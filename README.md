@@ -20,6 +20,7 @@ Runeon Wine 维护 Runeon Steam Baseline runtime 使用的 Wine 源码基线、�
 - Runeon 产品仓库继续负责 component packaging、Developer ID 签名、Dev/Production feed、下载校验和 release readiness。
 - 本仓库和 release assets 保持私有。每个实际分发的 Production runtime 对应的 patch-set/source bundle 还要永久归档到 Runeon private Production R2，并通过 `support@runeon.app` 按请求提供；App 不直接访问本仓库或源码对象。
 - `patchsets/cx26.3-wine11.0-runeon.0` 是已分发 Production seed `2026.07.22` 的精确历史源码定义，不含尚未上线的 Escape `cfgmgr32` backport；默认 `series` 仍是下一版 `.1` candidate。
+- `release-manifests/` 固定记录每个私有 bundle 的 commit、文件名、size、SHA-256、`on-request` 与 `permanent` 约束；Runeon R2 归档工具以这些 manifest 为输入，不能手填对象 key 或覆盖已有对象。
 
 ## 快速验证
 
