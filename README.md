@@ -1,33 +1,37 @@
 # Runeon Wine
 
-Runeon Wine 是 Runeon Steam Baseline runtime 的公开源码维护仓库，保存固定 Wine/CrossOver Wine 基线、上游 backport、产品级补丁和可复现的 corresponding-source 构建入口。它不是新的公开兼容性承诺，也不包含 Runeon App、Steam、游戏或 Apple 私有图形组件。
+[English](README.md) | [Chinese](README.zh-CN.md) | [Japanese](README.ja.md)
 
-## 当前基线
+> This English document is authoritative. The Chinese and Japanese documents are complete translations for convenience.
 
-- CodeWeavers source：`crossover-sources-26.3.0.tar.gz`
-- Wine baseline：`Wine version 11.0`
-- Patch set：`cx26.3-wine11.0-runeon.1`
-- 已审计 upstream：`wine-11.14`
+Runeon Wine is the public source-maintenance repository for Runeon's Steam Baseline runtime. It preserves a pinned Wine/CrossOver Wine baseline, upstream backports, product-specific patches, and reproducible corresponding-source build entry points. This repository does not create a general compatibility promise and does not contain the Runeon App, Steam, games, or Apple private graphics components.
 
-基线 URL、SHA-256 和源码根目录以 [`base/crossover-26.3-wine-11.0.json`](base/crossover-26.3-wine-11.0.json) 为唯一机器可读来源。补丁顺序以 [`series`](series) 为准，来源、风险和完整 upstream commit 记录在 [`patches/manifest.json`](patches/manifest.json)。
+## Current baseline
 
-## 边界
+- CodeWeavers source: `crossover-sources-26.3.0.tar.gz`
+- Wine baseline: `Wine version 11.0`
+- Active patch set: `cx26.3-wine11.0-runeon.1`
+- Upstream audited through: `wine-11.14`
 
-- 本仓库不提交完整 Wine 源码、编译目录、runtime archive 或 Wine prefix。
-- 本仓库不下载、镜像或分发 `D3DMetal.framework`、`libd3dshared.dylib` 或 GPTK 私有 PE/unix overlay。
-- 上游提交只进入审计清单，不会因为能够 clean apply 就自动进入 active series。
-- `ntdll`、`server`、`wow64`、`loader`、`winemac.drv`、`win32u`、unixlib/server protocol 和 D3DMetal 接口改动默认视为 ABI-sensitive，必须走独立基线升级或强化验证。
-- Runeon 产品仓库继续负责 component packaging、Developer ID 签名、Dev/Production feed、下载校验和 release readiness。
-- 本仓库和 GitHub Release assets 保持公开。每个实际分发的 Production runtime 必须对应一个不可变正式 Release，同时提供 patch-set、完整 corresponding source 和 SHA-256；候选版本只能标记为 Pre-release。
-- `patchsets/cx26.3-wine11.0-runeon.0` 是已分发 Production seed `2026.07.22` 的精确历史源码定义，不含尚未上线的 Escape `cfgmgr32` backport；默认 `series` 仍是下一版 `.1` candidate。
-- `release-manifests/` 固定记录每个公开 bundle 的 commit、Release URL、文件名、size、SHA-256、stable/prerelease 与永久保留约束。正式 runtime 只能引用 `stable` manifest；Pre-release 不代表修复已经提供给 Production 用户。
+[`base/crossover-26.3-wine-11.0.json`](base/crossover-26.3-wine-11.0.json) is the single machine-readable source for the baseline URL, SHA-256, and source root. [`series`](series) defines patch order. [`patches/manifest.json`](patches/manifest.json) records provenance, risk, and full upstream commit identifiers.
 
-## 发布状态
+## Scope and boundaries
 
-- [`cx26.3-wine11.0-runeon.0`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.0)：当前 Production seed `2026.07.22` 的正式对应源码。
-- [`cx26.3-wine11.0-runeon.1`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.1)：包含 Escape `cfgmgr32` backport 的下一版候选，尚未随 Dev/Production runtime 发布，保持 Pre-release。
+- The repository does not commit complete Wine source trees, build directories, runtime archives, or Wine prefixes.
+- It does not download, mirror, or distribute `D3DMetal.framework`, `libd3dshared.dylib`, or GPTK private PE/Unix overlays.
+- Upstream commits enter an audit list first. A clean apply does not automatically place a commit in the active series.
+- Changes to `ntdll`, `server`, `wow64`, `loader`, `winemac.drv`, `win32u`, Unix library/server protocols, or D3DMetal interfaces are ABI-sensitive by default and require a separate baseline upgrade or stronger validation.
+- The Runeon product repository remains responsible for component packaging, Developer ID signing, Dev/Production feeds, download verification, and release readiness.
+- This repository and its GitHub Release assets are public. Every distributed Production runtime must have an immutable stable Release containing the exact patch-set bundle, complete corresponding source, and SHA-256 files. Unreleased candidates must remain Pre-releases.
+- `patchsets/cx26.3-wine11.0-runeon.0` is the exact historical source definition for Production seed `2026.07.22`. It does not include the unreleased Escape `cfgmgr32` backport. The default [`series`](series) still describes the next-runtime `.1` candidate.
+- `release-manifests/` records each public bundle's commit, Release URL, file name, size, SHA-256, stable/prerelease state, and permanent-retention rule. A Production runtime may reference only a `stable` manifest. A Pre-release does not mean that its fixes are available to Production users.
 
-## 快速验证
+## Release status
+
+- [`cx26.3-wine11.0-runeon.0`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.0) is the stable corresponding-source Release for current Production seed `2026.07.22`.
+- [`cx26.3-wine11.0-runeon.1`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.1) is the next-runtime candidate containing the Escape `cfgmgr32` backport. It has not shipped in a Dev or Production runtime and remains a Pre-release.
+
+## Quick verification
 
 ```bash
 scripts/static-check.sh
@@ -35,9 +39,9 @@ source_root="$(scripts/fetch-source.sh)"
 scripts/integration-check.sh "$source_root"
 ```
 
-`integration-check.sh` 会复制一份临时基线、顺序应用全部 patch、验证最终 marker，并确认同一 series 不能被静默重复应用。它不会修改缓存中的原始源码。
+`integration-check.sh` copies the pinned baseline to a temporary tree, applies every patch in order, verifies final markers, and confirms that the same series cannot be silently applied twice. It does not modify the cached original source.
 
-## 生成对应源码包
+## Build corresponding-source bundles
 
 ```bash
 source_root="$(scripts/fetch-source.sh)"
@@ -45,17 +49,17 @@ scripts/apply-series.sh "$source_root"
 scripts/build-source-bundle.sh "$source_root" dist
 ```
 
-发布用 source bundle 必须与实际 runtime artifact 使用同一个 base SHA 和 patch set。对应 tag 的 GitHub Release 必须同时上传 source bundle、patch-set bundle 和各自 SHA-256。构建、发布与维护流程见 [`BUILDING.md`](BUILDING.md) 和 [`MAINTENANCE.md`](MAINTENANCE.md)。
+The source bundle used for a Release must use the same base SHA and patch set as the runtime artifact. Each tagged GitHub Release must contain the source bundle, patch-set bundle, and both SHA-256 files. See [`BUILDING.md`](BUILDING.md) and [`MAINTENANCE.md`](MAINTENANCE.md) for the build, release, and maintenance policies.
 
-产品仓库消费的是较小的 patch-set bundle：
+The Runeon product repository consumes the smaller patch-set bundle:
 
 ```bash
 scripts/build-patchset-bundle.sh dist
 ```
 
-它包含固定基线 manifest、patch、series、校验脚本和许可证；Runeon 构建仍从 CodeWeavers 固定 SHA 的完整 archive 获取 Wine 与同源依赖。
+It contains the pinned baseline manifest, patches, series, verification scripts, and license. The Runeon build still obtains the complete Wine and related source archive from CodeWeavers at the pinned SHA.
 
-构建已分发 `2026.07.22` 的精确历史源码包时必须显式选择 `.0`，不能用包含 Escape 修复的 `.1` candidate 代替：
+To rebuild the exact source for distributed seed `2026.07.22`, select `.0` explicitly. Do not substitute the `.1` candidate containing the Escape fix:
 
 ```bash
 export RUNEON_WINE_PATCHSET_DEFINITION=patchsets/cx26.3-wine11.0-runeon.0
@@ -69,6 +73,6 @@ scripts/build-source-archive-manifest.sh \
   dist/cx26.3-wine11.0-runeon.0.source-archive.json
 ```
 
-## 许可证
+## License
 
-Wine 与这里基于 Wine/CrossOver Wine 源码形成的修改遵循 LGPL-2.1-or-later。许可证文本见 [`LICENSE`](LICENSE)。各上游提交保留原作者和 Wine 项目历史；Runeon App 本身不因本仓库而改变许可方式。
+Wine and the modifications derived from Wine/CrossOver Wine in this repository are licensed under LGPL-2.1-or-later. See [`LICENSE`](LICENSE). Upstream commits retain their original authorship and Wine project history. The Runeon App's license is not changed by this repository.

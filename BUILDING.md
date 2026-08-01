@@ -1,25 +1,29 @@
-# 构建与源码包
+# Building and Source Bundles
 
-## 1. 获取固定基线
+[English](BUILDING.md) | [Chinese](BUILDING.zh-CN.md) | [Japanese](BUILDING.ja.md)
+
+> This English document is authoritative. The Chinese and Japanese documents are complete translations for convenience.
+
+## 1. Fetch the pinned baseline
 
 ```bash
 source_root="$(scripts/fetch-source.sh)"
 ```
 
-脚本只接受 manifest 中固定的 archive SHA-256，并检查 `VERSION`。缓存默认位于仓库的 `.work/`，不会进入 Git。
+The script accepts only the archive SHA-256 pinned in the manifest and verifies `VERSION`. The default cache is under `.work/` and is not committed to Git.
 
-## 2. 应用 patch series
+## 2. Apply the patch series
 
 ```bash
 scripts/apply-series.sh "$source_root"
 scripts/verify-source.sh "$source_root"
 ```
 
-patch 必须按 `series` 顺序应用。已应用、部分应用、SHA 漂移和基线不匹配都必须失败，不能静默跳过。
+Patches must be applied in [`series`](series) order. Already-applied patches, partial application, SHA drift, and baseline mismatches must fail rather than being skipped silently.
 
-## 3. Runeon macOS WoW64 配置边界
+## 3. Runeon macOS WoW64 configuration boundary
 
-当前产品构建使用完整 CrossOver 26.3/Wine 11.0 源码构建，不允许替换已构建 `lib/wine` 中的单个 DLL。核心配置为：
+The product build uses the complete CrossOver 26.3/Wine 11.0 source tree. Replacing individual DLLs inside an already-built `lib/wine` is not supported. The core configuration is:
 
 ```bash
 "$source_root/configure" \
@@ -39,24 +43,24 @@ patch 必须按 `series` 顺序应用。已应用、部分应用、SHA 漂移和
   --without-x
 ```
 
-依赖准备、GStreamer、MoltenVK、GnuTLS、Rockstar scoped D2D wrapper、Apple 用户本机 overlay、签名与 runtime component packaging 仍由 Runeon 产品仓库维护。
+Dependency preparation, GStreamer, MoltenVK, GnuTLS, the Rockstar-scoped D2D wrapper, Apple user-local overlays, signing, and runtime component packaging remain in the Runeon product repository.
 
-## 4. 对应源码包
+## 4. Build the corresponding-source bundle
 
 ```bash
 scripts/build-source-bundle.sh "$source_root" dist
 ```
 
-输出包含 patched Wine source、base/patch manifest、patch files、series、维护脚本、许可证和构建说明。发布时记录生成文件的 SHA-256，将两个 bundle 与 `.sha256` 上传到同 tag 的公开 GitHub Release，并把不可变 asset URL 写入 Runeon runtime component metadata 与公开 source offer。
+The output contains the patched Wine source, base and patch manifests, patch files, [`series`](series), maintenance scripts, the license, and build instructions. For a Release, record the generated SHA-256 values, upload both bundles and their `.sha256` files to the public GitHub Release for the same tag, and place the immutable asset URLs in Runeon runtime component metadata and the public source offer.
 
-## 5. 产品构建使用的 patch-set bundle
+## 5. Build the patch-set bundle used by the product
 
 ```bash
 scripts/build-patchset-bundle.sh dist
 ```
 
-Runeon 产品仓库下载并验证这个小型 bundle，再对固定 SHA 的 CrossOver archive 应用 `series`。patch-set bundle 和完整 corresponding-source bundle 必须来自同一个 tag，不能分别重建后混用。
+The Runeon product repository downloads and verifies this smaller bundle, then applies [`series`](series) to the CrossOver archive at the pinned SHA. The patch-set bundle and complete corresponding-source bundle must come from the same tag and must not be rebuilt independently and mixed.
 
-候选 tag 必须发布为 GitHub Pre-release；只有 matching runtime 完成 Dev 验证并真正进入 Production 后，才能把同一不可变 tag 的 Release 标记为正式版。Production 构建不得使用 branch archive 或 `latest` URL。
+Candidate tags must be published as GitHub Pre-releases. The same immutable tag may become a stable Release only after the matching runtime passes Dev validation and is actually promoted to Production. Production builds must not use branch archives or `latest` URLs.
 
-如果 patch-set ID 已经存在同名 tag，bundle 脚本只允许在该 tag 的精确 checkout 上重建，防止 main 后续文档或脚本变化悄悄改变历史 asset。继续开发时先创建新的 patch-set ID，不能移动旧 tag 或覆盖旧 Release asset。
+If a patch-set ID already has a tag with the same name, bundle scripts permit rebuilding only from the exact commit checked out at that tag. This prevents later documentation or script changes on `main` from silently changing historical assets. Create a new patch-set ID for continued development; do not move an old tag or replace an old Release asset.

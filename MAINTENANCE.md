@@ -1,40 +1,44 @@
-# 上游维护规则
+# Upstream Maintenance Policy
 
-Runeon Wine 同时使用主动审计和 diagnostics 驱动两条输入；任何路径都不能绕过同一验证门禁。
+[English](MAINTENANCE.md) | [Chinese](MAINTENANCE.zh-CN.md) | [Japanese](MAINTENANCE.ja.md)
 
-## 主动审计
+> This English document is authoritative. The Chinese and Japanese documents are complete translations for convenience.
 
-1. 每周 workflow 检查 Wine `11.x` 最新 tag。
-2. `scripts/audit-upstream.sh --through latest` 生成从 `wine-11.0` 开始的 commit 清单。
-3. 自动风险标签只用于缩小 review 范围，不代表补丁安全。
-4. 逐条判断 CrossOver 26.3 是否已有等价实现、是否依赖前置重构、是否值得进入 Runeon。
-5. 只有来源、依赖、测试、真实收益和回归面明确的修复才加入 active series。
+Runeon Wine accepts input from proactive upstream audits and diagnostics-driven investigation. Neither path may bypass the same validation gates.
 
-## 风险层级
+## Proactive audits
 
-- `candidate`：局部 DLL 修复，仍需人工 review 和测试。
-- `subsystem-sensitive`：图形、媒体、窗口、输入、构建系统或多模块修改。
-- `abi-sensitive`：`ntdll`、`server`、`wow64`、`loader`、`winemac.drv`、`win32u`、unixlib/server protocol、D3DMetal 接口。默认不做普通 backport。
+1. A weekly workflow checks the latest Wine `11.x` tag.
+2. `scripts/audit-upstream.sh --through latest` generates the commit list beginning at `wine-11.0`.
+3. Automated risk labels only narrow the review set; they do not establish patch safety.
+4. Review each commit for an equivalent CrossOver 26.3 implementation, prerequisite refactors, and concrete Runeon value.
+5. Add a fix to the active series only when its provenance, dependencies, tests, user benefit, and regression surface are understood.
 
-## Diagnostics 驱动
+## Risk levels
 
-真实用户日志用于确认影响和优先级。必须先固定调用链或独立 probe，再关联 upstream commit。没有本机证据时只能记录候选，不能把网上 issue 直接写成 Runeon 根因。
+- `candidate`: a localized DLL fix that still requires human review and tests.
+- `subsystem-sensitive`: graphics, media, windowing, input, build-system, or multi-module changes.
+- `abi-sensitive`: changes to `ntdll`, `server`, `wow64`, `loader`, `winemac.drv`, `win32u`, Unix library/server protocols, or D3DMetal interfaces. These are not ordinary backport candidates by default.
 
-## Patch 进入 active series 的门禁
+## Diagnostics-driven investigation
 
-- 完整 upstream commit SHA、首次进入的 Wine release 和作者来源；
-- 对固定 CrossOver source SHA clean apply，或明确记录适配差异；
-- 原始 upstream tests 一并回移植，或说明无法移植的原因；
-- 受影响模块测试与独立 probe 通过；
-- 完整 Wine runtime build 通过；
-- Steam CEF、stop/relaunch、D3DMetal overlay、DXMT/DXVK/D3DMetal smoke 通过；
-- clean prefix 与已有 prefix 都验证；
-- source bundle、notices、component metadata 和 Runeon 文档同步。
+Real user logs may establish impact and priority. First pin down the call chain or reproduce the behavior with an independent probe, then correlate it with an upstream commit. Without local evidence, record only a candidate; do not treat an online issue as the Runeon root cause.
 
-## 发布
+## Gates for entering the active series
 
-Patch set 使用不可变 ID，例如 `cx26.3-wine11.0-runeon.1`。Git tag、source bundle、runtime component metadata 和 Runeon release 文档必须引用同一个 ID。新 artifact 先发布 Dev 并完成 readiness/download/product smoke；Production 只能 promote 已验证的精确字节，不得重建后直接上线。
+- Record the full upstream commit SHA, first Wine release containing it, and original authorship.
+- Cleanly apply to the pinned CrossOver source SHA, or document every adaptation.
+- Backport the original upstream tests, or explain why they cannot be carried over.
+- Pass affected-module tests and an independent probe.
+- Complete a full Wine runtime build.
+- Pass Steam CEF, stop/relaunch, D3DMetal overlay, and DXMT/DXVK/D3DMetal smoke tests.
+- Validate both a clean prefix and an existing prefix.
+- Synchronize the source bundle, notices, component metadata, and Runeon documentation.
 
-仓库与 bundle 保持公开。生成候选 tag 后，用 `build-source-archive-manifest.sh` 记录公开 Release URL、asset SHA/size 和 `prerelease` 状态，并上传 patch-set、完整 corresponding source 及两份 `.sha256`。只有 matching runtime 真正进入 Production 后，才把同一不可变 tag 的 Release 与 manifest 状态改为 `stable`；历史 tag 和 assets 永久保留，不覆盖、不删除。
+## Release policy
 
-公开仓库只维护 LGPL Wine/CrossOver Wine lineage、补丁与构建脚本。Runeon App、用户诊断、Steam/游戏文件、Developer ID/服务密钥，以及 D3DMetal/GPTK/Apple 私有组件不得进入 Git 历史、Actions artifact 或 Release asset。每次公开前检查完整历史、Release asset 列表和 Actions 日志。
+Patch sets use immutable identifiers such as `cx26.3-wine11.0-runeon.1`. The Git tag, source bundle, runtime component metadata, and Runeon release documentation must reference the same identifier. Publish a new artifact to Dev first and complete readiness, download, and product smoke tests. Production may promote only the exact verified bytes; do not rebuild directly for Production.
+
+The repository and bundles are public. After creating a candidate tag, use `build-source-archive-manifest.sh` to record the public Release URL, asset SHA/size, and `prerelease` state, then upload the patch-set bundle, complete corresponding source, and both `.sha256` files. Change the same immutable Release and manifest to `stable` only after the matching runtime actually enters Production. Historical tags and assets are retained permanently and must not be moved, replaced, or deleted.
+
+The public repository contains only the LGPL Wine/CrossOver Wine lineage, patches, and build scripts. The Runeon App, user diagnostics, Steam/game files, Developer ID or service secrets, and D3DMetal/GPTK/Apple private components must never enter Git history, Actions artifacts, or Release assets. Before every public update, inspect the complete history, Release asset list, and Actions logs.
