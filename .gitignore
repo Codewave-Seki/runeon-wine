@@ -1,0 +1,8 @@
+.DS_Store
+.work/
+dist/
+*.tar.gz
+*.tar.xz
+*.zip
+SHA256SUMS
+

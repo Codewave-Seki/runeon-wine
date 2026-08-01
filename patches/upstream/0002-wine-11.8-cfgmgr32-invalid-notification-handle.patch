@@ -1,0 +1,86 @@
+diff --git a/dlls/cfgmgr32/main.c b/dlls/cfgmgr32/main.c
+index 8ae08e7..c8da8b9 100644
+--- a/dlls/cfgmgr32/main.c
++++ b/dlls/cfgmgr32/main.c
+@@ -20,6 +20,7 @@
+ #include <assert.h>
+ 
+ #include "wine/debug.h"
++#include "wine/exception.h"
+ #include "wine/rbtree.h"
+ #include "winreg.h"
+ #include "winternl.h"
+@@ -72,8 +73,11 @@ DWORD WINAPI CM_MapCrToWin32Err( CONFIGRET code, DWORD default_error )
+     return default_error;
+ }
+ 
++#define CM_NOTIFY_CONTEXT_MAGIC 0xbeef4dad
++
+ struct cm_notify_context
+ {
++    DWORD magic;
+     HDEVNOTIFY notify;
+     void *user_data;
+     PCM_NOTIFY_CALLBACK callback;
+@@ -207,6 +211,7 @@ static CONFIGRET create_notify_context( const CM_NOTIFY_FILTER *filter, HCMNOTIF
+ 
+     if (!(ctx = calloc( 1, sizeof(*ctx) ))) return CR_OUT_OF_MEMORY;
+ 
++    ctx->magic = CM_NOTIFY_CONTEXT_MAGIC;
+     ctx->user_data = user_data;
+     ctx->callback = callback;
+     if (!(ctx->notify = I_ScRegisterDeviceNotification( ctx, &notify_filter.header, devnotify_callback )))
+@@ -243,15 +248,29 @@ CONFIGRET WINAPI CM_Register_Notification( CM_NOTIFY_FILTER *filter, void *conte
+ CONFIGRET WINAPI CM_Unregister_Notification( HCMNOTIFICATION notify )
+ {
+     struct cm_notify_context *ctx = notify;
++    CONFIGRET ret = CR_SUCCESS;
+ 
+     TRACE( "(%p)\n", notify );
+ 
+     if (!notify) return CR_INVALID_DATA;
+ 
+-    I_ScUnregisterDeviceNotification( ctx->notify );
+-    free( ctx );
++    __TRY
++    {
++        if (ctx->magic == CM_NOTIFY_CONTEXT_MAGIC)
++        {
++            I_ScUnregisterDeviceNotification( ctx->notify );
++            free( ctx );
++        }
++        else
++            ret = CR_INVALID_DATA;
++    }
++    __EXCEPT_PAGE_FAULT
++    {
++        ret = CR_FAILURE;
++    }
++    __ENDTRY
+ 
+-    return CR_SUCCESS;
++    return ret;
+ }
+ 
+ /***********************************************************************
+diff --git a/dlls/cfgmgr32/tests/cfgmgr32.c b/dlls/cfgmgr32/tests/cfgmgr32.c
+index 6061d26..2343487 100644
+--- a/dlls/cfgmgr32/tests/cfgmgr32.c
++++ b/dlls/cfgmgr32/tests/cfgmgr32.c
+@@ -376,6 +376,16 @@ static void test_CM_Register_Notification( void )
+         }
+         winetest_pop_context();
+     }
++
++    /* Some unregister edge cases */
++    ret = pCM_Unregister_Notification( NULL );
++    ok( ret == CR_INVALID_DATA, "Expected CR_INVALID_DATA, got %#lx\n", ret );
++
++    ret = pCM_Unregister_Notification( (HCMNOTIFICATION)"valid pointer but not a handle" );
++    ok( ret == CR_INVALID_DATA, "Expected CR_INVALID_DATA, got %#lx\n", ret );
++
++    ret = pCM_Unregister_Notification( (HCMNOTIFICATION)0xdeadbeef );
++    ok( ret == CR_FAILURE, "Expected CR_FAILURE, got %#lx\n", ret );
+ }
+ 
+ static void check_device_path_casing(const WCHAR *original_path)

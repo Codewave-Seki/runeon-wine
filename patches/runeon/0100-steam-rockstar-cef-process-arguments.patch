@@ -1,0 +1,153 @@
+diff --git a/dlls/kernelbase/process.c b/dlls/kernelbase/process.c
+index 867964e..200663b 100644
+--- a/dlls/kernelbase/process.c
++++ b/dlls/kernelbase/process.c
+@@ -38,6 +38,118 @@ WINE_DEFAULT_DEBUG_CHANNEL(process);
+ static DWORD shutdown_flags = 0;
+ static DWORD shutdown_priority = 0x280;
+ 
++static BOOL is_steamwebhelper_command( const WCHAR *app_name, const WCHAR *cmd_line )
++{
++    static const WCHAR steamwebhelperW[] =
++        {0x0073,0x0074,0x0065,0x0061,0x006d,0x0077,0x0065,0x0062,0x0068,0x0065,0x006c,0x0070,0x0065,0x0072,0x002e,0x0065,0x0078,0x0065,0};
++
++    return (app_name && wcsstr( app_name, steamwebhelperW ))
++            || (cmd_line && wcsstr( cmd_line, steamwebhelperW ));
++}
++
++static BOOL is_socialclubhelper_command( const WCHAR *app_name, const WCHAR *cmd_line )
++{
++    static const WCHAR socialclubhelperW[] =
++        {0x0053,0x006f,0x0063,0x0069,0x0061,0x006c,0x0043,0x006c,0x0075,0x0062,0x0048,0x0065,0x006c,0x0070,0x0065,0x0072,0x002e,0x0065,0x0078,0x0065,0};
++
++    return (app_name && wcsstr( app_name, socialclubhelperW ))
++            || (cmd_line && wcsstr( cmd_line, socialclubhelperW ));
++}
++
++static WCHAR *append_steamwebhelper_inprocess_gpu( WCHAR *cmd_line )
++{
++    static const WCHAR in_process_gpuW[] =
++        {0x002d,0x002d,0x0069,0x006e,0x002d,0x0070,0x0072,0x006f,0x0063,0x0065,0x0073,0x0073,0x002d,0x0067,0x0070,0x0075,0};
++    WCHAR *new_cmd_line;
++    size_t len, switch_len;
++
++    if (!cmd_line || wcsstr( cmd_line, in_process_gpuW )) return cmd_line;
++    if (wcsstr( cmd_line, L"--type=" )) return cmd_line;
++
++    len = lstrlenW( cmd_line );
++    switch_len = lstrlenW( in_process_gpuW );
++    if (!(new_cmd_line = RtlAllocateHeap( GetProcessHeap(), 0, (len + switch_len + 2) * sizeof(WCHAR) )))
++        return cmd_line;
++
++    memcpy( new_cmd_line, cmd_line, len * sizeof(WCHAR) );
++    new_cmd_line[len++] = ' ';
++    memcpy( new_cmd_line + len, in_process_gpuW, switch_len * sizeof(WCHAR) );
++    new_cmd_line[len + switch_len] = 0;
++
++    FIXME( "HACK: appending %s to Steam webhelper main process.\n", debugstr_w(in_process_gpuW) );
++    return new_cmd_line;
++}
++
++static WCHAR *append_socialclubhelper_inprocess_gpu( WCHAR *cmd_line )
++{
++    static const WCHAR in_process_gpuW[] =
++        {0x002d,0x002d,0x0069,0x006e,0x002d,0x0070,0x0072,0x006f,0x0063,0x0065,0x0073,0x0073,0x002d,0x0067,0x0070,0x0075,0};
++    WCHAR *new_cmd_line;
++    size_t len, switch_len;
++
++    if (!cmd_line || wcsstr( cmd_line, in_process_gpuW )) return cmd_line;
++    if (wcsstr( cmd_line, L"--type=" )) return cmd_line;
++
++    len = lstrlenW( cmd_line );
++    switch_len = lstrlenW( in_process_gpuW );
++    if (!(new_cmd_line = RtlAllocateHeap( GetProcessHeap(), 0, (len + switch_len + 2) * sizeof(WCHAR) )))
++        return cmd_line;
++
++    memcpy( new_cmd_line, cmd_line, len * sizeof(WCHAR) );
++    new_cmd_line[len++] = ' ';
++    memcpy( new_cmd_line + len, in_process_gpuW, switch_len * sizeof(WCHAR) );
++    new_cmd_line[len + switch_len] = 0;
++
++    FIXME( "HACK: appending %s to Social Club helper main process.\n", debugstr_w(in_process_gpuW) );
++    return new_cmd_line;
++}
++
++static WCHAR *append_socialclubhelper_unsafe_swiftshader( WCHAR *cmd_line )
++{
++    static const WCHAR unsafe_swiftshaderW[] =
++        {0x002d,0x002d,0x0065,0x006e,0x0061,0x0062,0x006c,0x0065,0x002d,0x0075,0x006e,0x0073,0x0061,0x0066,0x0065,0x002d,0x0073,0x0077,0x0069,0x0066,0x0074,0x0073,0x0068,0x0061,0x0064,0x0065,0x0072,0};
++    WCHAR *new_cmd_line;
++    size_t len, switch_len;
++
++    if (!cmd_line || wcsstr( cmd_line, unsafe_swiftshaderW )) return cmd_line;
++
++    len = lstrlenW( cmd_line );
++    switch_len = lstrlenW( unsafe_swiftshaderW );
++    if (!(new_cmd_line = RtlAllocateHeap( GetProcessHeap(), 0, (len + switch_len + 2) * sizeof(WCHAR) )))
++        return cmd_line;
++
++    memcpy( new_cmd_line, cmd_line, len * sizeof(WCHAR) );
++    new_cmd_line[len++] = ' ';
++    memcpy( new_cmd_line + len, unsafe_swiftshaderW, switch_len * sizeof(WCHAR) );
++    new_cmd_line[len + switch_len] = 0;
++
++    FIXME( "HACK: appending %s to Social Club helper process.\n", debugstr_w(unsafe_swiftshaderW) );
++    return new_cmd_line;
++}
++
++static WCHAR *append_socialclubhelper_use_angle_swiftshader( WCHAR *cmd_line )
++{
++    static const WCHAR use_angle_swiftshaderW[] =
++        {0x002d,0x002d,0x0075,0x0073,0x0065,0x002d,0x0061,0x006e,0x0067,0x006c,0x0065,0x003d,0x0073,0x0077,0x0069,0x0066,0x0074,0x0073,0x0068,0x0061,0x0064,0x0065,0x0072,0};
++    WCHAR *new_cmd_line;
++    size_t len, switch_len;
++
++    if (!cmd_line || wcsstr( cmd_line, use_angle_swiftshaderW )) return cmd_line;
++
++    len = lstrlenW( cmd_line );
++    switch_len = lstrlenW( use_angle_swiftshaderW );
++    if (!(new_cmd_line = RtlAllocateHeap( GetProcessHeap(), 0, (len + switch_len + 2) * sizeof(WCHAR) )))
++        return cmd_line;
++
++    memcpy( new_cmd_line, cmd_line, len * sizeof(WCHAR) );
++    new_cmd_line[len++] = ' ';
++    memcpy( new_cmd_line + len, use_angle_swiftshaderW, switch_len * sizeof(WCHAR) );
++    new_cmd_line[len + switch_len] = 0;
++
++    FIXME( "HACK: appending %s to Social Club helper process.\n", debugstr_w(use_angle_swiftshaderW) );
++    return new_cmd_line;
++}
++
+ /***********************************************************************
+  * Processes
+  ***********************************************************************/
+@@ -567,6 +679,29 @@ BOOL WINAPI DECLSPEC_HOTPATCH CreateProcessInternalW( HANDLE token, const WCHAR
+         }
+     }
+ 
++    if (is_steamwebhelper_command( app_name, tidy_cmdline ? tidy_cmdline : cmd_line ))
++    {
++        WCHAR *new_cmdline = append_steamwebhelper_inprocess_gpu( tidy_cmdline ? tidy_cmdline : cmd_line );
++
++        if (new_cmdline != (tidy_cmdline ? tidy_cmdline : cmd_line))
++            tidy_cmdline = new_cmdline;
++    }
++    if (is_socialclubhelper_command( app_name, tidy_cmdline ? tidy_cmdline : cmd_line ))
++    {
++        WCHAR *new_cmdline = append_socialclubhelper_inprocess_gpu( tidy_cmdline ? tidy_cmdline : cmd_line );
++
++        if (new_cmdline != (tidy_cmdline ? tidy_cmdline : cmd_line))
++            tidy_cmdline = new_cmdline;
++
++        new_cmdline = append_socialclubhelper_unsafe_swiftshader( tidy_cmdline ? tidy_cmdline : cmd_line );
++        if (new_cmdline != (tidy_cmdline ? tidy_cmdline : cmd_line))
++            tidy_cmdline = new_cmdline;
++
++        new_cmdline = append_socialclubhelper_use_angle_swiftshader( tidy_cmdline ? tidy_cmdline : cmd_line );
++        if (new_cmdline != (tidy_cmdline ? tidy_cmdline : cmd_line))
++            tidy_cmdline = new_cmdline;
++    }
++
+     /* Warn if unsupported features are used */
+ 
+     if (flags & (IDLE_PRIORITY_CLASS | HIGH_PRIORITY_CLASS | REALTIME_PRIORITY_CLASS |

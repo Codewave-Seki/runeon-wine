@@ -1,0 +1,5 @@
+# Upstream fixes are applied before Runeon product patches.
+patches/upstream/0001-wine-11.1-vc14-builtin-version.patch
+patches/upstream/0002-wine-11.8-cfgmgr32-invalid-notification-handle.patch
+patches/runeon/0100-steam-rockstar-cef-process-arguments.patch
+

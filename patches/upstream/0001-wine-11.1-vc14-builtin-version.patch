@@ -1,0 +1,21 @@
+diff --git a/dlls/msvcp140/version.rc b/dlls/msvcp140/version.rc
+index 2d254b93aa0..4aa4068ae15 100644
+--- a/dlls/msvcp140/version.rc
++++ b/dlls/msvcp140/version.rc
+@@ -21 +21 @@
+-#define WINE_FILEVERSION 14,42,34433,0
++#define WINE_FILEVERSION 14,50,35719,0
+diff --git a/dlls/msvcp140_2/version.rc b/dlls/msvcp140_2/version.rc
+index b0a3cc6f89a..da51b7d0e25 100644
+--- a/dlls/msvcp140_2/version.rc
++++ b/dlls/msvcp140_2/version.rc
+@@ -21 +21 @@
+-#define WINE_FILEVERSION 14,42,34433,0
++#define WINE_FILEVERSION 14,50,35719,0
+diff --git a/dlls/vcruntime140_1/version.rc b/dlls/vcruntime140_1/version.rc
+index 0f04e31480b..8f3fb0d7dc6 100644
+--- a/dlls/vcruntime140_1/version.rc
++++ b/dlls/vcruntime140_1/version.rc
+@@ -21 +21 @@
+-#define WINE_FILEVERSION 14,42,34433,0
++#define WINE_FILEVERSION 14,50,35719,0

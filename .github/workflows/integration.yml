@@ -1,0 +1,38 @@
+name: Apply patch series
+
+on:
+  push:
+    paths:
+      - "base/**"
+      - "patches/**"
+      - "scripts/**"
+      - "series"
+      - ".github/workflows/integration.yml"
+  pull_request:
+    paths:
+      - "base/**"
+      - "patches/**"
+      - "scripts/**"
+      - "series"
+      - ".github/workflows/integration.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  apply-series:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Cache the verified CrossOver source archive
+        uses: actions/cache@v4
+        with:
+          path: .work/downloads
+          key: crossover-26.3-ac99c8ca4b3848f3
+      - name: Fetch the fixed source baseline
+        id: source
+        run: echo "root=$(scripts/fetch-source.sh)" >> "$GITHUB_OUTPUT"
+      - name: Apply and verify the complete patch series
+        run: scripts/integration-check.sh "${{ steps.source.outputs.root }}"
+

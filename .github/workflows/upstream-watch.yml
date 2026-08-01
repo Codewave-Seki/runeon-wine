@@ -1,0 +1,25 @@
+name: Watch Wine upstream
+
+on:
+  schedule:
+    - cron: "23 3 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Generate the current upstream audit inventory
+        run: scripts/audit-upstream.sh --through latest --output dist/upstream-audit.tsv
+      - name: Upload audit inventory
+        uses: actions/upload-artifact@v4
+        with:
+          name: upstream-audit
+          path: dist/upstream-audit.tsv
+      - name: Require an explicit review when a new Wine tag appears
+        run: scripts/check-upstream-current.sh
+

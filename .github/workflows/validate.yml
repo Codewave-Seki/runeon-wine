@@ -1,0 +1,17 @@
+name: Validate patch metadata
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  static-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate manifests, patch hashes, and shell syntax
+        run: scripts/static-check.sh
+
