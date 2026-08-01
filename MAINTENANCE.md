@@ -35,3 +35,4 @@ Runeon Wine 同时使用主动审计和 diagnostics 驱动两条输入；任何�
 
 Patch set 使用不可变 ID，例如 `cx26.3-wine11.0-runeon.1`。Git tag、source bundle、runtime component metadata 和 Runeon release 文档必须引用同一个 ID。新 artifact 先发布 Dev 并完成 readiness/download/product smoke；Production 只能 promote 已验证的精确字节，不得重建后直接上线。
 
+仓库与 bundle 保持私有。Production 分发前必须用 `build-source-archive-manifest.sh` 生成 `on-request` / `permanent` manifest，并通过 Runeon 产品仓库的 `wine-sources:archive` dry-run/apply 流程把精确 patch-set 与 corresponding source 写入 private Production R2 的隔离前缀。历史源码对象不得随普通 runtime component prune 删除或覆盖。

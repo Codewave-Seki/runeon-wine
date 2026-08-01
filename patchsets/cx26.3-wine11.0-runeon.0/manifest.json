@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 1,
+  "patchSetId": "cx26.3-wine11.0-runeon.0",
+  "baseId": "crossover-26.3-wine-11.0",
+  "runtimeReleases": ["2026.07.22"],
+  "status": "distributed-production-source-record",
+  "patches": [
+    {
+      "order": 1,
+      "path": "patches/upstream/0001-wine-11.1-vc14-builtin-version.patch",
+      "sha256": "f16e8c56732a0b276d2a8b1d58886bdff2a708a77b1ddafdf6de3ad6e64a1e91",
+      "kind": "upstream-backport",
+      "status": "active",
+      "risk": "low",
+      "firstWineRelease": "wine-11.1",
+      "upstreamCommits": [
+        "91273876cfface6056dee1a8d33d00b657701b91",
+        "774a1f8a8df61e4870fbd0d1253b7a8ffb762e53",
+        "fe542210cd1c0e503b8f2af6623ea6c0bb2d62df"
+      ],
+      "summary": "将 VC14 builtin 文件版本更新为 14.50.35719.0。"
+    },
+    {
+      "order": 100,
+      "path": "patches/runeon/0100-steam-rockstar-cef-process-arguments.patch",
+      "sha256": "546b0b22679bb5bf877c76d62de64a2ebcc132d817c35d1dfa5e3047a2b2cd54",
+      "kind": "runeon-product",
+      "status": "active",
+      "risk": "high",
+      "runeonTasks": ["T49", "T237"],
+      "summary": "按可执行文件范围为 Steam 和 Rockstar 主 CEF 进程追加已验证参数。"
+    }
+  ]
+}

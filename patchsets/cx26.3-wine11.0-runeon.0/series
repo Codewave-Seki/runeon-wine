@@ -1,0 +1,3 @@
+# Exact source patch series for the distributed Production seed 2026.07.22.
+patches/upstream/0001-wine-11.1-vc14-builtin-version.patch
+patches/runeon/0100-steam-rockstar-cef-process-arguments.patch

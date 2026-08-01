@@ -18,6 +18,8 @@ Runeon Wine 维护 Runeon Steam Baseline runtime 使用的 Wine 源码基线、�
 - 上游提交只进入审计清单，不会因为能够 clean apply 就自动进入 active series。
 - `ntdll`、`server`、`wow64`、`loader`、`winemac.drv`、`win32u`、unixlib/server protocol 和 D3DMetal 接口改动默认视为 ABI-sensitive，必须走独立基线升级或强化验证。
 - Runeon 产品仓库继续负责 component packaging、Developer ID 签名、Dev/Production feed、下载校验和 release readiness。
+- 本仓库和 release assets 保持私有。每个实际分发的 Production runtime 对应的 patch-set/source bundle 还要永久归档到 Runeon private Production R2，并通过 `support@runeon.app` 按请求提供；App 不直接访问本仓库或源码对象。
+- `patchsets/cx26.3-wine11.0-runeon.0` 是已分发 Production seed `2026.07.22` 的精确历史源码定义，不含尚未上线的 Escape `cfgmgr32` backport；默认 `series` 仍是下一版 `.1` candidate。
 
 ## 快速验证
 
@@ -46,6 +48,20 @@ scripts/build-patchset-bundle.sh dist
 ```
 
 它包含固定基线 manifest、patch、series、校验脚本和许可证；Runeon 构建仍从 CodeWeavers 固定 SHA 的完整 archive 获取 Wine 与同源依赖。
+
+构建已分发 `2026.07.22` 的精确历史源码包时必须显式选择 `.0`，不能用包含 Escape 修复的 `.1` candidate 代替：
+
+```bash
+export RUNEON_WINE_PATCHSET_DEFINITION=patchsets/cx26.3-wine11.0-runeon.0
+source_root="$(scripts/fetch-source.sh)"
+scripts/apply-series.sh "$source_root"
+scripts/build-source-bundle.sh "$source_root" dist
+scripts/build-patchset-bundle.sh dist
+scripts/build-source-archive-manifest.sh \
+  dist/runeon-wine-patchset-cx26.3-wine11.0-runeon.0.tar.gz \
+  dist/runeon-wine-source-cx26.3-wine11.0-runeon.0.tar.gz \
+  dist/cx26.3-wine11.0-runeon.0.source-archive.json
+```
 
 ## 许可证
 

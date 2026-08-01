@@ -36,7 +36,7 @@ while IFS= read -r relative_patch || [[ -n "$relative_patch" ]]; do
   else
     die "patch does not apply cleanly to $base_id: $relative_patch"
   fi
-done <"$repo_root/series"
+done <"$series_file"
 
 jq -n \
   --arg baseId "$base_id" \
@@ -46,4 +46,3 @@ jq -n \
   >"$marker"
 
 "$script_dir/verify-source.sh" "$source_root"
-

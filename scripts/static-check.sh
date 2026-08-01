@@ -15,7 +15,7 @@ jq -e . "$base_manifest" "$patch_manifest" >/dev/null
 [[ "$(json_value "$patch_manifest" '.patchSetId')" == "$patch_set_id" ]] \
   || die "patch-set ID differs between base and patch manifests"
 
-series_paths="$(sed -e '/^[[:space:]]*#/d' -e '/^[[:space:]]*$/d' "$repo_root/series")"
+series_paths="$(sed -e '/^[[:space:]]*#/d' -e '/^[[:space:]]*$/d' "$series_file")"
 manifest_paths="$(jq -r '.patches | sort_by(.order)[] | .path' "$patch_manifest")"
 [[ "$series_paths" == "$manifest_paths" ]] || die "series and patch manifest order differ"
 
@@ -33,4 +33,3 @@ for shell_script in "$repo_root"/scripts/*.sh; do
 done
 
 printf 'static checks passed for %s\n' "$patch_set_id"
-

@@ -29,9 +29,11 @@ trap cleanup EXIT INT TERM
 mkdir -p "$bundle_root"
 cp -R "$repo_root/base" "$bundle_root/base"
 cp -R "$repo_root/patches" "$bundle_root/patches"
+cp "$patch_manifest" "$bundle_root/patches/manifest.json"
 cp -R "$repo_root/scripts" "$bundle_root/scripts"
 cp -R "$repo_root/LICENSES" "$bundle_root/LICENSES"
-cp "$repo_root/series" "$repo_root/README.md" "$repo_root/BUILDING.md" "$repo_root/MAINTENANCE.md" "$bundle_root/"
+cp "$series_file" "$bundle_root/series"
+cp "$repo_root/README.md" "$repo_root/BUILDING.md" "$repo_root/MAINTENANCE.md" "$bundle_root/"
 
 jq -n \
   --arg baseId "$base_id" \

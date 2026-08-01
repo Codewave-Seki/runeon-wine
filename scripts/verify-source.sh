@@ -38,16 +38,17 @@ do
   grep -Fq "$marker_text" "$process_source" || die "process patch marker missing: $marker_text"
 done
 
-cfgmgr32_source="$source_root/dlls/cfgmgr32/main.c"
-cfgmgr32_tests="$source_root/dlls/cfgmgr32/tests/cfgmgr32.c"
-grep -Fq '#define CM_NOTIFY_CONTEXT_MAGIC 0xbeef4dad' "$cfgmgr32_source" \
-  || die "cfgmgr32 notification magic marker missing"
-grep -Fq '__EXCEPT_PAGE_FAULT' "$cfgmgr32_source" \
-  || die "cfgmgr32 invalid-pointer exception guard missing"
-grep -Fq 'valid pointer but not a handle' "$cfgmgr32_tests" \
-  || die "cfgmgr32 invalid-handle upstream test missing"
-grep -Fq '(HCMNOTIFICATION)0xdeadbeef' "$cfgmgr32_tests" \
-  || die "cfgmgr32 page-fault upstream test missing"
+if jq -e '.patches[] | select(.path | contains("cfgmgr32-invalid-notification-handle"))' "$patch_manifest" >/dev/null; then
+  cfgmgr32_source="$source_root/dlls/cfgmgr32/main.c"
+  cfgmgr32_tests="$source_root/dlls/cfgmgr32/tests/cfgmgr32.c"
+  grep -Fq '#define CM_NOTIFY_CONTEXT_MAGIC 0xbeef4dad' "$cfgmgr32_source" \
+    || die "cfgmgr32 notification magic marker missing"
+  grep -Fq '__EXCEPT_PAGE_FAULT' "$cfgmgr32_source" \
+    || die "cfgmgr32 invalid-pointer exception guard missing"
+  grep -Fq 'valid pointer but not a handle' "$cfgmgr32_tests" \
+    || die "cfgmgr32 invalid-handle upstream test missing"
+  grep -Fq '(HCMNOTIFICATION)0xdeadbeef' "$cfgmgr32_tests" \
+    || die "cfgmgr32 page-fault upstream test missing"
+fi
 
 printf 'verified %s on %s\n' "$patch_set_id" "$base_id"
-
