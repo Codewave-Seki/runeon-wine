@@ -35,4 +35,6 @@ Runeon Wine 同时使用主动审计和 diagnostics 驱动两条输入；任何�
 
 Patch set 使用不可变 ID，例如 `cx26.3-wine11.0-runeon.1`。Git tag、source bundle、runtime component metadata 和 Runeon release 文档必须引用同一个 ID。新 artifact 先发布 Dev 并完成 readiness/download/product smoke；Production 只能 promote 已验证的精确字节，不得重建后直接上线。
 
-仓库与 bundle 保持私有。Production 分发前必须用 `build-source-archive-manifest.sh` 生成 `on-request` / `permanent` manifest，并通过 Runeon 产品仓库的 `wine-sources:archive` dry-run/apply 流程把精确 patch-set 与 corresponding source 写入 private Production R2 的隔离前缀。历史源码对象不得随普通 runtime component prune 删除或覆盖。
+仓库与 bundle 保持公开。生成候选 tag 后，用 `build-source-archive-manifest.sh` 记录公开 Release URL、asset SHA/size 和 `prerelease` 状态，并上传 patch-set、完整 corresponding source 及两份 `.sha256`。只有 matching runtime 真正进入 Production 后，才把同一不可变 tag 的 Release 与 manifest 状态改为 `stable`；历史 tag 和 assets 永久保留，不覆盖、不删除。
+
+公开仓库只维护 LGPL Wine/CrossOver Wine lineage、补丁与构建脚本。Runeon App、用户诊断、Steam/游戏文件、Developer ID/服务密钥，以及 D3DMetal/GPTK/Apple 私有组件不得进入 Git 历史、Actions artifact 或 Release asset。每次公开前检查完整历史、Release asset 列表和 Actions 日志。

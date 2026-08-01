@@ -8,6 +8,7 @@ source "$script_dir/common.sh"
 
 load_base_manifest
 require_command jq
+require_file "$repo_root/LICENSE"
 
 jq -e . "$base_manifest" "$patch_manifest" >/dev/null
 [[ "$(json_value "$patch_manifest" '.baseId')" == "$base_id" ]] \
@@ -30,6 +31,22 @@ done <<<"$series_paths"
 
 for shell_script in "$repo_root"/scripts/*.sh; do
   bash -n "$shell_script"
+done
+
+for release_manifest in "$repo_root"/release-manifests/*.source-archive.json; do
+  require_file "$release_manifest"
+  [[ "$(json_value "$release_manifest" '.repositoryVisibility')" == "public" ]] \
+    || die "release manifest must record repositoryVisibility=public: $release_manifest"
+  [[ "$(json_value "$release_manifest" '.availability')" == "public-release" ]] \
+    || die "release manifest must record availability=public-release: $release_manifest"
+  [[ "$(json_value "$release_manifest" '.retention')" == "permanent" ]] \
+    || die "release manifest must record retention=permanent: $release_manifest"
+  release_state="$(json_value "$release_manifest" '.releaseState')"
+  [[ "$release_state" == "stable" || "$release_state" == "prerelease" ]] \
+    || die "release manifest must record stable or prerelease state: $release_manifest"
+  release_url="$(json_value "$release_manifest" '.releaseURL')"
+  [[ "$release_url" == "https://github.com/Codewave-Seki/runeon-wine/releases/tag/"* ]] \
+    || die "release manifest must use the canonical public GitHub release URL: $release_manifest"
 done
 
 printf 'static checks passed for %s\n' "$patch_set_id"

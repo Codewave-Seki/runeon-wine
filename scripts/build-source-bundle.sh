@@ -11,6 +11,7 @@ source_root="$(cd "$1" && pwd)"
 output_dir="$2"
 
 load_base_manifest
+require_release_tag_checkout_if_published
 "$script_dir/verify-source.sh" "$source_root" >/dev/null
 
 mkdir -p "$output_dir"
@@ -39,7 +40,7 @@ cp -R "$repo_root/base" "$bundle_root/base"
 cp -R "$repo_root/patches" "$bundle_root/patches"
 cp "$patch_manifest" "$bundle_root/patches/manifest.json"
 cp -R "$repo_root/scripts" "$bundle_root/scripts"
-cp -R "$repo_root/LICENSES" "$bundle_root/LICENSES"
+cp "$repo_root/LICENSE" "$bundle_root/LICENSE"
 cp "$series_file" "$bundle_root/series"
 cp "$repo_root/README.md" "$repo_root/BUILDING.md" "$repo_root/MAINTENANCE.md" "$bundle_root/"
 

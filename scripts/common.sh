@@ -66,6 +66,18 @@ load_base_manifest() {
   bundle_timestamp="$(json_value "$base_manifest" '.bundleTimestamp')"
 }
 
+require_release_tag_checkout_if_published() {
+  local tag_commit head_commit
+
+  require_command git
+  if ! tag_commit="$(git -C "$repo_root" rev-parse --verify "refs/tags/$patch_set_id^{commit}" 2>/dev/null)"; then
+    return 0
+  fi
+  head_commit="$(git -C "$repo_root" rev-parse HEAD)"
+  [[ "$head_commit" == "$tag_commit" ]] \
+    || die "published patch set $patch_set_id must be rebuilt from its immutable tag checkout"
+}
+
 create_reproducible_tar_gz() {
   local bundle_root="$1"
   local archive="$2"
