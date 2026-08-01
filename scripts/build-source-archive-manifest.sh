@@ -10,6 +10,12 @@ source "$script_dir/common.sh"
 patchset_archive="$(cd "$(dirname "$1")" && pwd)/$(basename "$1")"
 source_archive="$(cd "$(dirname "$2")" && pwd)/$(basename "$2")"
 output_json="$3"
+release_state="${RUNEON_WINE_RELEASE_STATE:-prerelease}"
+
+case "$release_state" in
+  stable|prerelease) ;;
+  *) die "RUNEON_WINE_RELEASE_STATE must be stable or prerelease" ;;
+esac
 
 load_base_manifest
 require_file "$patchset_archive"
@@ -33,13 +39,17 @@ jq -n \
   --arg sourceFile "$(basename "$source_archive")" \
   --arg sourceSHA "$source_sha256" \
   --argjson sourceSize "$source_size" \
+  --arg releaseURL "https://github.com/Codewave-Seki/runeon-wine/releases/tag/$patch_set_id" \
+  --arg releaseState "$release_state" \
   '{
     schemaVersion: 1,
     patchSetID: $patchSetID,
     commit: $commit,
     repository: "Codewave-Seki/runeon-wine",
-    repositoryVisibility: "private",
-    availability: "on-request",
+    repositoryVisibility: "public",
+    availability: "public-release",
+    releaseURL: $releaseURL,
+    releaseState: $releaseState,
     retention: "permanent",
     assets: {
       "patch-set": {fileName: $patchsetFile, sha256: $patchsetSHA, sizeBytes: $patchsetSize},

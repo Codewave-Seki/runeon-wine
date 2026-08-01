@@ -3,8 +3,10 @@
   "patchSetID": "cx26.3-wine11.0-runeon.0",
   "commit": "d248ebaa1d319532a387ad9eb69b61420004ce89",
   "repository": "Codewave-Seki/runeon-wine",
-  "repositoryVisibility": "private",
-  "availability": "on-request",
+  "repositoryVisibility": "public",
+  "availability": "public-release",
+  "releaseURL": "https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.0",
+  "releaseState": "stable",
   "retention": "permanent",
   "assets": {
     "patch-set": {

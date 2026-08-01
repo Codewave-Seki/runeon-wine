@@ -47,7 +47,7 @@ patch 必须按 `series` 顺序应用。已应用、部分应用、SHA 漂移和
 scripts/build-source-bundle.sh "$source_root" dist
 ```
 
-输出包含 patched Wine source、base/patch manifest、patch files、series、维护脚本、许可证和构建说明。发布时记录生成文件的 SHA-256，并把不可变下载地址写入 Runeon runtime component metadata 与公开 source offer。
+输出包含 patched Wine source、base/patch manifest、patch files、series、维护脚本、许可证和构建说明。发布时记录生成文件的 SHA-256，将两个 bundle 与 `.sha256` 上传到同 tag 的公开 GitHub Release，并把不可变 asset URL 写入 Runeon runtime component metadata 与公开 source offer。
 
 ## 5. 产品构建使用的 patch-set bundle
 
@@ -57,3 +57,6 @@ scripts/build-patchset-bundle.sh dist
 
 Runeon 产品仓库下载并验证这个小型 bundle，再对固定 SHA 的 CrossOver archive 应用 `series`。patch-set bundle 和完整 corresponding-source bundle 必须来自同一个 tag，不能分别重建后混用。
 
+候选 tag 必须发布为 GitHub Pre-release；只有 matching runtime 完成 Dev 验证并真正进入 Production 后，才能把同一不可变 tag 的 Release 标记为正式版。Production 构建不得使用 branch archive 或 `latest` URL。
+
+如果 patch-set ID 已经存在同名 tag，bundle 脚本只允许在该 tag 的精确 checkout 上重建，防止 main 后续文档或脚本变化悄悄改变历史 asset。继续开发时先创建新的 patch-set ID，不能移动旧 tag 或覆盖旧 Release asset。
