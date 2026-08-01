@@ -8,6 +8,7 @@ source "$script_dir/common.sh"
 
 load_base_manifest
 require_command jq
+require_command perl
 require_file "$repo_root/LICENSE"
 
 jq -e . "$base_manifest" "$patch_manifest" >/dev/null
@@ -31,6 +32,47 @@ done <<<"$series_paths"
 
 for shell_script in "$repo_root"/scripts/*.sh; do
   bash -n "$shell_script"
+done
+
+for english_document in "$repo_root"/*.md; do
+  case "$english_document" in
+    *.zh-CN.md|*.ja.md) continue ;;
+  esac
+
+  document_stem="${english_document%.md}"
+  chinese_document="$document_stem.zh-CN.md"
+  japanese_document="$document_stem.ja.md"
+  english_name="$(basename "$english_document")"
+  chinese_name="$(basename "$chinese_document")"
+  japanese_name="$(basename "$japanese_document")"
+
+  require_file "$chinese_document"
+  require_file "$japanese_document"
+
+  for document in "$english_document" "$chinese_document" "$japanese_document"; do
+    grep -Fq "$english_name" "$document" \
+      || die "documentation language link is missing $english_name: $document"
+    grep -Fq "$chinese_name" "$document" \
+      || die "documentation language link is missing $chinese_name: $document"
+    grep -Fq "$japanese_name" "$document" \
+      || die "documentation language link is missing $japanese_name: $document"
+  done
+
+  if perl -CSD -ne '$found ||= /\p{Han}|\p{Hiragana}|\p{Katakana}/; END { exit($found ? 0 : 1) }' "$english_document"; then
+    die "authoritative English documentation contains Chinese or Japanese text: $english_document"
+  fi
+  perl -CSD -ne '$found ||= /\p{Han}/; END { exit($found ? 0 : 1) }' "$chinese_document" \
+    || die "Chinese documentation does not contain Chinese text: $chinese_document"
+  perl -CSD -ne '$found ||= /\p{Hiragana}|\p{Katakana}/; END { exit($found ? 0 : 1) }' "$japanese_document" \
+    || die "Japanese documentation does not contain Japanese text: $japanese_document"
+done
+
+for translated_document in "$repo_root"/*.zh-CN.md "$repo_root"/*.ja.md; do
+  case "$translated_document" in
+    *.zh-CN.md) english_document="${translated_document%.zh-CN.md}.md" ;;
+    *.ja.md) english_document="${translated_document%.ja.md}.md" ;;
+  esac
+  require_file "$english_document"
 done
 
 for release_manifest in "$repo_root"/release-manifests/*.source-archive.json; do

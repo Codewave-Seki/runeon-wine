@@ -1,7 +1,11 @@
-# 安全问题
+# Security Policy
 
-请不要在公开 Issue、Pull Request、Discussion 或 Actions artifact 中提交 Runeon 用户日志、诊断包、账号信息、Steam 数据、密钥、签名身份或 Apple 私有组件。
+[English](SECURITY.md) | [Chinese](SECURITY.zh-CN.md) | [Japanese](SECURITY.ja.md)
 
-如果发现本仓库的源码供应链、构建脚本或 Release asset 存在安全问题，请将复现步骤、受影响 tag/commit 和最小必要证据发送至 `support@runeon.app`。在修复和披露方案确认前，请不要公开尚未修复的利用细节。
+> This English document is authoritative. The Chinese and Japanese documents are complete translations for convenience.
 
-本仓库只覆盖公开的 Wine/CrossOver Wine lineage、Runeon Wine patch 和对应源码构建入口。Runeon App、后端、用户诊断、D3DMetal/GPTK 与 Apple 私有组件不属于本仓库的公开范围。
+Do not submit Runeon user logs, diagnostics packages, account information, Steam data, secrets, signing identities, or Apple private components to public Issues, Pull Requests, Discussions, or Actions artifacts.
+
+If you find a security issue in this repository's source supply chain, build scripts, or Release assets, send reproduction steps, the affected tag or commit, and only the minimum necessary evidence to `support@runeon.app`. Do not disclose unpatched exploitation details publicly before a remediation and disclosure plan is agreed.
+
+This repository covers only the public Wine/CrossOver Wine lineage, Runeon Wine patches, and corresponding-source build entry points. The Runeon App, backend, user diagnostics, D3DMetal/GPTK, and Apple private components are outside this repository's public scope.

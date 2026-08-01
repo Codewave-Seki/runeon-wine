@@ -42,7 +42,7 @@ cp "$patch_manifest" "$bundle_root/patches/manifest.json"
 cp -R "$repo_root/scripts" "$bundle_root/scripts"
 cp "$repo_root/LICENSE" "$bundle_root/LICENSE"
 cp "$series_file" "$bundle_root/series"
-cp "$repo_root/README.md" "$repo_root/BUILDING.md" "$repo_root/MAINTENANCE.md" "$bundle_root/"
+cp "$repo_root"/*.md "$bundle_root/"
 
 jq -n \
   --arg baseId "$base_id" \
