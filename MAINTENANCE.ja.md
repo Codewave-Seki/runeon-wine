@@ -20,6 +20,12 @@ Runeon Wine は、能動的な上流監査と diagnostics 主導の調査とい�
 - `subsystem-sensitive`: グラフィックス、メディア、ウィンドウ、入力、ビルドシステム、または複数モジュールにまたがる変更です。
 - `abi-sensitive`: `ntdll`、`server`、`wow64`、`loader`、`winemac.drv`、`win32u`、Unix library/server protocol、または D3DMetal interface の変更です。既定では通常の backport 候補にしません。
 
+## 現在の Wine 11.x レビューベースライン
+
+現在の `cx26.3-wine11.0-runeon.2` 候補は、`wine-11.14` までのコミット単位レビューに基づきます。完全な記録は[監査レポート](AUDIT-11.0-11.14.ja.md)を参照してください。以前に採用した 2 件の upstream backport に加え、局所的な正確性・安定性修正を 33 件選定しましたが、upstream の全コミットをそのまま取り込んだものではありません。機能追加、大規模リファクタリング、ABI-sensitive な変更、サブシステム移行、CrossOver 26.3 に同等実装が存在する修正、依存関係または回帰範囲を限定できていない修正は保留しています。
+
+この監査は特定時点の判断記録であり、恒久的な allowlist ではありません。保留したコミットも、依存チェーン、関連テスト、独立 probe、Runeon での影響が確認できれば、将来の新しい immutable patch set に追加できます。一方、監査で採用しただけでは runtime の公開は許可されず、以下の完全 build と製品 smoke gate を引き続き満たす必要があります。
+
 ## Diagnostics 主導の調査
 
 実ユーザーのログは、影響と優先度を確認するために使用できます。最初に呼び出しチェーンを特定するか、独立 probe で挙動を再現し、その後で upstream commit と対応付けます。ローカル証拠がない場合は候補としてのみ記録し、オンライン issue を Runeon の根本原因として扱ってはいけません。

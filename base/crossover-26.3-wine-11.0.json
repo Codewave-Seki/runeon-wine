@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "baseId": "crossover-26.3-wine-11.0",
-  "patchSetId": "cx26.3-wine11.0-runeon.1",
+  "patchSetId": "cx26.3-wine11.0-runeon.2",
   "sourceUrl": "https://media.codeweavers.com/pub/crossover/source/crossover-sources-26.3.0.tar.gz",
   "sourceArchiveName": "crossover-sources-26.3.0.tar.gz",
   "sourceArchiveSha256": "ac99c8ca4b3848f3e81784135f023df266b61c2345726ea55a50b3e030dd6872",

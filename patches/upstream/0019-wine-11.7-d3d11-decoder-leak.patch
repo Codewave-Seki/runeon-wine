@@ -1,0 +1,12 @@
+diff --git a/dlls/d3d11/decoder.c b/dlls/d3d11/decoder.c
+index b3a1982100..cae0593f35 100644
+--- a/dlls/d3d11/decoder.c
++++ b/dlls/d3d11/decoder.c
+@@ -193,6 +193,7 @@ HRESULT d3d_video_decoder_create(struct d3d_device *device, const D3D11_VIDEO_DE
+         else if (config->ConfigBitstreamRaw != 2)
+         {
+             FIXME("Unsupported ConfigBitstreamRaw value %u.\n", config->ConfigBitstreamRaw);
++            free(object);
+             return E_NOTIMPL;
+         }
+     }

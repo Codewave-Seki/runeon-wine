@@ -51,4 +51,16 @@ if jq -e '.patches[] | select(.path | contains("cfgmgr32-invalid-notification-ha
     || die "cfgmgr32 page-fault upstream test missing"
 fi
 
+while IFS=$'\t' read -r relative_source marker_text; do
+  [[ -n "$relative_source" && -n "$marker_text" ]] \
+    || die "invalid source verification marker in $patch_manifest"
+  case "$relative_source" in
+    /*|../*|*/../*) die "unsafe source verification path: $relative_source" ;;
+  esac
+  verification_source="$source_root/$relative_source"
+  require_file "$verification_source"
+  grep -Fq "$marker_text" "$verification_source" \
+    || die "source verification marker missing in $relative_source: $marker_text"
+done < <(jq -r '.patches[] | .verification[]? | [.path, .contains] | @tsv' "$patch_manifest")
+
 printf 'verified %s on %s\n' "$patch_set_id" "$base_id"

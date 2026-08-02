@@ -1,0 +1,44 @@
+diff --git a/dlls/msvcp140/tests/msvcp140.c b/dlls/msvcp140/tests/msvcp140.c
+index 32f06741cf..bad48e4934 100644
+--- a/dlls/msvcp140/tests/msvcp140.c
++++ b/dlls/msvcp140/tests/msvcp140.c
+@@ -714,7 +714,8 @@ static void test__TaskEventLogger(void)
+ static void __cdecl chore_callback(void *arg)
+ {
+     HANDLE event = arg;
+-    SetEvent(event);
++    if (event)
++        SetEvent(event);
+ }
+ 
+ static void test_chore(void)
+@@ -725,11 +726,14 @@ static void test_chore(void)
+     int ret;
+ 
+     memset(&chore, 0, sizeof(chore));
++    chore.callback = chore_callback;
+     ret = p__Schedule_chore(&chore);
+     ok(!ret, "_Schedule_chore returned %d\n", ret);
+     ok(chore.work != NULL, "chore.work == NULL\n");
+-    ok(!chore.callback, "chore.callback != NULL\n");
++    ok(chore.callback == chore_callback, "chore.callback != chore_callback\n");
+     p__Release_chore(&chore);
++    ok(!chore.work, "chore.work != NULL\n");
++    ok(chore.callback == chore_callback, "chore.callback != chore_callback\n");
+ 
+     chore.work = NULL;
+     chore.callback = chore_callback;
+diff --git a/dlls/msvcp90/details.c b/dlls/msvcp90/details.c
+index 7dd7e23e38..9e541e2521 100644
+--- a/dlls/msvcp90/details.c
++++ b/dlls/msvcp90/details.c
+@@ -1055,8 +1055,7 @@ static void WINAPI threadpool_callback(PTP_CALLBACK_INSTANCE instance, void *con
+ {
+     _Threadpool_chore *chore = context;
+     TRACE("calling chore callback: %p\n", chore);
+-    if (chore->callback)
+-        chore->callback(chore->arg);
++    chore->callback(chore->arg);
+ }
+ 
+ /* ?_Schedule_chore@details@Concurrency@@YAHPAU_Threadpool_chore@12@@Z */

@@ -1,0 +1,12 @@
+diff --git a/programs/oleview/tree.c b/programs/oleview/tree.c
+index 0429230f5c..c08bf308d9 100644
+--- a/programs/oleview/tree.c
++++ b/programs/oleview/tree.c
+@@ -564,6 +564,7 @@ static void AddBaseEntries(void)
+ 
+     LoadStringW(globals.hMainInst, IDS_TREE_CLO, tvis.item.pszText,
+             MAX_LOAD_STRING);
++    tvis.item.lParam = 0;
+     tree.hCLO = TreeView_InsertItemW(globals.hTree, &tvis);
+ 
+     LoadStringW(globals.hMainInst, IDS_TREE_O1O, tvis.item.pszText,
