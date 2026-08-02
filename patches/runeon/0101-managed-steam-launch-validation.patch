@@ -1,0 +1,263 @@
+diff --git a/server/Makefile.in b/server/Makefile.in
+index f21aa48..9070de5 100644
+--- a/server/Makefile.in
++++ b/server/Makefile.in
+@@ -30,6 +30,7 @@ SOURCES = \
+ 	procfs.c \
+ 	ptrace.c \
+ 	queue.c \
++	runeon_launch.c \
+ 	region.c \
+ 	registry.c \
+ 	request.c \
+@@ -52,6 +53,6 @@ SOURCES = \
+ 	winstation.c
+ 
+ UNIX_CFLAGS = $(INOTIFY_CFLAGS)
+-UNIX_LIBS   = $(LDEXECFLAGS) $(RT_LIBS) $(INOTIFY_LIBS) $(PROCSTAT_LIBS)
++UNIX_LIBS   = $(LDEXECFLAGS) $(RT_LIBS) $(INOTIFY_LIBS) $(PROCSTAT_LIBS) $(SECURITY_LIBS)
+ 
+ unicode_EXTRADEFS = -DBINDIR="\"${bindir}\"" -DDATADIR="\"${datadir}\""
+diff --git a/server/main.c b/server/main.c
+index 19127ce..5ac42ca 100644
+--- a/server/main.c
++++ b/server/main.c
+@@ -41,6 +41,7 @@
+ #include "request.h"
+ #include "unicode.h"
+ #include "msync.h"
++#include "runeon_launch.h"
+ 
+ /* command-line options */
+ int debug_level = 0;
+@@ -260,6 +261,11 @@ int main( int argc, char *argv[] )
+     sock_init();
+     msync_init_shm();
+     open_master_socket();
++    if (!runeon_validate_managed_launch())
++    {
++        fputs( "wineserver: managed launch validation failed\n", stderr );
++        return 1;
++    }
+     msync_init();
+ 
+     if (debug_level) fprintf( stderr, "wineserver: starting (pid=%ld)\n", (long) getpid() );
+diff --git a/server/runeon_launch.c b/server/runeon_launch.c
+new file mode 100644
+index 0000000..090ab7a
+--- /dev/null
++++ b/server/runeon_launch.c
+@@ -0,0 +1,190 @@
++/*
++ * Managed launch validation.
++ *
++ * Copyright (C) 2026 Runeon
++ *
++ * This library is free software; you can redistribute it and/or
++ * modify it under the terms of the GNU Lesser General Public
++ * License as published by the Free Software Foundation; either
++ * version 2.1 of the License, or (at your option) any later version.
++ */
++
++#include "config.h"
++
++#include <errno.h>
++#include <stdint.h>
++#include <stdlib.h>
++#include <string.h>
++#include <unistd.h>
++
++#include "runeon_launch.h"
++
++#if defined(RUNEON_MANAGED_LAUNCH_VALIDATION) && defined(__APPLE__)
++
++#include <CoreFoundation/CoreFoundation.h>
++#include <Security/Security.h>
++#include <sys/socket.h>
++#include <sys/un.h>
++
++#define RUNEON_REQUEST_MAGIC "RNLNCH01"
++#define RUNEON_RESPONSE_MAGIC "RNLNRS01"
++#define RUNEON_PROTOCOL_VERSION 1
++#define RUNEON_TOKEN_LENGTH 64
++#define RUNEON_MAX_PATH_LENGTH 4096
++
++static int send_all( int fd, const void *buffer, size_t length )
++{
++    const char *cursor = buffer;
++
++    while (length)
++    {
++        ssize_t count = send( fd, cursor, length, 0 );
++        if (count < 0 && errno == EINTR) continue;
++        if (count <= 0) return 0;
++        cursor += count;
++        length -= count;
++    }
++    return 1;
++}
++
++static int receive_all( int fd, void *buffer, size_t length )
++{
++    char *cursor = buffer;
++
++    while (length)
++    {
++        ssize_t count = recv( fd, cursor, length, 0 );
++        if (count < 0 && errno == EINTR) continue;
++        if (count <= 0) return 0;
++        cursor += count;
++        length -= count;
++    }
++    return 1;
++}
++
++static void put_uint16( unsigned char *destination, uint16_t value )
++{
++    destination[0] = value >> 8;
++    destination[1] = value & 0xff;
++}
++
++static uint16_t get_uint16( const unsigned char *source )
++{
++    return ((uint16_t)source[0] << 8) | source[1];
++}
++
++static int validate_peer_signature( int fd )
++{
++    pid_t peer_pid = 0;
++    socklen_t peer_pid_size = sizeof(peer_pid);
++    CFNumberRef pid_number = NULL;
++    CFDictionaryRef attributes = NULL;
++    SecCodeRef code = NULL;
++    SecRequirementRef requirement = NULL;
++    OSStatus status;
++    int valid = 0;
++
++    if (getsockopt( fd, SOL_LOCAL, LOCAL_PEERPID, &peer_pid, &peer_pid_size ) || peer_pid <= 0) return 0;
++    if (!(pid_number = CFNumberCreate( NULL, kCFNumberIntType, &peer_pid ))) goto done;
++    {
++        const void *keys[] = { kSecGuestAttributePid };
++        const void *values[] = { pid_number };
++        attributes = CFDictionaryCreate( NULL, keys, values, 1, &kCFTypeDictionaryKeyCallBacks,
++                                         &kCFTypeDictionaryValueCallBacks );
++    }
++    if (!attributes) goto done;
++    status = SecCodeCopyGuestWithAttributes( NULL, attributes, kSecCSDefaultFlags, &code );
++    if (status != errSecSuccess) goto done;
++    status = SecRequirementCreateWithString(
++        CFSTR("anchor apple generic and identifier \"app.runeon.macos.Runeon\" and certificate leaf[subject.OU] = \"5L9V6FRKP5\""),
++        kSecCSDefaultFlags, &requirement );
++    if (status != errSecSuccess) goto done;
++    valid = SecCodeCheckValidity( code, kSecCSStrictValidate, requirement ) == errSecSuccess;
++
++done:
++    if (requirement) CFRelease( requirement );
++    if (code) CFRelease( code );
++    if (attributes) CFRelease( attributes );
++    if (pid_number) CFRelease( pid_number );
++    return valid;
++}
++
++static int connect_gatekeeper( const char *socket_path )
++{
++    struct sockaddr_un address;
++    int fd;
++
++    if (strlen( socket_path ) >= sizeof(address.sun_path)) return -1;
++    if ((fd = socket( AF_UNIX, SOCK_STREAM, 0 )) < 0) return -1;
++    memset( &address, 0, sizeof(address) );
++    address.sun_family = AF_UNIX;
++    address.sun_len = sizeof(address);
++    strcpy( address.sun_path, socket_path );
++    if (connect( fd, (const struct sockaddr *)&address, sizeof(address) ))
++    {
++        close( fd );
++        return -1;
++    }
++    return fd;
++}
++
++int runeon_validate_managed_launch(void)
++{
++    const char *socket_environment = getenv( "RUNEON_LAUNCH_GATE_SOCKET" );
++    const char *token_environment = getenv( "RUNEON_LAUNCH_GATE_GRANT" );
++    const char *runtime_environment = getenv( "RUNEON_LAUNCH_GATE_RUNTIME" );
++    const char *prefix_environment = getenv( "WINEPREFIX" );
++    char *socket_path = socket_environment ? strdup( socket_environment ) : NULL;
++    char *token = token_environment ? strdup( token_environment ) : NULL;
++    char *runtime = runtime_environment ? strdup( runtime_environment ) : NULL;
++    char *prefix = prefix_environment ? strdup( prefix_environment ) : NULL;
++    unsigned char header[16], response[12];
++    size_t prefix_length, runtime_length;
++    int fd = -1, valid = 0;
++
++    unsetenv( "RUNEON_LAUNCH_GATE_SOCKET" );
++    unsetenv( "RUNEON_LAUNCH_GATE_GRANT" );
++    unsetenv( "RUNEON_LAUNCH_GATE_RUNTIME" );
++
++    if (!socket_path || !token || !runtime || !prefix) goto done;
++    prefix_length = strlen( prefix );
++    runtime_length = strlen( runtime );
++    if (strlen( token ) != RUNEON_TOKEN_LENGTH || !prefix_length || !runtime_length ||
++        prefix_length > RUNEON_MAX_PATH_LENGTH || runtime_length > RUNEON_MAX_PATH_LENGTH ||
++        prefix_length > UINT16_MAX || runtime_length > UINT16_MAX) goto done;
++
++    if ((fd = connect_gatekeeper( socket_path )) < 0 || !validate_peer_signature( fd )) goto done;
++    memcpy( header, RUNEON_REQUEST_MAGIC, 8 );
++    put_uint16( header + 8, RUNEON_PROTOCOL_VERSION );
++    put_uint16( header + 10, RUNEON_TOKEN_LENGTH );
++    put_uint16( header + 12, prefix_length );
++    put_uint16( header + 14, runtime_length );
++    if (!send_all( fd, header, sizeof(header) ) ||
++        !send_all( fd, token, RUNEON_TOKEN_LENGTH ) ||
++        !send_all( fd, prefix, prefix_length ) ||
++        !send_all( fd, runtime, runtime_length ) ||
++        !receive_all( fd, response, sizeof(response) )) goto done;
++    valid = !memcmp( response, RUNEON_RESPONSE_MAGIC, 8 ) &&
++            get_uint16( response + 8 ) == RUNEON_PROTOCOL_VERSION && response[10] == 1;
++
++done:
++    if (fd >= 0) close( fd );
++    if (token)
++    {
++        memset( token, 0, strlen(token) );
++        free( token );
++    }
++    free( socket_path );
++    free( runtime );
++    free( prefix );
++    return valid;
++}
++
++#else
++
++int runeon_validate_managed_launch(void)
++{
++    return 1;
++}
++
++#endif
+diff --git a/server/runeon_launch.h b/server/runeon_launch.h
+new file mode 100644
+index 0000000..77c2efa
+--- /dev/null
++++ b/server/runeon_launch.h
+@@ -0,0 +1,17 @@
++/*
++ * Managed launch validation.
++ *
++ * Copyright (C) 2026 Runeon
++ *
++ * This library is free software; you can redistribute it and/or
++ * modify it under the terms of the GNU Lesser General Public
++ * License as published by the Free Software Foundation; either
++ * version 2.1 of the License, or (at your option) any later version.
++ */
++
++#ifndef __WINE_SERVER_RUNEON_LAUNCH_H
++#define __WINE_SERVER_RUNEON_LAUNCH_H
++
++extern int runeon_validate_managed_launch(void);
++
++#endif /* __WINE_SERVER_RUNEON_LAUNCH_H */

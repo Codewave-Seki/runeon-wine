@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "patchSetId": "cx26.3-wine11.0-runeon.2",
+  "patchSetId": "cx26.3-wine11.0-runeon.3",
   "baseId": "crossover-26.3-wine-11.0",
   "audit": {
     "from": "wine-11.0",
@@ -604,6 +604,15 @@
         "T237"
       ],
       "summary": "Append verified CEF arguments only to the scoped Steam and Rockstar main processes."
+    },
+    {
+      "order": 101,
+      "path": "patches/runeon/0101-managed-steam-launch-validation.patch",
+      "sha256": "b8676da5c704f24f5ef73952e3042f990cc0d7ba86b5e56b967e19a741d6dad3",
+      "kind": "runeon-product",
+      "status": "active",
+      "risk": "high",
+      "summary": "Improve managed Steam launch validation."
     }
   ]
 }

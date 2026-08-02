@@ -35,3 +35,4 @@ patches/upstream/0033-wine-11.14-crypt32-oid-info-size.patch
 patches/upstream/0034-wine-11.14-gdiplus-drawimage-overflow.patch
 patches/upstream/0035-wine-11.1-cmd-mklink-buffer-bounds.patch
 patches/runeon/0100-steam-rockstar-cef-process-arguments.patch
+patches/runeon/0101-managed-steam-launch-validation.patch
