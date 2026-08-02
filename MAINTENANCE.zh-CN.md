@@ -20,6 +20,12 @@ Runeon Wine 同时接受主动上游审计和 diagnostics 驱动调查两类输�
 - `subsystem-sensitive`：图形、媒体、窗口、输入、构建系统或多模块修改。
 - `abi-sensitive`：`ntdll`、`server`、`wow64`、`loader`、`winemac.drv`、`win32u`、Unix library/server protocol 或 D3DMetal 接口改动。默认不作为普通 backport 候选。
 
+## 当前 Wine 11.x 审查基线
+
+当前 `cx26.3-wine11.0-runeon.2` 候选基于截至 `wine-11.14` 的逐提交审查；完整记录见[审计报告](AUDIT-11.0-11.14.zh-CN.md)。本轮在此前两个已接受的上游 backport 之外，又选入 33 个局部正确性与稳定性修复，并不是把所有上游提交直接复制进来。功能新增、大范围重构、ABI 敏感改动、子系统迁移、CrossOver 26.3 已有等价实现，以及依赖或回归面尚未收敛的修复均继续延期。
+
+审计是一个时间点上的决策记录，不是永久白名单。延期提交在其依赖链、相关测试、独立探针和 Runeon 实际价值都得到确认后，可以进入后续新的不可变 patch set。反过来，进入审计清单也不代表可以直接发布 runtime；仍必须通过下文的完整构建与产品 smoke 门槛。
+
 ## Diagnostics 驱动调查
 
 真实用户日志可以确认影响和优先级。必须先固定调用链或用独立 probe 复现，再关联 upstream commit。没有本机证据时只能记录候选，不能把网上 issue 直接写成 Runeon 根因。

@@ -1,7 +1,44 @@
 {
   "schemaVersion": 1,
-  "patchSetId": "cx26.3-wine11.0-runeon.1",
+  "patchSetId": "cx26.3-wine11.0-runeon.2",
   "baseId": "crossover-26.3-wine-11.0",
+  "audit": {
+    "from": "wine-11.0",
+    "through": "wine-11.14",
+    "totalCommits": 3143,
+    "automatedCandidateCount": 2373,
+    "selectedNewBackports": 33,
+    "crossOverEquivalentCommits": [
+      "00f88cd59bb1b867d1b8b0064eb442583c1eefbf",
+      "13a82c7468dd46341c55d4ea3fb8ee8a51bc5c2e",
+      "12154421e345ef77951865695b4baff4a3bc0593",
+      "e0663e8a283cd0ac36ebd95bbbdf97d99968d12c",
+      "eef8e97dd335beccb23f3b13d4f4ad715f23f359"
+    ],
+    "deferredCommits": [
+      {
+        "commit": "f34dda8a56d09d1ca4ce2e929fe2c83ccbd14c94",
+        "reason": "Media Foundation control-flow and test prerequisites diverge from the pinned CrossOver branch."
+      },
+      {
+        "commit": "a48b1ff36b6154a27be94c274b22d43ad06c1054",
+        "reason": "CrossOver carries a divergent WinHTTP stream implementation and the upstream commit adds no in-tree regression test."
+      },
+      {
+        "commit": "35b1e7eb9a7e66c49fac8583e50186c6c21736e6",
+        "reason": "The source hunk applies but the matching SChannel test prerequisite does not; source-only backporting is not accepted."
+      },
+      {
+        "commit": "b39db986571ed894334b992d8479b6deb9ddb23e",
+        "reason": "The implementation moved from setupapi to cfgmgr32 upstream; this requires semantic adaptation and a matching legacy-layout test."
+      },
+      {
+        "commit": "8840f1dae9a7fc873ebb635a0a054062880dba51",
+        "reason": "The URI safety fix depends on the surrounding canonicalization series and must be evaluated as an ordered chain."
+      }
+    ],
+    "decisionDocument": "AUDIT-11.0-11.14.md"
+  },
   "patches": [
     {
       "order": 1,
@@ -16,7 +53,7 @@
         "774a1f8a8df61e4870fbd0d1253b7a8ffb762e53",
         "fe542210cd1c0e503b8f2af6623ea6c0bb2d62df"
       ],
-      "summary": "将 VC14 builtin 文件版本更新为 14.50.35719.0。"
+      "summary": "Update the VC14 builtin file versions to 14.50.35719.0."
     },
     {
       "order": 2,
@@ -29,8 +66,531 @@
       "upstreamCommits": [
         "a0236b658e5ee47b403f127e378c3802bfe84de3"
       ],
-      "adaptation": "Wine 11.8 已拆分到 notification.c；CrossOver 26.3/Wine 11.0 的等价实现仍位于 main.c。测试语义保持上游一致。",
-      "summary": "拒绝无效 CM notification handle，避免退出阶段 access violation。"
+      "adaptation": "Wine 11.8 moved the implementation to notification.c. The equivalent CrossOver 26.3/Wine 11.0 implementation remains in main.c; upstream test semantics are preserved.",
+      "summary": "Reject invalid Configuration Manager notification handles instead of raising an access violation during shutdown."
+    },
+    {
+      "order": 3,
+      "path": "patches/upstream/0003-wine-11.1-windowscodecs-truncated-gif-palette.patch",
+      "sha256": "de9d1f282f8f3cd7fbfe7e1882be8a18f7731bec2d737c5ef95999d73aa0cb1d",
+      "kind": "upstream-backport",
+      "status": "active",
+      "risk": "medium",
+      "firstWineRelease": "wine-11.1",
+      "upstreamCommits": [
+        "0706ffc06c1809a66fc2bb334c93de9dfb30c412"
+      ],
+      "crossOverEquivalence": "absent; exact upstream diff passes the release forward-apply gate",
+      "dependencies": [],
+      "testStrategy": "source conformance check and affected-module/full Wine build; upstream added no regression test",
+      "verification": [
+        {
+          "path": "dlls/windowscodecs/gifformat.c",
+          "contains": "static HRESULT gif_compress(IStream *out_stream, const BYTE *in_data, ULONG in_size, int color_bits)"
+        }
+      ],
+      "summary": "Initialize GIF LZW compression correctly when the color palette is truncated."
+    },
+    {
+      "order": 4,
+      "path": "patches/upstream/0004-wine-11.1-qasf-unconnected-seeking.patch",
+      "sha256": "0e32732d8f7da47f709a0e390bee80005c01000af2037f9dfcd4474c9fb87711",
+      "kind": "upstream-backport",
+      "status": "active",
+      "risk": "medium",
+      "firstWineRelease": "wine-11.1",
+      "upstreamCommits": [
+        "e33a8cc4ba7d2e9a0d38202968b44ab5d5960615"
+      ],
+      "crossOverEquivalence": "absent; exact upstream diff and regression test pass the release forward-apply gate",
+      "dependencies": [],
+      "testStrategy": "upstream qasf seeking regression test plus affected-module/full Wine build",
+      "verification": [
+        {
+          "path": "dlls/qasf/asfreader.c",
+          "contains": "stream->source.pin.peer && FAILED(IPin_BeginFlush"
+        },
+        {
+          "path": "dlls/qasf/tests/asfreader.c",
+          "contains": "static void test_seeking(void)"
+        }
+      ],
+      "summary": "Do not dereference unconnected ASF reader pins during seeking."
+    },
+    {
+      "order": 5,
+      "path": "patches/upstream/0005-wine-11.2-qasf-stopped-stream-uaf.patch",
+      "sha256": "f1948793c87601aa3f6655c4d89c0ab67a812218458b65d35eacd6e6ae0b9a28",
+      "kind": "upstream-backport",
+      "status": "active",
+      "risk": "medium",
+      "firstWineRelease": "wine-11.2",
+      "upstreamCommits": [
+        "a0a82c471b09a0c0b8b5049bc2a696286422d492"
+      ],
+      "crossOverEquivalence": "absent; exact upstream diff passes the release forward-apply gate",
+      "dependencies": [],
+      "testStrategy": "source conformance check and affected-module/full Wine build; upstream added no regression test",
+      "verification": [
+        {
+          "path": "dlls/qasf/asfreader.c",
+          "contains": "WMT_STATUS filter_status = filter->status;"
+        }
+      ],
+      "summary": "Keep a stopped ASF reader stopped while seeking to avoid a callback use-after-free race."
+    },
+    {
+      "order": 6,
+      "path": "patches/upstream/0006-wine-11.3-coreaudio-division-by-zero.patch",
+      "sha256": "03dac0ca09e35dff8d5ca737ddfac91a450bdf44f3a2d4e7d2d9e9b31aa4b52e",
+      "kind": "upstream-backport",
+      "status": "active",
+      "risk": "low",
+      "firstWineRelease": "wine-11.3",
+      "upstreamCommits": [
+        "56a4347acac16b1445a55719e1fddd9c6f9581b5"
+      ],
+      "crossOverEquivalence": "absent; exact upstream diff passes the release forward-apply gate",
+      "dependencies": [],
+      "testStrategy": "macOS CoreAudio source conformance check and full Wine build; upstream added no regression test",
+      "verification": [
+        {
+          "path": "dlls/winecoreaudio.drv/coreaudio.c",
+          "contains": "if (stream->period_frames == 0)"
+        }
+      ],
+      "summary": "Reject invalid CoreAudio periods instead of dividing by zero."
+    },
+    {
+      "order": 7,
+      "path": "patches/upstream/0007-wine-11.3-riched20-copy-crash.patch",
+      "sha256": "06d91a7f6764896c1918b4463b28a0237cb78d02b7c4a6eb9873facffb134a0b",
+      "kind": "upstream-backport",
+      "status": "active",
+      "risk": "low",
+      "firstWineRelease": "wine-11.3",
+      "upstreamCommits": [
+        "bb4ef1fbf7d8dae627025ea698c740cca8d15a06"
+      ],
+      "crossOverEquivalence": "absent; exact upstream diff passes the release forward-apply gate",
+      "dependencies": [],
+      "testStrategy": "source conformance check and affected-module/full Wine build; upstream added no regression test",
+      "verification": [
+        {
+          "path": "dlls/riched20/writer.c",
+          "contains": "(ULONG)fmt->rgxTabs[i] >> 28 <= 5"
+        }
+      ],
+      "summary": "Validate rich-text tab leader indices before copying text."
+    },
+    {
+      "order": 8,
+      "path": "patches/upstream/0008-wine-11.3-windowscodecs-interlaced-gif-size.patch",
+      "sha256": "119645da1fadcb52a23b3e21b01b03588fc5fee6d62c7334e2a0d2332a58a05b",
+      "kind": "upstream-backport",
+      "status": "active",
+      "risk": "low",
+      "firstWineRelease": "wine-11.3",
+      "upstreamCommits": [
+        "45190d46646bf6716f18ba5eb8bbc9bfe2102d7a"
+      ],
+      "crossOverEquivalence": "absent; exact upstream diff passes the release forward-apply gate",
+      "dependencies": [],
+      "testStrategy": "source conformance check and affected-module/full Wine build; upstream added no regression test",
+      "verification": [
+        {
+          "path": "dlls/windowscodecs/gifformat.c",
+          "contains": "(dststride * (rc->Height - 1)) + rc->Width > dstbuffersize"
+        }
+      ],
+      "summary": "Use the requested rectangle width in the interlaced GIF output-buffer bounds check."
+    },
+    {
+      "order": 9,
+      "path": "patches/upstream/0009-wine-11.3-ws2-duplicated-socket-close.patch",
+      "sha256": "0e610587ad6ec51fb5668de009fe7516d47f5f4d5c9f3e1ebb6d3efe2e7265d8",
+      "kind": "upstream-backport",
+      "status": "active",
+      "risk": "low",
+      "firstWineRelease": "wine-11.3",
+      "upstreamCommits": [
+        "352d6c94fd2ae7699df481db78e778dff6fccc05"
+      ],
+      "crossOverEquivalence": "absent; exact upstream diff and regression test pass the release forward-apply gate",
+      "dependencies": [],
+      "testStrategy": "upstream ws2_32 duplicated-handle regression test plus affected-module/full Wine build",
+      "verification": [
+        {
+          "path": "dlls/ws2_32/socket.c",
+          "contains": "!socket_list_remove( s ) && !is_valid_socket( s )"
+        },
+        {
+          "path": "dlls/ws2_32/tests/sock.c",
+          "contains": "closesocket((SOCKET)duplicated)"
+        }
+      ],
+      "summary": "Allow closesocket() to close a duplicated socket handle without corrupting socket bookkeeping."
+    },
+    {
+      "order": 10,
+      "path": "patches/upstream/0010-wine-11.12-windowscodecs-full-lzw-table.patch",
+      "sha256": "e7d142aaf9f8778d53baab0ff91fbfd9a0e6f791f443724a623aaf31fe4e8897",
+      "kind": "upstream-backport",
+      "status": "active",
+      "risk": "low",
+      "firstWineRelease": "wine-11.12",
+      "upstreamCommits": [
+        "89b35d3f707989e0901b27522e118ccd84f40550"
+      ],
+      "crossOverEquivalence": "absent; exact upstream diff passes the release forward-apply gate",
+      "dependencies": [],
+      "testStrategy": "source conformance check and affected-module/full Wine build; upstream added no regression test",
+      "verification": [
+        {
+          "path": "dlls/windowscodecs/ungif.c",
+          "contains": "Private->RunningCode - 2 < (LZ_MAX_CODE + 1)"
+        }
+      ],
+      "summary": "Preserve a full GIF LZW table until a clear code arrives."
+    },
+    {
+      "order": 11,
+      "path": "patches/upstream/0011-wine-11.14-wininet-empty-file-url-oob.patch",
+      "sha256": "d0754b5171cf42f68f5589df5c4b7a67bd3885879ca411b44fec0be3294a5bad",
+      "kind": "upstream-backport",
+      "status": "active",
+      "risk": "low",
+      "firstWineRelease": "wine-11.14",
+      "upstreamCommits": [
+        "af25fb409cece17bea2481ef274d6e9ea640669b"
+      ],
+      "crossOverEquivalence": "absent; exact upstream diff and regression tests pass the release forward-apply gate",
+      "dependencies": [],
+      "testStrategy": "upstream ANSI and Unicode empty-file-URL tests plus affected-module/full Wine build",
+      "verification": [
+        {
+          "path": "dlls/wininet/internet.c",
+          "contains": "len >= 2 && tmppath[len - 1] == '.'"
+        },
+        {
+          "path": "dlls/wininet/tests/url.c",
+          "contains": "file:// URLs with empty path and fragment/query immediately after //"
+        }
+      ],
+      "summary": "Prevent an out-of-bounds read when parsing file URLs with an empty path."
+    },
+    {
+      "order": 12,
+      "path": "patches/upstream/0012-wine-11.1-windowscodecs-rgba-conversion.patch",
+      "sha256": "03455b824e2721bed1a4bf2a9ab56a9357d7794e79e015965b39a67c5b1d5840",
+      "kind": "upstream-backport",
+      "status": "active",
+      "risk": "low",
+      "firstWineRelease": "wine-11.1",
+      "upstreamCommits": [
+        "95fa88630ee4f681221183e6de543c8719d9fb14"
+      ],
+      "summary": "Fix conversion from 64bpp RGBA to 32bpp BGRA."
+    },
+    {
+      "order": 13,
+      "path": "patches/upstream/0013-wine-11.3-ucrtbase-scanset-range.patch",
+      "sha256": "6206acaa75a33e7de0642e8f193f4ce331ea6448abd1d707acdcade0f9cbfcde",
+      "kind": "upstream-backport",
+      "status": "active",
+      "risk": "low",
+      "firstWineRelease": "wine-11.3",
+      "upstreamCommits": [
+        "5f241ebda259ae2a7f0aaa39b6d8df2f5bc60044"
+      ],
+      "summary": "Fix scanset character range handling in scanf."
+    },
+    {
+      "order": 14,
+      "path": "patches/upstream/0014-wine-11.3-advapi32-reportevent-leak.patch",
+      "sha256": "b71726abcaa1c0d0e79abbabf0b87ffda45dd99418936c5edf6fc406b5e73440",
+      "kind": "upstream-backport",
+      "status": "active",
+      "risk": "low",
+      "firstWineRelease": "wine-11.3",
+      "upstreamCommits": [
+        "91905171217d5f0cc54736f79e863eca4a1b39cb"
+      ],
+      "summary": "Release converted strings on ReportEventA failure paths."
+    },
+    {
+      "order": 15,
+      "path": "patches/upstream/0015-wine-11.4-msvcrt-time32-overflow.patch",
+      "sha256": "b5ba03f4ae2d9385b7b9ad3e339030110c73e546fe3276000327a241dae4fe89",
+      "kind": "upstream-backport",
+      "status": "active",
+      "risk": "low",
+      "firstWineRelease": "wine-11.4",
+      "upstreamCommits": [
+        "8ca440beead45275b999d59c51dfb8456d30533c"
+      ],
+      "summary": "Reject _time32 values that overflow the 32-bit result."
+    },
+    {
+      "order": 16,
+      "path": "patches/upstream/0016-wine-11.4-msvcp140-schedule-chore.patch",
+      "sha256": "7fdd0488d9173bbed140f2ca35a18b697b0f979aaf8b5a449ab739d4b8320054",
+      "kind": "upstream-backport",
+      "status": "active",
+      "risk": "low",
+      "firstWineRelease": "wine-11.4",
+      "upstreamCommits": [
+        "8845229a35a94569fc85361bfc85d72bdf1955cb"
+      ],
+      "summary": "Match native _Schedule_chore callback handling and avoid a VC14 crash."
+    },
+    {
+      "order": 17,
+      "path": "patches/upstream/0017-wine-11.4-msvcr100-exceptionptr-leak.patch",
+      "sha256": "69179a730a32a4c80db5982fa61880d29388ce652715ebb9ae1077c32f09b77e",
+      "kind": "upstream-backport",
+      "status": "active",
+      "risk": "low",
+      "firstWineRelease": "wine-11.4",
+      "upstreamCommits": [
+        "a955417b8f7bc959ee2f256ece1c73ee71c20f60"
+      ],
+      "summary": "Release the previous exception object when assigning ExceptionPtr values."
+    },
+    {
+      "order": 18,
+      "path": "patches/upstream/0018-wine-11.6-vbscript-redim-crash.patch",
+      "sha256": "1b5d17a1ed336e21557cf797931e7e2f22d12dfa9028c757371436d6adaeb314",
+      "kind": "upstream-backport",
+      "status": "active",
+      "risk": "low",
+      "firstWineRelease": "wine-11.6",
+      "upstreamCommits": [
+        "9c7d674aa96cdc89bfbb838439c5e03fa5a0c5ad"
+      ],
+      "summary": "Avoid dereferencing a null SAFEARRAY when ReDim initializes a dynamic array."
+    },
+    {
+      "order": 19,
+      "path": "patches/upstream/0019-wine-11.7-d3d11-decoder-leak.patch",
+      "sha256": "e0a1529e0decde481972b4e5f0c9ee7990a74010e16280dfeda729d69a0bf499",
+      "kind": "upstream-backport",
+      "status": "active",
+      "risk": "medium",
+      "firstWineRelease": "wine-11.7",
+      "upstreamCommits": [
+        "1ed184e29eb9d7916459a9e38ae9aa07437fe14f"
+      ],
+      "summary": "Release the video device interface when D3D11 decoder creation fails."
+    },
+    {
+      "order": 20,
+      "path": "patches/upstream/0020-wine-11.7-scrrun-bstr-length.patch",
+      "sha256": "bece5ee39292791c05b4d8b57e285319914d2f3f87abe435fc7a1401e71b3b15",
+      "kind": "upstream-backport",
+      "status": "active",
+      "risk": "low",
+      "firstWineRelease": "wine-11.7",
+      "upstreamCommits": [
+        "8d1c07977dc1e2f7cc80a752f616769ff2d3cde0"
+      ],
+      "summary": "Exclude the null terminator from the create_folder BSTR length."
+    },
+    {
+      "order": 21,
+      "path": "patches/upstream/0021-wine-11.7-quartz-completion-handle-leak.patch",
+      "sha256": "2e6f515d55a229a883771aeb3fc9416ebec55d4a8df015bbbd4f145a7f4d6b12",
+      "kind": "upstream-backport",
+      "status": "active",
+      "risk": "low",
+      "firstWineRelease": "wine-11.7",
+      "upstreamCommits": [
+        "8f15e858e311e4213cfb689e605d9c9849d7a6a6"
+      ],
+      "summary": "Close the DirectShow filter graph completion event handle."
+    },
+    {
+      "order": 22,
+      "path": "patches/upstream/0022-wine-11.8-nsiproxy-null-interface-list.patch",
+      "sha256": "cb6502a6ed80a9f1e801af3636ee54f9998f95523a163bdefcc0f23bcce0970f",
+      "kind": "upstream-backport",
+      "status": "active",
+      "risk": "low",
+      "firstWineRelease": "wine-11.8",
+      "upstreamCommits": [
+        "08dbf01aaa3689f8c8a8a22276658f372b023b03"
+      ],
+      "summary": "Handle if_nameindex failure without a null-pointer dereference."
+    },
+    {
+      "order": 23,
+      "path": "patches/upstream/0023-wine-11.8-nsiproxy-zero-interfaces.patch",
+      "sha256": "fe29cfaefbf30f1b4abf6c6f9e0da37445ec9814989c90e02ce228f6d39d2834",
+      "kind": "upstream-backport",
+      "status": "active",
+      "risk": "low",
+      "firstWineRelease": "wine-11.8",
+      "upstreamCommits": [
+        "965a00c4b479fca5d40196250542587415029f9d"
+      ],
+      "summary": "Avoid zero-sized allocation when no network interfaces exist."
+    },
+    {
+      "order": 24,
+      "path": "patches/upstream/0024-wine-11.8-iphlpapi-zero-interfaces.patch",
+      "sha256": "8af3a78ffb1117c1a5785c8a24a969faf8b7a6f398c6fa4fc3d0baf17f9e114d",
+      "kind": "upstream-backport",
+      "status": "active",
+      "risk": "low",
+      "firstWineRelease": "wine-11.8",
+      "upstreamCommits": [
+        "4781a7128e53b0af05114bc4d37bff3793a200fe"
+      ],
+      "summary": "Avoid an out-of-bounds read when no network interfaces exist."
+    },
+    {
+      "order": 25,
+      "path": "patches/upstream/0025-wine-11.8-msado15-null-update-status.patch",
+      "sha256": "f31e68802c495627f80fa5b85391c516c327fa7224e00cd152c9e99cf0d9aed9",
+      "kind": "upstream-backport",
+      "status": "active",
+      "risk": "low",
+      "firstWineRelease": "wine-11.8",
+      "upstreamCommits": [
+        "452d82e997fa273a32b60f353ed90fda677edf2d"
+      ],
+      "summary": "Handle providers that return no row status from IRowsetUpdate::Update."
+    },
+    {
+      "order": 26,
+      "path": "patches/upstream/0026-wine-11.10-wininet-authorization-leak.patch",
+      "sha256": "26280abe46dbd69edfcea381cfef77bb43b6422bd1ea0d09d6d27ff862e81a60",
+      "kind": "upstream-backport",
+      "status": "active",
+      "risk": "low",
+      "firstWineRelease": "wine-11.10",
+      "upstreamCommits": [
+        "cb3de0f05be4d56eba63d57a0198a3413fdd6506"
+      ],
+      "summary": "Free temporary authorization data in WinINet."
+    },
+    {
+      "order": 27,
+      "path": "patches/upstream/0027-wine-11.12-oleview-reload-uaf.patch",
+      "sha256": "10d396d8ff8d642af7630f5728ffc2fc62d4cdc776c9288e4f7db688edf74760",
+      "kind": "upstream-backport",
+      "status": "active",
+      "risk": "low",
+      "firstWineRelease": "wine-11.12",
+      "upstreamCommits": [
+        "c293e14307e700f0e69f63eaac86c9721a955c96"
+      ],
+      "summary": "Clear the selected item before OleView reload frees its tree."
+    },
+    {
+      "order": 28,
+      "path": "patches/upstream/0028-wine-11.12-regedit-multisz-overflow.patch",
+      "sha256": "0fe005efdec6928ad6db43b2867bfa5227f4f1de3c9478536ff4ebf3457b8380",
+      "kind": "upstream-backport",
+      "status": "active",
+      "risk": "low",
+      "firstWineRelease": "wine-11.12",
+      "upstreamCommits": [
+        "fe4f614de6d5ca5db8ac822de214cb0d29801acb"
+      ],
+      "summary": "Bound REG_MULTI_SZ scanning by the registry value size in Regedit."
+    },
+    {
+      "order": 29,
+      "path": "patches/upstream/0029-wine-11.13-urlmon-cache-buffer.patch",
+      "sha256": "7170cc51153c7e92b24610b29eab44aabea55c5dbb39ab75a4252242168672ee",
+      "kind": "upstream-backport",
+      "status": "active",
+      "risk": "low",
+      "firstWineRelease": "wine-11.13",
+      "upstreamCommits": [
+        "3f4bff72fa8edb1b72846e8a02fbebc7c4a2c521"
+      ],
+      "summary": "Use character counts and reserve the null terminator in URLDownloadToCacheFile."
+    },
+    {
+      "order": 30,
+      "path": "patches/upstream/0030-wine-11.13-mshtml-create-attr-leak.patch",
+      "sha256": "37808a9cae4065d746bbc35b4ea3fd4782e12003f7d45f07b6b07eec8d372311",
+      "kind": "upstream-backport",
+      "status": "active",
+      "risk": "low",
+      "firstWineRelease": "wine-11.13",
+      "upstreamCommits": [
+        "632963fc4fbba9d1a74b2a57fdc4bfc5d9f98cf6"
+      ],
+      "summary": "Release the Gecko attribute after creating an MSHTML attribute."
+    },
+    {
+      "order": 31,
+      "path": "patches/upstream/0031-wine-11.13-mshtml-detach-attr-leak.patch",
+      "sha256": "699ac1067ea83517928e5e03afb0578907e20eeb78f7396e86ff52af7301b384",
+      "kind": "upstream-backport",
+      "status": "active",
+      "risk": "low",
+      "firstWineRelease": "wine-11.13",
+      "upstreamCommits": [
+        "3131eba5b3526390f9859ac029088a0e65fe7b84"
+      ],
+      "summary": "Release the attribute collection reference when detaching an MSHTML attribute."
+    },
+    {
+      "order": 32,
+      "path": "patches/upstream/0032-wine-11.13-mshtml-dispid-attr-leak.patch",
+      "sha256": "2dd9dff3c98f6bc4e27dc312b7f3abb192f7357b73933e029fdacb43473c2b46",
+      "kind": "upstream-backport",
+      "status": "active",
+      "risk": "low",
+      "firstWineRelease": "wine-11.13",
+      "upstreamCommits": [
+        "8e6d4b91001e51e3e55d47c8af79b907c5de6a5d"
+      ],
+      "summary": "Release the Gecko attribute after obtaining its MSHTML DISPID."
+    },
+    {
+      "order": 33,
+      "path": "patches/upstream/0033-wine-11.14-crypt32-oid-info-size.patch",
+      "sha256": "6973e7e4612a4c965706a1526db05727959eec9434f04235759bb90f2204af31",
+      "kind": "upstream-backport",
+      "status": "active",
+      "risk": "low",
+      "firstWineRelease": "wine-11.14",
+      "upstreamCommits": [
+        "349d6af5b55bfe38a1aa25f01e72ec984a42041b"
+      ],
+      "summary": "Validate CRYPT_OID_INFO sizes while accepting extra-field compatibility."
+    },
+    {
+      "order": 34,
+      "path": "patches/upstream/0034-wine-11.14-gdiplus-drawimage-overflow.patch",
+      "sha256": "fbe226c1322ae0ca3c4893f84f828561800affbc9de536f40a49be72caf3e547",
+      "kind": "upstream-backport",
+      "status": "active",
+      "risk": "low",
+      "firstWineRelease": "wine-11.14",
+      "upstreamCommits": [
+        "568aca4e2aad7d1d2f0918f6834954618c3151ad"
+      ],
+      "summary": "Reject point-count arithmetic overflow in GdipDrawImagePointsRect."
+    },
+    {
+      "order": 35,
+      "path": "patches/upstream/0035-wine-11.1-cmd-mklink-buffer-bounds.patch",
+      "sha256": "a21dc3dc10c9677c83d25243a6e5e4defe1b451419be7fdc359d6680cf36c921",
+      "kind": "upstream-backport",
+      "status": "active",
+      "risk": "medium",
+      "firstWineRelease": "wine-11.1",
+      "upstreamCommits": [
+        "73e02c1e7f5487755d2583ea4f5116027fe9bf56"
+      ],
+      "adaptation": "The CrossOver 26.3 parser predates the upstream argument-state refactor. The MAX_PATH/full-path checks and extra-argument rejection are applied to the legacy control flow without importing unrelated cmd changes.",
+      "summary": "Bound MKLINK paths and reject excess arguments before copying them."
     },
     {
       "order": 100,
@@ -39,8 +599,11 @@
       "kind": "runeon-product",
       "status": "active",
       "risk": "high",
-      "runeonTasks": ["T49", "T237"],
-      "summary": "按可执行文件范围为 Steam 和 Rockstar 主 CEF 进程追加已验证参数。"
+      "runeonTasks": [
+        "T49",
+        "T237"
+      ],
+      "summary": "Append verified CEF arguments only to the scoped Steam and Rockstar main processes."
     }
   ]
 }

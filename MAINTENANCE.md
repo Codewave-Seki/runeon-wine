@@ -20,6 +20,12 @@ Runeon Wine accepts input from proactive upstream audits and diagnostics-driven 
 - `subsystem-sensitive`: graphics, media, windowing, input, build-system, or multi-module changes.
 - `abi-sensitive`: changes to `ntdll`, `server`, `wow64`, `loader`, `winemac.drv`, `win32u`, Unix library/server protocols, or D3DMetal interfaces. These are not ordinary backport candidates by default.
 
+## Current Wine 11.x review baseline
+
+The active `cx26.3-wine11.0-runeon.2` candidate is based on a commit-by-commit review through `wine-11.14`; see [the complete audit](AUDIT-11.0-11.14.md). The review selected 33 localized correctness and stability fixes in addition to the two previously accepted upstream backports. It did not attempt to copy every upstream commit. Feature work, broad refactors, ABI-sensitive changes, subsystem migrations, fixes already present in CrossOver 26.3, and fixes whose dependency or regression surface was not yet bounded remain deferred.
+
+The audit is a point-in-time decision record, not a permanent allowlist. A deferred commit may enter a later immutable patch set after its dependency chain, affected tests, independent probe, and Runeon impact are established. Conversely, inclusion in the audit does not authorize publishing a runtime: the complete build and product smoke gates below still apply.
+
 ## Diagnostics-driven investigation
 
 Real user logs may establish impact and priority. First pin down the call chain or reproduce the behavior with an independent probe, then correlate it with an upstream commit. Without local evidence, record only a candidate; do not treat an online issue as the Runeon root cause.

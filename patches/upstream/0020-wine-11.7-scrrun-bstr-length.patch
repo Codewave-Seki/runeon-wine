@@ -1,0 +1,15 @@
+diff --git a/dlls/scrrun/filesystem.c b/dlls/scrrun/filesystem.c
+index ae6c583fd0..6af73acbd7 100644
+--- a/dlls/scrrun/filesystem.c
++++ b/dlls/scrrun/filesystem.c
+@@ -2740,7 +2740,9 @@ HRESULT create_folder(const WCHAR *path, IFolder **folder)
+         return E_FAIL;
+     }
+ 
+-    object->path = SysAllocStringLen(NULL, len);
++    /* GetFullPathNameW returns the required size including the NUL terminator,
++     * so the BSTR length prefix must be one less. */
++    object->path = SysAllocStringLen(NULL, len - 1);
+     if(!object->path)
+     {
+         free(object);

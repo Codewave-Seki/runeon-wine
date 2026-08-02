@@ -1,0 +1,14 @@
+diff --git a/dlls/mshtml/htmlelem.c b/dlls/mshtml/htmlelem.c
+index b90fc24d28..4db8bd83a3 100644
+--- a/dlls/mshtml/htmlelem.c
++++ b/dlls/mshtml/htmlelem.c
+@@ -1214,6 +1214,9 @@ static HRESULT WINAPI HTMLElement_removeAttribute(IHTMLElement *iface, BSTR strA
+             list_remove(&attr->entry);
+             IHTMLDOMNode_Release(&attr->elem->node.IHTMLDOMNode_iface);
+             attr->elem = NULL;
++
++            /* The collection also keeps ref to us, release it */
++            IHTMLDOMAttribute_Release(&attr->IHTMLDOMAttribute_iface);
+         }
+ 
+         if(id == DISPID_IHTMLELEMENT_STYLE) {
