@@ -47,7 +47,7 @@ new file mode 100644
 index 0000000..090ab7a
 --- /dev/null
 +++ b/server/runeon_launch.c
-@@ -0,0 +1,190 @@
+@@ -0,0 +1,204 @@
 +/*
 + * Managed launch validation.
 + *
@@ -81,6 +81,18 @@ index 0000000..090ab7a
 +#define RUNEON_PROTOCOL_VERSION 1
 +#define RUNEON_TOKEN_LENGTH 64
 +#define RUNEON_MAX_PATH_LENGTH 4096
++
++static const unsigned char runeon_requirement_data[] = {
++    0xfa, 0xde, 0x0c, 0x00, 0x00, 0x00, 0x00, 0x64, 0x00, 0x00, 0x00, 0x01,
++    0x00, 0x00, 0x00, 0x06, 0x00, 0x00, 0x00, 0x06, 0x00, 0x00, 0x00, 0x0f,
++    0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x17, 0x61, 0x70, 0x70, 0x2e,
++    0x72, 0x75, 0x6e, 0x65, 0x6f, 0x6e, 0x2e, 0x6d, 0x61, 0x63, 0x6f, 0x73,
++    0x2e, 0x52, 0x75, 0x6e, 0x65, 0x6f, 0x6e, 0x00, 0x00, 0x00, 0x00, 0x0b,
++    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x0a, 0x73, 0x75, 0x62, 0x6a,
++    0x65, 0x63, 0x74, 0x2e, 0x4f, 0x55, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01,
++    0x00, 0x00, 0x00, 0x0a, 0x35, 0x4c, 0x39, 0x56, 0x36, 0x46, 0x52, 0x4b,
++    0x50, 0x35, 0x00, 0x00
++};
 +
 +static int send_all( int fd, const void *buffer, size_t length )
 +{
@@ -131,6 +143,7 @@ index 0000000..090ab7a
 +    CFDictionaryRef attributes = NULL;
 +    SecCodeRef code = NULL;
 +    SecRequirementRef requirement = NULL;
++    CFDataRef requirement_data_ref = NULL;
 +    OSStatus status;
 +    int valid = 0;
 +
@@ -145,13 +158,14 @@ index 0000000..090ab7a
 +    if (!attributes) goto done;
 +    status = SecCodeCopyGuestWithAttributes( NULL, attributes, kSecCSDefaultFlags, &code );
 +    if (status != errSecSuccess) goto done;
-+    status = SecRequirementCreateWithString(
-+        CFSTR("anchor apple generic and identifier \"app.runeon.macos.Runeon\" and certificate leaf[subject.OU] = \"5L9V6FRKP5\""),
-+        kSecCSDefaultFlags, &requirement );
++    requirement_data_ref = CFDataCreate( NULL, runeon_requirement_data, sizeof(runeon_requirement_data) );
++    if (!requirement_data_ref) goto done;
++    status = SecRequirementCreateWithData( requirement_data_ref, kSecCSDefaultFlags, &requirement );
 +    if (status != errSecSuccess) goto done;
 +    valid = SecCodeCheckValidity( code, kSecCSStrictValidate, requirement ) == errSecSuccess;
 +
 +done:
++    if (requirement_data_ref) CFRelease( requirement_data_ref );
 +    if (requirement) CFRelease( requirement );
 +    if (code) CFRelease( code );
 +    if (attributes) CFRelease( attributes );
