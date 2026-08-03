@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "patchSetId": "cx26.3-wine11.0-runeon.4",
+  "patchSetId": "cx26.3-wine11.0-runeon.5",
   "baseId": "crossover-26.3-wine-11.0",
   "audit": {
     "from": "wine-11.0",
@@ -608,11 +608,11 @@
     {
       "order": 101,
       "path": "patches/runeon/0101-managed-steam-launch-validation.patch",
-      "sha256": "0639f31d637fc041f2956439e838fe7427e9f1701f9e63fb4a4878ac7d2511f4",
+      "sha256": "7f834f867c8722ada4df3a8d5f68ecf7d3f265a1de21ee646c0a0cb8361ceeba",
       "kind": "runeon-product",
       "status": "active",
       "risk": "high",
-      "summary": "Improve managed Steam launch validation."
+      "summary": "Streamline managed Steam launch validation."
     }
   ]
 }

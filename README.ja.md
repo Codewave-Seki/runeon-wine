@@ -10,7 +10,7 @@ Runeon Wine は、Runeon の Steam Baseline runtime 用に公開されている�
 
 - CodeWeavers ソース: `crossover-sources-26.3.0.tar.gz`
 - Wine ベースライン: `Wine version 11.0`
-- 現在の source candidate: `cx26.3-wine11.0-runeon.4`
+- 現在の source candidate: `cx26.3-wine11.0-runeon.5`
 - 上流の監査済み範囲: `wine-11.14` まで
 
 [`base/crossover-26.3-wine-11.0.json`](base/crossover-26.3-wine-11.0.json) は、ベースライン URL、SHA-256、およびソースルートに関する唯一の機械可読な情報源です。[`series`](series) がパッチの順序を定義し、[`patches/manifest.json`](patches/manifest.json) が出所、リスク、および完全な upstream commit ID を記録します。
@@ -23,7 +23,7 @@ Runeon Wine は、Runeon の Steam Baseline runtime 用に公開されている�
 - `ntdll`、`server`、`wow64`、`loader`、`winemac.drv`、`win32u`、Unix library/server protocol、または D3DMetal interface の変更は、既定で ABI-sensitive と扱い、個別のベースライン更新または強化された検証を必要とします。
 - component packaging、Developer ID 署名、Dev/Production feed、ダウンロード検証、release readiness は、引き続き Runeon 製品リポジトリが担当します。
 - 本リポジトリと GitHub Release assets は公開されています。実際に配布される各 Production runtime には、正確な patch-set bundle、完全な対応ソース、および SHA-256 ファイルを含む不変の正式 Release が必要です。未公開候補は Pre-release のままにします。
-- `patchsets/cx26.3-wine11.0-runeon.0` は Production seed `2026.07.22` の正確な履歴ソース定義です。`patchsets/cx26.3-wine11.0-runeon.1` は、最初の未公開 Escape 修正候補を固定します。既定の [`series`](series) は現在の `.4` source candidate を示します。source candidate は配布済み runtime を意味しません。
+- `patchsets/cx26.3-wine11.0-runeon.0` は Production seed `2026.07.22` の正確な履歴ソース定義です。`patchsets/cx26.3-wine11.0-runeon.1` は、最初の未公開 Escape 修正候補を固定します。既定の [`series`](series) は現在の `.5` source candidate を示します。source candidate は配布済み runtime を意味しません。
 - `release-manifests/` は、各公開 bundle の commit、Release URL、ファイル名、size、SHA-256、stable/prerelease 状態、および永続保持ルールを記録します。Production runtime が参照できるのは `stable` manifest のみです。Pre-release であることは、その修正が Production ユーザーへ提供済みであることを意味しません。
 
 ## リリース状況
@@ -32,7 +32,8 @@ Runeon Wine は、Runeon の Steam Baseline runtime 用に公開されている�
 - [`cx26.3-wine11.0-runeon.1`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.1) は、Escape の `cfgmgr32` backport を含む次期 runtime 候補です。Dev または Production runtime としてはまだ配布されておらず、Pre-release のままです。
 - `cx26.3-wine11.0-runeon.2` は、Wine 11.1 から 11.14 までの安定性・正確性修正 33 件を人手でレビューして追加しています。採用、同等実装、延期の判断は [`AUDIT-11.0-11.14.ja.md`](AUDIT-11.0-11.14.ja.md) に記録します。
 - `cx26.3-wine11.0-runeon.3` は `.2` に管理対象 Steam の起動検証を初めて追加した、不変の履歴候補です。
-- `cx26.3-wine11.0-runeon.4` は現在の source candidate です。`.3` を継承し、管理対象 Steam の起動検証を改善します。source Release と Runeon runtime の独立 gate が完了するまでは、ユーザーに提供済みとは扱いません。
+- `cx26.3-wine11.0-runeon.4` は不変の履歴候補として保持されます。
+- `cx26.3-wine11.0-runeon.5` は現在の source candidate です。`.4` を継承し、管理対象 Steam の起動検証を簡素化します。source Release と Runeon runtime の独立 gate が完了するまでは、ユーザーに提供済みとは扱いません。
 
 ## クイック検証
 
