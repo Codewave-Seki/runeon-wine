@@ -34,7 +34,7 @@ Runeon Wine 是 Runeon Steam Baseline runtime 的公开源码维护仓库，保�
 - `cx26.3-wine11.0-runeon.3` 在 `.2` 基础上首次加入受管理的 Steam 启动验证，并作为不可变历史候选保留。
 - `cx26.3-wine11.0-runeon.4` 作为不可变历史候选保留。
 - `cx26.3-wine11.0-runeon.5` 作为不可变历史候选保留：继承 `.4`，并精简受管理的 Steam 启动验证。
-- `cx26.3-wine11.0-runeon.6` 是当前源码候选：继承 `.5`，新增 9 个来自 Wine 11.15 的评审 backport，并把审计范围推进到 `wine-11.15`。纳入、等价和延期决定见 [`AUDIT-11.0-11.15.zh-CN.md`](AUDIT-11.0-11.15.zh-CN.md)。源码 Release 和 Runeon runtime 的独立门禁完成前，不能描述为用户已经获得。
+- [`cx26.3-wine11.0-runeon.6`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.6) 是当前源码候选：继承 `.5`，新增 9 个来自 Wine 11.15 的评审 backport，并把审计范围推进到 `wine-11.15`。纳入、等价和延期决定见 [`AUDIT-11.0-11.15.zh-CN.md`](AUDIT-11.0-11.15.zh-CN.md)。已作为 Pre-release 发布；Runeon runtime 门禁完成前，不能描述为用户已经获得。
 
 ## 快速验证
 

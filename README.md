@@ -34,7 +34,7 @@ Runeon Wine is the public source-maintenance repository for Runeon's Steam Basel
 - `cx26.3-wine11.0-runeon.3` introduced managed Steam launch validation on top of `.2` and remains an immutable historical candidate.
 - `cx26.3-wine11.0-runeon.4` remains an immutable historical candidate.
 - `cx26.3-wine11.0-runeon.5` remains an immutable historical candidate. It inherited `.4` and streamlined managed Steam launch validation.
-- `cx26.3-wine11.0-runeon.6` is the active source candidate. It inherits `.5` and adds nine reviewed backports from Wine 11.15, extending the audit through `wine-11.15`. Its decisions and exclusions are recorded in [`AUDIT-11.0-11.15.md`](AUDIT-11.0-11.15.md). It is not available to users until the source Release and separate Runeon runtime gates are complete.
+- [`cx26.3-wine11.0-runeon.6`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.6) is the active source candidate. It inherits `.5` and adds nine reviewed backports from Wine 11.15, extending the audit through `wine-11.15`. Its decisions and exclusions are recorded in [`AUDIT-11.0-11.15.md`](AUDIT-11.0-11.15.md). It is published as a Pre-release and is not available to users until the Runeon runtime gates are complete.
 
 ## Quick verification
 
