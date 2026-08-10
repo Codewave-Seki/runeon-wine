@@ -1,4 +1,3 @@
-# Upstream fixes are applied before Runeon product patches.
 patches/upstream/0001-wine-11.1-vc14-builtin-version.patch
 patches/upstream/0002-wine-11.8-cfgmgr32-invalid-notification-handle.patch
 patches/upstream/0003-wine-11.1-windowscodecs-truncated-gif-palette.patch
@@ -34,5 +33,14 @@ patches/upstream/0032-wine-11.13-mshtml-dispid-attr-leak.patch
 patches/upstream/0033-wine-11.14-crypt32-oid-info-size.patch
 patches/upstream/0034-wine-11.14-gdiplus-drawimage-overflow.patch
 patches/upstream/0035-wine-11.1-cmd-mklink-buffer-bounds.patch
+patches/upstream/0036-wine-11.15-win32u-kbdus-vsc-table-bounds.patch
+patches/upstream/0037-wine-11.15-mfreadwrite-set-current-media-type.patch
+patches/upstream/0038-wine-11.15-mfreadwrite-transform-need-more-input.patch
+patches/upstream/0039-wine-11.15-vidreszr-media-types.patch
+patches/upstream/0040-wine-11.15-secur32-schannel-ecdsa-cert-hash.patch
+patches/upstream/0041-wine-11.15-gdiplus-convert-pixels-rounding.patch
+patches/upstream/0042-wine-11.15-listbox-settopindex-bounds.patch
+patches/upstream/0043-wine-11.15-cmd-node-build-parse-uninitialized.patch
+patches/upstream/0044-wine-11.15-crypt32-pfx-trailing-bytes.patch
 patches/runeon/0100-steam-rockstar-cef-process-arguments.patch
 patches/runeon/0101-managed-steam-launch-validation.patch

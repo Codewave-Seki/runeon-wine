@@ -1,0 +1,190 @@
+diff --git a/dlls/comctl32/tests/listbox.c b/dlls/comctl32/tests/listbox.c
+index 8ac595a355..c2f523ff82 100644
+--- a/dlls/comctl32/tests/listbox.c
++++ b/dlls/comctl32/tests/listbox.c
+@@ -2996,6 +2996,70 @@ static void test_integral_resize(void)
+     DestroyWindow(parent);
+ }
+ 
++static void test_LB_SETTOPINDEX(void)
++{
++    HWND parent, listbox;
++    int i;
++    int ret;
++
++    parent = create_parent();
++    listbox = CreateWindowA(WC_LISTBOXA, "TestList",
++        WS_CHILD | WS_VISIBLE, 0, 0, 200, 100, parent, NULL, NULL, 0);
++    ok(!!listbox, "got error %lu\n", GetLastError());
++
++    for (i = 0; i < 10; i++)
++    {
++        SendMessageA(listbox, LB_ADDSTRING, 0, (LPARAM)"item");
++    }
++
++    /* Normal range */
++    ret = SendMessageA(listbox, LB_SETTOPINDEX, 3, 0);
++    ok(!ret, "got %d\n", ret);
++
++    ret = SendMessageA(listbox, LB_GETTOPINDEX, 0, 0);
++    ok(ret == 3, "got %d\n", ret);
++
++    ret = SendMessageA(listbox, LB_SETTOPINDEX, 0, 0);
++    ok(!ret, "got %d\n", ret);
++
++    ret = SendMessageA(listbox, LB_GETTOPINDEX, 0, 0);
++    ok(ret == 0, "got %d\n", ret);
++
++    /* Less than item count, but greater than max top index (to which it gets clamped) */
++    ret = SendMessageA(listbox, LB_SETTOPINDEX, 5, 0);
++    ok(!ret, "got %d\n", ret);
++
++    ret = SendMessageA(listbox, LB_GETTOPINDEX, 0, 0);
++    ok(ret == 4, "got %d\n", ret);
++
++    /* Reset to a non-boundary top item */
++    ret = SendMessageA(listbox, LB_SETTOPINDEX, 2, 0);
++    ok(!ret, "got %d\n", ret);
++
++    /* Greater than or equal to item count (out of bounds) */
++    ret = SendMessageA(listbox, LB_SETTOPINDEX, 10, 0);
++    ok(ret == LB_ERR, "got %d\n", ret);
++
++    ret = SendMessageA(listbox, LB_GETTOPINDEX, 0, 0);
++    ok(ret == 2, "got %d\n", ret);
++
++    ret = SendMessageA(listbox, LB_SETTOPINDEX, 20, 0);
++    ok(ret == LB_ERR, "Expected LB_ERR, got %d\n", ret);
++
++    ret = SendMessageA(listbox, LB_GETTOPINDEX, 0, 0);
++    ok(ret == 2, "got %d\n", ret);
++
++    /* Negative (out of bounds) */
++    ret = SendMessageA(listbox, LB_SETTOPINDEX, -1, 0);
++    ok(ret == LB_ERR, "Expected LB_ERR, got %d\n", ret);
++
++    ret = SendMessageA(listbox, LB_GETTOPINDEX, 0, 0);
++    ok(ret == 2, "got %d\n", ret);
++
++    DestroyWindow(listbox);
++    DestroyWindow(parent);
++}
++
+ START_TEST(listbox)
+ {
+     ULONG_PTR ctx_cookie;
+@@ -3030,6 +3094,7 @@ START_TEST(listbox)
+     test_LB_FINDSTRING();
+     test_keypresses();
+     test_integral_resize();
++    test_LB_SETTOPINDEX();
+ 
+     uninit_winevent_hook();
+ 
+diff --git a/dlls/comctl32_v6/listbox.c b/dlls/comctl32_v6/listbox.c
+index 7dec0e2d99..43fe7cd180 100644
+--- a/dlls/comctl32_v6/listbox.c
++++ b/dlls/comctl32_v6/listbox.c
+@@ -2801,6 +2801,8 @@ static LRESULT CALLBACK LISTBOX_WindowProc( HWND hwnd, UINT msg, WPARAM wParam,
+         return descr->focus_item;
+ 
+     case LB_SETTOPINDEX:
++        if (((INT)wParam < 0) || ((INT)wParam >= descr->nb_items))
++            return LB_ERR;
+         return LISTBOX_SetTopItem( descr, wParam, TRUE );
+ 
+     case LB_SETCOLUMNWIDTH:
+diff --git a/dlls/user32/listbox.c b/dlls/user32/listbox.c
+index 7989c2d350..a43c3c960c 100644
+--- a/dlls/user32/listbox.c
++++ b/dlls/user32/listbox.c
+@@ -2869,6 +2869,8 @@ LRESULT ListBoxWndProc_common( HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam
+         return descr->focus_item;
+ 
+     case LB_SETTOPINDEX:
++        if (((INT)wParam < 0) || ((INT)wParam >= descr->nb_items))
++            return LB_ERR;
+         return LISTBOX_SetTopItem( descr, wParam, TRUE );
+ 
+     case LB_SETCOLUMNWIDTH:
+diff --git a/dlls/user32/tests/listbox.c b/dlls/user32/tests/listbox.c
+index 3aba6a297b..24dd05b545 100644
+--- a/dlls/user32/tests/listbox.c
++++ b/dlls/user32/tests/listbox.c
+@@ -2579,6 +2579,70 @@ static void test_integral_resize(void)
+     DestroyWindow(parent);
+ }
+ 
++static void test_LB_SETTOPINDEX(void)
++{
++    HWND parent, listbox;
++    int i;
++    int ret;
++
++    parent = create_parent();
++    listbox = CreateWindowA("listbox", "TestList",
++        WS_CHILD | WS_VISIBLE, 0, 0, 200, 100, parent, NULL, NULL, 0);
++    ok(!!listbox, "got error %lu\n", GetLastError());
++
++    for (i = 0; i < 10; i++)
++    {
++        SendMessageA(listbox, LB_ADDSTRING, 0, (LPARAM)"item");
++    }
++
++    /* Normal range */
++    ret = SendMessageA(listbox, LB_SETTOPINDEX, 3, 0);
++    ok(!ret, "got %d\n", ret);
++
++    ret = SendMessageA(listbox, LB_GETTOPINDEX, 0, 0);
++    ok(ret == 3, "got %d\n", ret);
++
++    ret = SendMessageA(listbox, LB_SETTOPINDEX, 0, 0);
++    ok(!ret, "got %d\n", ret);
++
++    ret = SendMessageA(listbox, LB_GETTOPINDEX, 0, 0);
++    ok(ret == 0, "got %d\n", ret);
++
++    /* Less than item count, but greater than max top index (to which it gets clamped) */
++    ret = SendMessageA(listbox, LB_SETTOPINDEX, 5, 0);
++    ok(!ret, "got %d\n", ret);
++
++    ret = SendMessageA(listbox, LB_GETTOPINDEX, 0, 0);
++    ok(ret == 4, "got %d\n", ret);
++
++    /* Reset to a non-boundary top item */
++    ret = SendMessageA(listbox, LB_SETTOPINDEX, 2, 0);
++    ok(!ret, "got %d\n", ret);
++
++    /* Greater than or equal to item count (out of bounds) */
++    ret = SendMessageA(listbox, LB_SETTOPINDEX, 10, 0);
++    ok(ret == LB_ERR, "got %d\n", ret);
++
++    ret = SendMessageA(listbox, LB_GETTOPINDEX, 0, 0);
++    ok(ret == 2, "got %d\n", ret);
++
++    ret = SendMessageA(listbox, LB_SETTOPINDEX, 20, 0);
++    ok(ret == LB_ERR, "Expected LB_ERR, got %d\n", ret);
++
++    ret = SendMessageA(listbox, LB_GETTOPINDEX, 0, 0);
++    ok(ret == 2, "got %d\n", ret);
++
++    /* Negative (out of bounds) */
++    ret = SendMessageA(listbox, LB_SETTOPINDEX, -1, 0);
++    ok(ret == LB_ERR, "Expected LB_ERR, got %d\n", ret);
++
++    ret = SendMessageA(listbox, LB_GETTOPINDEX, 0, 0);
++    ok(ret == 2, "got %d\n", ret);
++
++    DestroyWindow(listbox);
++    DestroyWindow(parent);
++}
++
+ START_TEST(listbox)
+ {
+   const struct listbox_test SS =
+@@ -2680,4 +2744,5 @@ START_TEST(listbox)
+   test_LBS_NODATA();
+   test_LB_FINDSTRING();
+   test_integral_resize();
++  test_LB_SETTOPINDEX();
+ }

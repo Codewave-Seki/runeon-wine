@@ -1,19 +1,20 @@
 {
   "schemaVersion": 1,
-  "patchSetId": "cx26.3-wine11.0-runeon.5",
+  "patchSetId": "cx26.3-wine11.0-runeon.6",
   "baseId": "crossover-26.3-wine-11.0",
   "audit": {
     "from": "wine-11.0",
-    "through": "wine-11.14",
-    "totalCommits": 3143,
-    "automatedCandidateCount": 2373,
-    "selectedNewBackports": 33,
+    "through": "wine-11.15",
+    "totalCommits": 3350,
+    "automatedCandidateCount": 2520,
+    "selectedNewBackports": 42,
     "crossOverEquivalentCommits": [
       "00f88cd59bb1b867d1b8b0064eb442583c1eefbf",
       "13a82c7468dd46341c55d4ea3fb8ee8a51bc5c2e",
       "12154421e345ef77951865695b4baff4a3bc0593",
       "e0663e8a283cd0ac36ebd95bbbdf97d99968d12c",
-      "eef8e97dd335beccb23f3b13d4f4ad715f23f359"
+      "eef8e97dd335beccb23f3b13d4f4ad715f23f359",
+      "0fde54a3574a4d16148330932a3683fab64a06b6"
     ],
     "deferredCommits": [
       {
@@ -35,9 +36,49 @@
       {
         "commit": "8840f1dae9a7fc873ebb635a0a054062880dba51",
         "reason": "The URI safety fix depends on the surrounding canonicalization series and must be evaluated as an ordered chain."
+      },
+      {
+        "commit": "b0150eda77d7072d2238ec4cec27636a19811b10",
+        "reason": "The ucrtbase test prerequisite rewrites unrelated test_cexp and test_expf assertions whose outcome depends on 11.x math fixes absent from the pinned base; source-only backporting is not accepted."
+      },
+      {
+        "commit": "5e5fea8b9117b90ec8d6d1d8bf9038d41bf4fb49",
+        "reason": "Switching UnhandledExceptionFilter from the PEB BeingDebugged flag to the debug port changes the crash path for titles that tamper with that flag and needs product evidence first."
+      },
+      {
+        "commit": "3ec14378590503ffbadfa936b994e5bf849fe967",
+        "reason": "Upstream converted the monitor DPI helpers to fractional ratios after 11.0, so the detached-source guard needs a hand-written adaptation in abi-sensitive display code with no upstream regression test."
+      },
+      {
+        "commit": "4534f6cd04717a5ed445f568428143303841d1cc",
+        "reason": "Rectifying the pixel aspect ratio adds new output behaviour rather than fixing a defect, and no Runeon title is known to need it."
+      },
+      {
+        "commit": "a1bae27f21b53fa3ac6be6b08f4cbfb441360ade",
+        "reason": "The fix targets the batched raw mouse input mechanism introduced after 11.0; the base has no info->raw_mouse path to repair."
+      },
+      {
+        "commit": "f27d14a21cfef776cbd5c7871a269066e3f1dc87",
+        "reason": "WINHTTP_OPTION_SERVER_CERT_CHAIN_CONTEXT does not exist in the pinned base; the fix requires porting the whole option first."
+      },
+      {
+        "commit": "93ef2498b391902e560f0e4aa64a7c74abe40b4a",
+        "reason": "Same missing WINHTTP_OPTION_SERVER_CERT_CHAIN_CONTEXT prerequisite as f27d14a21cfe."
+      },
+      {
+        "commit": "852e39a89c0d6eae4fc35ff227577c7e8ae24c39",
+        "reason": "pGetWindowStateUpdates is implemented only by winex11.drv; the host window state race the lock protects against does not exist on the macOS driver."
+      },
+      {
+        "commit": "95e5d76a1882a91d91c436a28a2c5447a72c8545",
+        "reason": "Planar CPU blits belong to the wined3d Vulkan H.264 decoder chain, which Runeon does not use because video decoding runs through D3DMetal and DXVK."
+      },
+      {
+        "commit": "bfe591cbef5b7f0485031c8569e6d32a1b6d35ec",
+        "reason": "The bound check it removes was added by 2e68942fce46 inside the same release window and never reached the pinned base, so the pair is a no-op here."
       }
     ],
-    "decisionDocument": "AUDIT-11.0-11.14.md"
+    "decisionDocument": "AUDIT-11.0-11.15.md"
   },
   "patches": [
     {
@@ -591,6 +632,126 @@
       ],
       "adaptation": "The CrossOver 26.3 parser predates the upstream argument-state refactor. The MAX_PATH/full-path checks and extra-argument rejection are applied to the legacy control flow without importing unrelated cmd changes.",
       "summary": "Bound MKLINK paths and reject excess arguments before copying them."
+    },
+    {
+      "order": 36,
+      "path": "patches/upstream/0036-wine-11.15-win32u-kbdus-vsc-table-bounds.patch",
+      "sha256": "690c0cccffe32f53d7f96e64557371e968b94c5405152d1332528d69ecc8022b",
+      "kind": "upstream-backport",
+      "status": "active",
+      "risk": "low",
+      "firstWineRelease": "wine-11.15",
+      "upstreamCommits": [
+        "702e44767a8edb1cbd8731306389d0934c5f84d1"
+      ],
+      "summary": "Stop the US keyboard layout table from reporting one scan code past the end of vsc_to_vk."
+    },
+    {
+      "order": 37,
+      "path": "patches/upstream/0037-wine-11.15-mfreadwrite-set-current-media-type.patch",
+      "sha256": "d973859e7ba01afbf81c3d508c206d7d417dff9e9d024f97b810e8a9c5782b43",
+      "kind": "upstream-backport",
+      "status": "active",
+      "risk": "medium",
+      "firstWineRelease": "wine-11.15",
+      "upstreamCommits": [
+        "bb33d1d3420467edb3df73cba99ede5420fb4295"
+      ],
+      "summary": "Keep the caller media type untouched by copying it before the source reader negotiates transforms."
+    },
+    {
+      "order": 38,
+      "path": "patches/upstream/0038-wine-11.15-mfreadwrite-transform-need-more-input.patch",
+      "sha256": "e4152f70b6f5e123d46b20646bad42d2f21211a1717c6e8c147e8de2c92153c3",
+      "kind": "upstream-backport",
+      "status": "active",
+      "risk": "medium",
+      "firstWineRelease": "wine-11.15",
+      "upstreamCommits": [
+        "9a26041b38d8c81fdc262adc8ce955f530581ccc"
+      ],
+      "summary": "Let a decoder drain more than one sample when another transform sits downstream."
+    },
+    {
+      "order": 39,
+      "path": "patches/upstream/0039-wine-11.15-vidreszr-media-types.patch",
+      "sha256": "e613ab66cb4bf61d49e43ace8319a99c254156960e013e540739ee7b5c144657",
+      "kind": "upstream-backport",
+      "status": "active",
+      "risk": "medium",
+      "firstWineRelease": "wine-11.15",
+      "upstreamCommits": [
+        "0e3bbc87cf619b9e4e78a42fd0d8497c8ec40da9"
+      ],
+      "summary": "Register the media types the video resizer DMO actually supports."
+    },
+    {
+      "order": 40,
+      "path": "patches/upstream/0040-wine-11.15-secur32-schannel-ecdsa-cert-hash.patch",
+      "sha256": "148cd9a2a7bc8cdc564f4a42d5a12cda5d81dc2648a55ac1652ee4dc3c16d8ca",
+      "kind": "upstream-backport",
+      "status": "active",
+      "risk": "medium",
+      "firstWineRelease": "wine-11.15",
+      "upstreamCommits": [
+        "cd0d7910b23b0ac6077bdef2bcb597feb8cc8af3"
+      ],
+      "summary": "Hash the server certificate with bcrypt so ECDSA signature algorithms are supported; adds the bcrypt delay import the base secur32 lacks."
+    },
+    {
+      "order": 41,
+      "path": "patches/upstream/0041-wine-11.15-gdiplus-convert-pixels-rounding.patch",
+      "sha256": "8cb6bdcff5ce9d75ebfa4a7394a2b3b9bfdbbf04d62534f8d179d8b45a475c8f",
+      "kind": "upstream-backport",
+      "status": "active",
+      "risk": "low",
+      "firstWineRelease": "wine-11.15",
+      "upstreamCommits": [
+        "1fc89cc934e992543dbafd52ebf0f6833247295e"
+      ],
+      "summary": "Stop convert_pixels() from rounding the per-row byte count down for sub-byte formats."
+    },
+    {
+      "order": 42,
+      "path": "patches/upstream/0042-wine-11.15-listbox-settopindex-bounds.patch",
+      "sha256": "576ddc6c053a229f683ff3ccc48bff9b1f80c61acd23f6637eba444a14b9732b",
+      "kind": "upstream-backport",
+      "status": "active",
+      "risk": "low",
+      "firstWineRelease": "wine-11.15",
+      "upstreamCommits": [
+        "ab21fbc49a252c0dad3df75a7d0f187d2b929759",
+        "2f66b17d51def78f6a7aef3b9f3de1e0c5c69c69",
+        "dd7f58d77465d4d7c65e465321219f52a7e72494",
+        "27ee4f5db28cba293dc8f2a5f98216110c842cf4"
+      ],
+      "summary": "Return LB_ERR for out-of-bounds LB_SETTOPINDEX in both listbox implementations, with the upstream tests."
+    },
+    {
+      "order": 43,
+      "path": "patches/upstream/0043-wine-11.15-cmd-node-build-parse-uninitialized.patch",
+      "sha256": "2ea6c6a7e8c888079779d4f327980f0144694b6b41d1118f10562f30045449c2",
+      "kind": "upstream-backport",
+      "status": "active",
+      "risk": "low",
+      "firstWineRelease": "wine-11.15",
+      "upstreamCommits": [
+        "d8186e465ad47538affd6aec2e0b1e29a344fd89"
+      ],
+      "summary": "Initialise the node_builder_parse loop flag before it is read."
+    },
+    {
+      "order": 44,
+      "path": "patches/upstream/0044-wine-11.15-crypt32-pfx-trailing-bytes.patch",
+      "sha256": "e5da5ff562afa2a14116d266fbe1be913d05127d91a9dbc80bb92e17b07e3a3c",
+      "kind": "upstream-backport",
+      "status": "active",
+      "risk": "medium",
+      "firstWineRelease": "wine-11.15",
+      "upstreamCommits": [
+        "d4b32af246295f7d4658a19f623d81ca2db3020e"
+      ],
+      "summary": "Ignore bytes past the outer DER SEQUENCE when importing a PFX blob."
     },
     {
       "order": 100,

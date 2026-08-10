@@ -22,7 +22,7 @@ Runeon Wine accepts input from proactive upstream audits and diagnostics-driven 
 
 ## Current Wine 11.x review baseline
 
-The active `cx26.3-wine11.0-runeon.2` candidate is based on a commit-by-commit review through `wine-11.14`; see [the complete audit](AUDIT-11.0-11.14.md). The review selected 33 localized correctness and stability fixes in addition to the two previously accepted upstream backports. It did not attempt to copy every upstream commit. Feature work, broad refactors, ABI-sensitive changes, subsystem migrations, fixes already present in CrossOver 26.3, and fixes whose dependency or regression surface was not yet bounded remain deferred.
+The active `cx26.3-wine11.0-runeon.6` candidate is based on a commit-by-commit review through `wine-11.15`; see [the complete audit](AUDIT-11.0-11.15.md) and the earlier [11.0 to 11.14 audit](AUDIT-11.0-11.14.md) it extends. The review selected 42 localized correctness and stability fixes in addition to the two previously accepted upstream backports. It did not attempt to copy every upstream commit. Feature work, broad refactors, ABI-sensitive changes, subsystem migrations, fixes already present in CrossOver 26.3, and fixes whose dependency or regression surface was not yet bounded remain deferred.
 
 The audit is a point-in-time decision record, not a permanent allowlist. A deferred commit may enter a later immutable patch set after its dependency chain, affected tests, independent probe, and Runeon impact are established. Conversely, inclusion in the audit does not authorize publishing a runtime: the complete build and product smoke gates below still apply.
 

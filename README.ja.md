@@ -10,8 +10,8 @@ Runeon Wine は、Runeon の Steam Baseline runtime 用に公開されている�
 
 - CodeWeavers ソース: `crossover-sources-26.3.0.tar.gz`
 - Wine ベースライン: `Wine version 11.0`
-- 現在の source candidate: `cx26.3-wine11.0-runeon.5`
-- 上流の監査済み範囲: `wine-11.14` まで
+- 現在の source candidate: `cx26.3-wine11.0-runeon.6`
+- 上流の監査済み範囲: `wine-11.15` まで
 
 [`base/crossover-26.3-wine-11.0.json`](base/crossover-26.3-wine-11.0.json) は、ベースライン URL、SHA-256、およびソースルートに関する唯一の機械可読な情報源です。[`series`](series) がパッチの順序を定義し、[`patches/manifest.json`](patches/manifest.json) が出所、リスク、および完全な upstream commit ID を記録します。
 
@@ -33,7 +33,8 @@ Runeon Wine は、Runeon の Steam Baseline runtime 用に公開されている�
 - `cx26.3-wine11.0-runeon.2` は、Wine 11.1 から 11.14 までの安定性・正確性修正 33 件を人手でレビューして追加しています。採用、同等実装、延期の判断は [`AUDIT-11.0-11.14.ja.md`](AUDIT-11.0-11.14.ja.md) に記録します。
 - `cx26.3-wine11.0-runeon.3` は `.2` に管理対象 Steam の起動検証を初めて追加した、不変の履歴候補です。
 - `cx26.3-wine11.0-runeon.4` は不変の履歴候補として保持されます。
-- `cx26.3-wine11.0-runeon.5` は現在の source candidate です。`.4` を継承し、管理対象 Steam の起動検証を簡素化します。source Release と Runeon runtime の独立 gate が完了するまでは、ユーザーに提供済みとは扱いません。
+- `cx26.3-wine11.0-runeon.5` は不変の履歴 candidate として保持します。`.4` を継承し、管理対象 Steam の起動検証を簡素化しました。
+- `cx26.3-wine11.0-runeon.6` は現在の source candidate です。`.5` を継承し、Wine 11.15 からレビュー済みの backport 9 件を追加して監査範囲を `wine-11.15` まで進めます。採用、同等実装、延期の判断は [`AUDIT-11.0-11.15.ja.md`](AUDIT-11.0-11.15.ja.md) に記録します。source Release と Runeon runtime の独立 gate が完了するまでは、ユーザーに提供済みとは扱いません。
 
 ## クイック検証
 
