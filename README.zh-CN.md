@@ -10,6 +10,7 @@ Runeon Wine 是 Runeon Steam Baseline runtime 的公开源码维护仓库，保�
 
 - CodeWeavers 源码：`crossover-sources-26.3.0.tar.gz`
 - Wine 基线：`Wine version 11.0`
+- 当前已交付源码：Dev/Production seed `2026.08.03.2` 对应 `cx26.3-wine11.0-runeon.5`
 - 当前源码候选：`cx26.3-wine11.0-runeon.6`
 - 上游已审计至：`wine-11.15`
 
@@ -28,12 +29,12 @@ Runeon Wine 是 Runeon Steam Baseline runtime 的公开源码维护仓库，保�
 
 ## 发布状态
 
-- [`cx26.3-wine11.0-runeon.0`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.0) 是当前 Production seed `2026.07.22` 的正式对应源码 Release。
-- [`cx26.3-wine11.0-runeon.1`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.1) 是包含 Escape `cfgmgr32` backport 的下一版候选，尚未随 Dev 或 Production runtime 发布，保持 Pre-release。
+- [`cx26.3-wine11.0-runeon.0`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.0) 是保留的旧 seed `2026.07.22` 对应的历史正式源码 Release。
+- [`cx26.3-wine11.0-runeon.1`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.1) 是第一版包含 Escape `cfgmgr32` backport 的未上线候选，未随 Dev 或 Production runtime 发布，保持 Pre-release。
 - `cx26.3-wine11.0-runeon.2` 新增了 33 个从 Wine 11.1 至 11.14 人工评审的稳定性与正确性 backport。纳入、等价和延期决定见 [`AUDIT-11.0-11.14.zh-CN.md`](AUDIT-11.0-11.14.zh-CN.md)。
 - `cx26.3-wine11.0-runeon.3` 在 `.2` 基础上首次加入受管理的 Steam 启动验证，并作为不可变历史候选保留。
 - `cx26.3-wine11.0-runeon.4` 作为不可变历史候选保留。
-- `cx26.3-wine11.0-runeon.5` 作为不可变历史候选保留：继承 `.4`，并精简受管理的 Steam 启动验证。
+- [`cx26.3-wine11.0-runeon.5`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.5) 是当前 Dev/Production seed `2026.08.03.2` 对应的正式源码 Release：继承 `.4`，精简受管理的 Steam 启动验证，并与已发布 assets、checksum 一起保持不可变。
 - [`cx26.3-wine11.0-runeon.6`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.6) 是当前源码候选：继承 `.5`，新增 9 个来自 Wine 11.15 的评审 backport，并把审计范围推进到 `wine-11.15`。纳入、等价和延期决定见 [`AUDIT-11.0-11.15.zh-CN.md`](AUDIT-11.0-11.15.zh-CN.md)。已作为 Pre-release 发布；Runeon runtime 门禁完成前，不能描述为用户已经获得。
 
 ## 快速验证
@@ -64,7 +65,7 @@ scripts/build-patchset-bundle.sh dist
 
 其中包含固定基线 manifest、补丁、series、验证脚本和许可证。Runeon 构建仍从 CodeWeavers 获取固定 SHA 的完整 Wine 与相关源码 archive。
 
-重建已分发 seed `2026.07.22` 的精确源码时必须显式选择 `.0`，不能用 `.1` 或当前 `.2` candidate 代替：
+重建保留的旧 seed `2026.07.22` 的精确源码时必须显式选择 `.0`，不能用任何后续 patch set（包括当前 `.6` 候选）代替：
 
 ```bash
 export RUNEON_WINE_PATCHSET_DEFINITION=patchsets/cx26.3-wine11.0-runeon.0

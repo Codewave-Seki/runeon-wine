@@ -10,6 +10,7 @@ Runeon Wine is the public source-maintenance repository for Runeon's Steam Basel
 
 - CodeWeavers source: `crossover-sources-26.3.0.tar.gz`
 - Wine baseline: `Wine version 11.0`
+- Current shipped source: `cx26.3-wine11.0-runeon.5` for Dev/Production seed `2026.08.03.2`
 - Active source candidate: `cx26.3-wine11.0-runeon.6`
 - Upstream audited through: `wine-11.15`
 
@@ -28,12 +29,12 @@ Runeon Wine is the public source-maintenance repository for Runeon's Steam Basel
 
 ## Release status
 
-- [`cx26.3-wine11.0-runeon.0`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.0) is the stable corresponding-source Release for current Production seed `2026.07.22`.
-- [`cx26.3-wine11.0-runeon.1`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.1) is the next-runtime candidate containing the Escape `cfgmgr32` backport. It has not shipped in a Dev or Production runtime and remains a Pre-release.
+- [`cx26.3-wine11.0-runeon.0`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.0) is the historical stable corresponding-source Release for retained legacy seed `2026.07.22`.
+- [`cx26.3-wine11.0-runeon.1`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.1) is the first unreleased candidate containing the Escape `cfgmgr32` backport. It did not ship in a Dev or Production runtime and remains a Pre-release.
 - `cx26.3-wine11.0-runeon.2` adds 33 manually reviewed stability and correctness backports from Wine 11.1 through 11.14. Its decisions and exclusions are recorded in [`AUDIT-11.0-11.14.md`](AUDIT-11.0-11.14.md).
 - `cx26.3-wine11.0-runeon.3` introduced managed Steam launch validation on top of `.2` and remains an immutable historical candidate.
 - `cx26.3-wine11.0-runeon.4` remains an immutable historical candidate.
-- `cx26.3-wine11.0-runeon.5` remains an immutable historical candidate. It inherited `.4` and streamlined managed Steam launch validation.
+- [`cx26.3-wine11.0-runeon.5`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.5) is the current stable corresponding-source Release for Dev/Production seed `2026.08.03.2`. It inherited `.4`, streamlined managed Steam launch validation, and remains immutable together with its published assets and checksums.
 - [`cx26.3-wine11.0-runeon.6`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.6) is the active source candidate. It inherits `.5` and adds nine reviewed backports from Wine 11.15, extending the audit through `wine-11.15`. Its decisions and exclusions are recorded in [`AUDIT-11.0-11.15.md`](AUDIT-11.0-11.15.md). It is published as a Pre-release and is not available to users until the Runeon runtime gates are complete.
 
 ## Quick verification
@@ -64,7 +65,7 @@ scripts/build-patchset-bundle.sh dist
 
 It contains the pinned baseline manifest, patches, series, verification scripts, and license. The Runeon build still obtains the complete Wine and related source archive from CodeWeavers at the pinned SHA.
 
-To rebuild the exact source for distributed seed `2026.07.22`, select `.0` explicitly. Do not substitute `.1` or the active `.2` candidate:
+To rebuild the exact source for retained legacy seed `2026.07.22`, select `.0` explicitly. Do not substitute any later patch set, including the active `.6` candidate:
 
 ```bash
 export RUNEON_WINE_PATCHSET_DEFINITION=patchsets/cx26.3-wine11.0-runeon.0
