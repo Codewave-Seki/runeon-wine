@@ -38,7 +38,7 @@ Runeon Wine は、Runeon の Steam Baseline runtime 用に公開されている�
 - [`cx26.3-wine11.0-runeon.5`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.5) は、Production に保持する rollback seed `2026.08.03.2` に対応する正式なソース Release です。`.4` を継承して管理対象 Steam の起動検証を簡素化し、公開済み assets および checksum とともに不変のまま保持します。
 - [`cx26.3-wine11.0-runeon.6`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.6) は、現在の Dev および Production seed `2026.08.11.1` に対応する正式なソース Release です。`.5` を継承し、Wine 11.15 からレビュー済みの backport 9 件を追加して監査範囲を `wine-11.15` まで進めます。採用、同等実装、延期の判断は [`AUDIT-11.0-11.15.ja.md`](AUDIT-11.0-11.15.ja.md) に記録します。build、署名、readiness、認証付きダウンロード、製品経路の検証は完了しており、Production は Dev で検証されたものと完全に同一の artifact bytes を使用します。
 
-- `cx26.3-wine11.0-runeon.7` は `.6` を継承し、Vuplex 3D WebView ホスト向けのアプリケーション単位のオプトイン機能を追加します。Dev / Production runtime にはまだビルドされておらず、Release もありません。
+- [`cx26.3-wine11.0-runeon.7`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.7) は `.6` を継承し、Vuplex 3D WebView ホスト向けのアプリケーション単位のオプトイン機能を追加します。Pre-release であり、Dev / Production runtime にはビルドされていないため、この修正はユーザーには提供されていません。
 
 ## クイック検証
 

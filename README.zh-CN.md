@@ -38,7 +38,7 @@ Runeon Wine 是 Runeon Steam Baseline runtime 的公开源码维护仓库，保�
 - [`cx26.3-wine11.0-runeon.5`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.5) 是 Production 保留 rollback seed `2026.08.03.2` 对应的正式源码 Release：继承 `.4`，精简受管理的 Steam 启动验证，并与已发布 assets、checksum 一起保持不可变。
 - [`cx26.3-wine11.0-runeon.6`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.6) 是当前 Dev 与 Production seed `2026.08.11.1` 对应的正式源码 Release：继承 `.5`，新增 9 个来自 Wine 11.15 的评审 backport，并把审计范围推进到 `wine-11.15`；纳入、等价和延期决定见 [`AUDIT-11.0-11.15.zh-CN.md`](AUDIT-11.0-11.15.zh-CN.md)。构建、签名、readiness、鉴权下载和产品路径验证均已完成，Production 使用在 Dev 验证过的完全相同 artifact bytes。
 
-- `cx26.3-wine11.0-runeon.7` 继承 `.6`，新增面向 Vuplex 3D WebView 宿主的按应用可选能力。尚未构建进任何 Dev 或 Production runtime，也还没有 Release。
+- [`cx26.3-wine11.0-runeon.7`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.7) 继承 `.6`，新增面向 Vuplex 3D WebView 宿主的按应用可选能力。它是 Pre-release：尚未构建进任何 Dev 或 Production runtime，因此该修复对用户尚不可用。
 
 ## 快速验证
 
