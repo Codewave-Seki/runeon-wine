@@ -22,7 +22,7 @@ Runeon Wine 同时接受主动上游审计和 diagnostics 驱动调查两类输�
 
 ## 当前 Wine 11.x 审查基线
 
-`cx26.3-wine11.0-runeon.7` 新增 `patches/runeon/0102-vuplex-accelerated-paint-policy.patch`。它只给 Wine 一种能力：让 Vuplex 3D WebView 的 CEF 宿主从 `OnAcceleratedPaint()` 回退到 CPU `OnPaint()`。该参数仅在调用方应用通过 `HKCU\Software\Wine\AppDefaults\<映像名>\Runeon` 的 `DisableVuplexAcceleratedPaint` 显式开启时才追加。Wine 中不出现任何游戏名或 Steam AppID——策略由调用方写入，哪些游戏需要回退不属于本仓库。宿主的识别条件是：命令行实际要运行的**映像名**以 `.vuplex` 结尾，且命令行含 `--vx-graphics-api=d3d11`、不含 `--type=`。因此 Chromium 子进程不受影响，某个参数里恰好出现 `.vuplex` 路径也不会误触发。回退的代价是每帧一次 CPU 拷贝，所以它是按应用可选而非默认开启。
+`cx26.3-wine11.0-runeon.8` 携带 `patches/runeon/0102-vuplex-accelerated-paint-policy.patch`。（`.7` 携带的是同一补丁的早期形态，**无法编译**——它在完整构建之前就被打了 tag。`static-check.sh` 与 `integration-check.sh` 只验证补丁能否应用，不验证产物能否构建，因此产品补丁必须先过完整构建再打 tag。）它只给 Wine 一种能力：让 Vuplex 3D WebView 的 CEF 宿主从 `OnAcceleratedPaint()` 回退到 CPU `OnPaint()`。该参数仅在调用方应用通过 `HKCU\Software\Wine\AppDefaults\<映像名>\Runeon` 的 `DisableVuplexAcceleratedPaint` 显式开启时才追加。Wine 中不出现任何游戏名或 Steam AppID——策略由调用方写入，哪些游戏需要回退不属于本仓库。宿主的识别条件是：命令行实际要运行的**映像名**以 `.vuplex` 结尾，且命令行含 `--vx-graphics-api=d3d11`、不含 `--type=`。因此 Chromium 子进程不受影响，某个参数里恰好出现 `.vuplex` 路径也不会误触发。回退的代价是每帧一次 CPU 拷贝，所以它是按应用可选而非默认开启。
 
 当前 `cx26.3-wine11.0-runeon.6` patch set 基于截至 `wine-11.15` 的逐提交审查；完整记录见[审计报告](AUDIT-11.0-11.15.zh-CN.md)，以及它所延续的[11.0 至 11.14 审计](AUDIT-11.0-11.14.zh-CN.md)。在此前两个已接受的上游 backport 之外，累计选入 42 个局部正确性与稳定性修复，并不是把所有上游提交直接复制进来。功能新增、大范围重构、ABI 敏感改动、子系统迁移、CrossOver 26.3 已有等价实现，以及依赖或回归面尚未收敛的修复均继续延期。
 

@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "patchSetId": "cx26.3-wine11.0-runeon.7",
+  "patchSetId": "cx26.3-wine11.0-runeon.8",
   "baseId": "crossover-26.3-wine-11.0",
   "audit": {
     "from": "wine-11.0",
@@ -778,7 +778,7 @@
     {
       "order": 102,
       "path": "patches/runeon/0102-vuplex-accelerated-paint-policy.patch",
-      "sha256": "00c528519e1b86a5bdaa9148bfbfaa3b3718014628aa626f46c66e15b16d8662",
+      "sha256": "7f69d6c092b0e28dcc1dbe399e6307d23fb3fe48dee0fddff26d3149c2ab614f",
       "kind": "runeon-product",
       "status": "active",
       "risk": "medium",

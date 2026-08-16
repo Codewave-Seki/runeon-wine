@@ -1,10 +1,21 @@
 diff --git a/dlls/kernelbase/process.c b/dlls/kernelbase/process.c
 --- a/dlls/kernelbase/process.c
 +++ b/dlls/kernelbase/process.c
-@@ -150,6 +150,113 @@
-     return new_cmd_line;
- }
+@@ -25,6 +25,7 @@
+ #define WIN32_NO_STATUS
+ #include "windef.h"
+ #include "winbase.h"
++#include "winreg.h"
+ #include "winnls.h"
+ #include "wincontypes.h"
+ #include "winternl.h"
+@@ -147,6 +148,113 @@
+     new_cmd_line[len + switch_len] = 0;
  
+     FIXME( "HACK: appending %s to Social Club helper process.\n", debugstr_w(use_angle_swiftshaderW) );
++    return new_cmd_line;
++}
++
 +/* Runeon: per-application policy, read from
 + * HKCU\Software\Wine\AppDefaults\<current image>\Runeon.
 + *
@@ -109,13 +120,10 @@ diff --git a/dlls/kernelbase/process.c b/dlls/kernelbase/process.c
 +    new_cmd_line[len + switch_len] = 0;
 +
 +    FIXME( "HACK: appending %s to Vuplex WebView host process.\n", debugstr_w(disable_switchW) );
-+    return new_cmd_line;
-+}
-+
- /***********************************************************************
-  * Processes
-  ***********************************************************************/
-@@ -701,6 +808,14 @@
+     return new_cmd_line;
+ }
+ 
+@@ -701,6 +809,14 @@
          if (new_cmdline != (tidy_cmdline ? tidy_cmdline : cmd_line))
              tidy_cmdline = new_cmdline;
      }
