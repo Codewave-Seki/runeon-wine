@@ -11,6 +11,7 @@ Runeon Wine is the public source-maintenance repository for Runeon's Steam Basel
 - CodeWeavers source: `crossover-sources-26.3.0.tar.gz`
 - Wine baseline: `Wine version 11.0`
 - Current shipped source: `cx26.3-wine11.0-runeon.6` for Dev and Production seed `2026.08.11.1`
+- In development: `cx26.3-wine11.0-runeon.7`, not built into any seed yet
 - Retained Production rollback source: `cx26.3-wine11.0-runeon.5` for seed `2026.08.03.2`
 - Upstream audited through: `wine-11.15`
 
@@ -36,6 +37,8 @@ Runeon Wine is the public source-maintenance repository for Runeon's Steam Basel
 - `cx26.3-wine11.0-runeon.4` remains an immutable historical candidate.
 - [`cx26.3-wine11.0-runeon.5`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.5) is the stable corresponding-source Release for retained Production rollback seed `2026.08.03.2`. It inherited `.4`, streamlined managed Steam launch validation, and remains immutable together with its published assets and checksums.
 - [`cx26.3-wine11.0-runeon.6`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.6) is the stable corresponding-source Release for current Dev and Production seed `2026.08.11.1`. It inherits `.5` and adds nine reviewed backports from Wine 11.15, extending the audit through `wine-11.15`; its decisions and exclusions are recorded in [`AUDIT-11.0-11.15.md`](AUDIT-11.0-11.15.md). Build, signing, readiness, authenticated download, and product-path validation are complete, and Production uses the exact artifact bytes verified in Dev.
+
+- `cx26.3-wine11.0-runeon.7` inherits `.6` and adds an opt-in capability for Vuplex 3D WebView hosts. It has not been built into a Dev or Production runtime and has no Release yet.
 
 ## Quick verification
 

@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "patchSetId": "cx26.3-wine11.0-runeon.6",
+  "patchSetId": "cx26.3-wine11.0-runeon.7",
   "baseId": "crossover-26.3-wine-11.0",
   "audit": {
     "from": "wine-11.0",
@@ -774,6 +774,19 @@
       "status": "active",
       "risk": "high",
       "summary": "Streamline managed Steam launch validation."
+    },
+    {
+      "order": 102,
+      "path": "patches/runeon/0102-vuplex-accelerated-paint-policy.patch",
+      "sha256": "41e359176ccb98d7e71535dff5ae8cdc6581e9e7d4868eae655549bf610afc2b",
+      "kind": "runeon-product",
+      "status": "active",
+      "risk": "medium",
+      "runeonTasks": [
+        "T680",
+        "T681"
+      ],
+      "summary": "Let an application opt its Vuplex CEF host out of accelerated paint, gated on a per-application registry policy."
     }
   ]
 }

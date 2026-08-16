@@ -1,0 +1,105 @@
+diff --git a/dlls/kernelbase/process.c b/dlls/kernelbase/process.c
+--- a/dlls/kernelbase/process.c
++++ b/dlls/kernelbase/process.c
+@@ -147,6 +147,86 @@
+     new_cmd_line[len + switch_len] = 0;
+ 
+     FIXME( "HACK: appending %s to Social Club helper process.\n", debugstr_w(use_angle_swiftshaderW) );
++    return new_cmd_line;
++}
++
++/* Runeon: per-application policy, read from
++ * HKCU\Software\Wine\AppDefaults\<current image>\Runeon.
++ *
++ * The lookup is on the *calling* process, which for a middleware host is the
++ * game that spawns it. That keeps game identity out of Wine entirely: Wine
++ * knows how to drive the middleware, and which titles need it stays with the
++ * caller that writes the policy.
++ */
++static BOOL runeon_policy_enabled( const WCHAR *value_name )
++{
++    WCHAR key_path[MAX_PATH + 64], *image_name;
++    UNICODE_STRING *image;
++    DWORD type, value, size = sizeof(value);
++    HKEY key;
++    LONG status;
++
++    image = &NtCurrentTeb()->Peb->ProcessParameters->ImagePathName;
++    if (!image->Buffer || !image->Length) return FALSE;
++    if (!(image_name = wcsrchr( image->Buffer, '\\' ))) image_name = image->Buffer;
++    else image_name++;
++    if (!*image_name) return FALSE;
++
++    if (wcslen( image_name ) + 40 > ARRAY_SIZE(key_path)) return FALSE;
++    lstrcpyW( key_path, L"Software\\Wine\\AppDefaults\\" );
++    lstrcatW( key_path, image_name );
++    lstrcatW( key_path, L"\\Runeon" );
++
++    if (RegOpenKeyExW( HKEY_CURRENT_USER, key_path, 0, KEY_QUERY_VALUE, &key )) return FALSE;
++    status = RegQueryValueExW( key, value_name, NULL, &type, (BYTE *)&value, &size );
++    RegCloseKey( key );
++
++    return !status && type == REG_DWORD && value != 0;
++}
++
++/* Vuplex 3D WebView ships its CEF host with a .vuplex extension. The image
++ * name is the same for the host and its Chromium children, so --type= is what
++ * separates them.
++ */
++static BOOL is_vuplex_host_command( const WCHAR *app_name, const WCHAR *cmd_line )
++{
++    if (!(app_name && wcsstr( app_name, L".vuplex" ))
++        && !(cmd_line && wcsstr( cmd_line, L".vuplex" )))
++        return FALSE;
++    if (!cmd_line) return FALSE;
++    if (wcsstr( cmd_line, L"--type=" )) return FALSE;
++    /* Only the D3D11 path shares textures with the engine; leave anything else
++     * alone rather than guessing.
++     */
++    return wcsstr( cmd_line, L"--vx-graphics-api=d3d11" ) != NULL;
++}
++
++/* Makes Vuplex fall back from CEF OnAcceleratedPaint() to CPU OnPaint().
++ *
++ * The accelerated path hands Chromium's shared texture straight to the engine,
++ * which the macOS D3D11 translation layers do not carry across intact: the
++ * page texture never lands and the WebView layer stays blank. Costs a CPU copy
++ * per painted frame, so it is opt-in per application rather than always on.
++ */
++static WCHAR *append_vuplex_accelerated_paint_disabled( WCHAR *cmd_line )
++{
++    static const WCHAR disable_switchW[] = L"--vx-accelerated-paint-disabled=true";
++    WCHAR *new_cmd_line;
++    size_t len, switch_len;
++
++    if (!cmd_line || wcsstr( cmd_line, L"--vx-accelerated-paint-disabled" )) return cmd_line;
++
++    len = lstrlenW( cmd_line );
++    switch_len = lstrlenW( disable_switchW );
++    if (!(new_cmd_line = RtlAllocateHeap( GetProcessHeap(), 0, (len + switch_len + 2) * sizeof(WCHAR) )))
++        return cmd_line;
++
++    memcpy( new_cmd_line, cmd_line, len * sizeof(WCHAR) );
++    new_cmd_line[len++] = ' ';
++    memcpy( new_cmd_line + len, disable_switchW, switch_len * sizeof(WCHAR) );
++    new_cmd_line[len + switch_len] = 0;
++
++    FIXME( "HACK: appending %s to Vuplex WebView host process.\n", debugstr_w(disable_switchW) );
+     return new_cmd_line;
+ }
+ 
+@@ -698,6 +778,14 @@
+             tidy_cmdline = new_cmdline;
+ 
+         new_cmdline = append_socialclubhelper_use_angle_swiftshader( tidy_cmdline ? tidy_cmdline : cmd_line );
++        if (new_cmdline != (tidy_cmdline ? tidy_cmdline : cmd_line))
++            tidy_cmdline = new_cmdline;
++    }
++    if (is_vuplex_host_command( app_name, tidy_cmdline ? tidy_cmdline : cmd_line )
++        && runeon_policy_enabled( L"DisableVuplexAcceleratedPaint" ))
++    {
++        WCHAR *new_cmdline = append_vuplex_accelerated_paint_disabled( tidy_cmdline ? tidy_cmdline : cmd_line );
++
+         if (new_cmdline != (tidy_cmdline ? tidy_cmdline : cmd_line))
+             tidy_cmdline = new_cmdline;
+     }

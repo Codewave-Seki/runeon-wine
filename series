@@ -44,3 +44,4 @@ patches/upstream/0043-wine-11.15-cmd-node-build-parse-uninitialized.patch
 patches/upstream/0044-wine-11.15-crypt32-pfx-trailing-bytes.patch
 patches/runeon/0100-steam-rockstar-cef-process-arguments.patch
 patches/runeon/0101-managed-steam-launch-validation.patch
+patches/runeon/0102-vuplex-accelerated-paint-policy.patch
