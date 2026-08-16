@@ -25,7 +25,7 @@ Runeon Wine は、Runeon の Steam Baseline runtime 用に公開されている�
 - `ntdll`、`server`、`wow64`、`loader`、`winemac.drv`、`win32u`、Unix library/server protocol、または D3DMetal interface の変更は、既定で ABI-sensitive と扱い、個別のベースライン更新または強化された検証を必要とします。
 - component packaging、Developer ID 署名、Dev/Production feed、ダウンロード検証、release readiness は、引き続き Runeon 製品リポジトリが担当します。
 - 本リポジトリと GitHub Release assets は公開されています。実際に配布される各 Production runtime には、正確な patch-set bundle、完全な対応ソース、および SHA-256 ファイルを含む不変の正式 Release が必要です。未公開候補は Pre-release のままにします。
-- `patchsets/cx26.3-wine11.0-runeon.0` は Production seed `2026.07.22` の正確な履歴ソース定義です。`patchsets/cx26.3-wine11.0-runeon.1` は、最初の未公開 Escape 修正候補を固定します。既定の [`series`](series) は現在の `.6` patch set を示します。製品レベルの検証後、Dev および Production seed `2026.08.11.1` で配布されています。
+- `patchsets/cx26.3-wine11.0-runeon.0` は Production seed `2026.07.22` の正確な履歴ソース定義です。`patchsets/cx26.3-wine11.0-runeon.1` は、最初の未公開 Escape 修正候補を固定します。既定の [`series`](series) は開発中の `.7` patch set を示すようになりました。実際に使用されているのは `.6` で、Dev および Production seed `2026.08.11.1` で配布されています。`.6` を再構築するには、それを含むコミットをチェックアウトする必要があり、現在の作業ツリーではありません。
 - `release-manifests/` は、各公開 bundle の commit、Release URL、ファイル名、size、SHA-256、stable/prerelease 状態、および永続保持ルールを記録します。Production runtime が参照できるのは `stable` manifest のみです。Pre-release であることは、その修正が Production ユーザーへ提供済みであることを意味しません。
 
 ## リリース状況
