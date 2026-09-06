@@ -10,6 +10,7 @@ Runeon Wine is the public source-maintenance repository for Runeon's Steam Basel
 
 - CodeWeavers source: `crossover-sources-26.3.0.tar.gz`
 - Wine baseline: `Wine version 11.0`
+<!-- release-facts:current-patch-set -->
 - Current shipped source: `cx26.3-wine11.0-runeon.8` for Dev and Production seed `2026.08.16.1`
 - Retained Production rollback sources: `cx26.3-wine11.0-runeon.6` for seed `2026.08.11.1`, and `cx26.3-wine11.0-runeon.5` for seed `2026.08.03.2`
 - Upstream audited through: `wine-11.15`

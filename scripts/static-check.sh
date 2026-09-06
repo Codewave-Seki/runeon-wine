@@ -91,4 +91,25 @@ for release_manifest in "$repo_root"/release-manifests/*.source-archive.json; do
     || die "release manifest must use the canonical public GitHub release URL: $release_manifest"
 done
 
+# The README "current shipped source" line in every language must name the patch
+# set the default series actually defines. The .6 -> .8 drift happened because
+# the series and the GitHub Release moved while these lines did not. Skipped when
+# RUNEON_WINE_PATCHSET_DEFINITION selects a historical patch set: the READMEs
+# describe the current one, not the one being rebuilt.
+if [[ -z "${RUNEON_WINE_PATCHSET_DEFINITION:-}" ]]; then
+  for readme in "$repo_root"/README.md "$repo_root"/README.zh-CN.md "$repo_root"/README.ja.md; do
+    require_file "$readme"
+    marker_count="$(grep -cF '<!-- release-facts:current-patch-set -->' "$readme" || true)"
+    [[ "$marker_count" == "1" ]] \
+      || die "README must carry exactly one release-facts:current-patch-set marker: $readme"
+    current_source_line="$(grep -A1 -F '<!-- release-facts:current-patch-set -->' "$readme" | tail -n 1)"
+    grep -Fq "$patch_set_id" <<<"$current_source_line" \
+      || die "README current shipped source must name $patch_set_id: $readme"
+    stale_patch_set_ids="$(grep -oE 'cx[0-9]+\.[0-9]+-wine[0-9]+\.[0-9]+-runeon\.[0-9]+' <<<"$current_source_line" \
+      | grep -Fxv "$patch_set_id" || true)"
+    [[ -z "$stale_patch_set_ids" ]] \
+      || die "README current shipped source also names a stale patch set: $readme"
+  done
+fi
+
 printf 'static checks passed for %s\n' "$patch_set_id"
