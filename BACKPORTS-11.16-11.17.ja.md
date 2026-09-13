@@ -4,7 +4,7 @@
 
 > 英語版が正式な文書です。簡体字中国語版と日本語版は、内容を省略しない翻訳です。
 
-レビュー日: 2026-09-13。`cx26.3-wine11.0-runeon.9` は Dev seed `2026.09.13` が使用する公開 Pre-release で、`.8` と同じ固定 CrossOver 26.3 / Wine 11.0 archive に基づきます。既存の 47 パッチファイルを保持し、13 の上流コミットを含む 10 ファイルを追加します。合計は 57 ファイルで、54 の upstream backport と変更していない三つの製品パッチからなります。この増分は ABI-sensitive なコードや製品ポリシーを変更しません。
+レビュー日: 2026-09-13。`cx26.3-wine11.0-runeon.9` は Dev と Production の seed `2026.09.13` が使用する公開正式ソース版（2026-09-14 に正式版へ昇格） で、`.8` と同じ固定 CrossOver 26.3 / Wine 11.0 archive に基づきます。既存の 47 パッチファイルを保持し、13 の上流コミットを含む 10 ファイルを追加します。合計は 57 ファイルで、54 の upstream backport と変更していない三つの製品パッチからなります。この増分は ABI-sensitive なコードや製品ポリシーを変更しません。
 
 今回は選定した Wine 11.16/11.17 変更の対象限定レビューであり、11.15 以降の 628 コミットすべての完全監査ではありません。完全監査の境界は `wine-11.15` のままです。upstream-watch workflow の通知を消すために `upstreamAuditThrough` を進めたり、過去の監査を書き換えたりしません。配布済み runtime の状態は引き続き [README](README.ja.md) を参照してください。
 
@@ -59,6 +59,6 @@
 | WIC 読み取り結果の障害注入 | [stream-read-check.py](tests/stream-read-check.py) は九つのシナリオで 38 assertion を実行し、候補は合格、`.8` は 12 の想定失敗です。NULL/非 NULL count、完全/短い読み取り、S_FALSE 正規化、未書き込み count を読まずに E_FAIL を保つ動作を検証します。関数単位の検証で、実 codec の実行ではありません。 |
 | 新しい依存関係での再検証 | Open Wine `.9` は既存の GnuTLS/GStreamer 依存バージョンを維持し、MoltenVK `1.4.2` で完全に再ビルドしました。同じ各アーキテクチャ 70 の API assertion と、x64/x86 の headers/PAC 全四チェックに合格しました。追加の PAC trace では、一度のダウンロード後に script cache を再利用し、長い hostname の経路へ到達することを確認しました。ゲーム互換性や MoltenVK のグラフィックス機能を証明するチェックではありません。 |
 | 完全な対象モジュール suite と製品回帰 | 完全な suite 実行、製品の既存 prefix チェック、Steam CEF/停止・再起動、D3DMetal/DXMT/DXVK のゲーム smoke は未完了です。隔離した API prefix の結果では代替できません。 |
-| ソース assets と runtime 配布 | `.9` の公開 Pre-release と四つの不変の assets は公開済みです。[ソース manifest](release-manifests/cx26.3-wine11.0-runeon.9.source-archive.json) に commit、archive の digest とサイズを記録します。Dev seed `2026.09.13` は `.9` と MoltenVK `1.4.2` を組み合わせ、seed のビルド、署名、readiness、feed/ticket/download 検証が完了しています。ユーザーによる Steam/ゲームの実機受け入れ確認は未実施で、現在の Runeon App ソースからビルドする Dev `1.8 (3)` を使用する予定です。既存の公開 App インストーラーは変更しません。`.9` は Production へ昇格しておらず、正式版にも変更していません。Production は引き続き `.8` / seed `2026.09.06` です。 |
+| ソース assets と runtime 配布 | Dev と Production の seed `2026.09.13` は `.9` と MoltenVK `1.4.2` を使用し、App の配布条件は `1.8 (0)` 以上です。Production は Dev で検証した同一の署名済み archive を使用します。ビルド、API 回帰、署名、readiness、認証付き feed/ticket と全体ダウンロードの検証は完了しています。ユーザーは現在の Xcode Dev ソース版でコンポーネント更新、runtime 準備、Steam 起動を確認しました。配布は `1.8 (0-3)` で検証しましたが、各 build のゲーム、停止と再起動の操作、新規 prefix の受け入れ確認は再実施していません。公開 App インストーラーは `1.8 (3)` のままです。ソース Release は正式版となり、tag、commit、四つの添付 assets の bytes、size、digest は不変です。`.8` / seed `2026.09.06` は履歴として保持します。 |
 
 再現可能なチェックコマンドと managed runtime の起動境界は [BUILDING](BUILDING.ja.md) を参照してください。上流テストのコンパイルは実行を意味せず、API と関数単位の合格は [MAINTENANCE](MAINTENANCE.ja.md) の未完了の製品リリースゲートを代替しません。対応する証拠を得た後にのみ状態を更新します。
