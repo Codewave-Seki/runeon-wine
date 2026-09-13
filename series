@@ -42,6 +42,16 @@ patches/upstream/0041-wine-11.15-gdiplus-convert-pixels-rounding.patch
 patches/upstream/0042-wine-11.15-listbox-settopindex-bounds.patch
 patches/upstream/0043-wine-11.15-cmd-node-build-parse-uninitialized.patch
 patches/upstream/0044-wine-11.15-crypt32-pfx-trailing-bytes.patch
+patches/upstream/0045-wine-11.16-dinput-action-device-guid.patch
+patches/upstream/0053-wine-11.16-d3d10-stateblock-disabled-byte-fields.patch
+patches/upstream/0054-wine-11.17-winhttp-connection-query-buffer-length.patch
+patches/upstream/0055-wine-11.17-winhttp-pac-scheme-host-bounds.patch
+patches/upstream/0056-wine-11.17-secur32-schannel-invalid-context.patch
+patches/upstream/0057-wine-11.17-windowscodecs-nonnull-stream-read-count.patch
+patches/upstream/0058-wine-11.17-dwrite-ttc-header-read-size.patch
+patches/upstream/0059-wine-11.17-d3d10-device-adapter-failure-reference.patch
+patches/upstream/0060-wine-11.17-d2d1-geometry-fill-brush-lifetime.patch
+patches/upstream/0061-wine-11.17-evr-video-window-swapchain-lifetime.patch
 patches/runeon/0100-steam-rockstar-cef-process-arguments.patch
 patches/runeon/0101-managed-steam-launch-validation.patch
 patches/runeon/0102-vuplex-accelerated-paint-policy.patch

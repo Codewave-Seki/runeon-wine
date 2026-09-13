@@ -1,0 +1,63 @@
+# Targeted Wine 11.16/11.17 backports
+
+[English](BACKPORTS-11.16-11.17.md) | [Chinese](BACKPORTS-11.16-11.17.zh-CN.md) | [Japanese](BACKPORTS-11.16-11.17.ja.md)
+
+> This English document is authoritative. The Chinese and Japanese documents are complete translations for convenience.
+
+Review date: 2026-09-13. `cx26.3-wine11.0-runeon.9` is an unshipped source candidate based on the same pinned CrossOver 26.3 / Wine 11.0 archive as `.8`. It preserves all 47 existing patch files and adds 10 files carrying 13 upstream commits: 57 files in total, comprising 54 upstream backports and three unchanged product patches. No ABI-sensitive or product-policy code is changed by this increment.
+
+This is a targeted review of selected Wine 11.16/11.17 changes, not a complete review of the 628 commits since 11.15. The complete audit boundary remains `wine-11.15`; neither `upstreamAuditThrough` nor the historical audit reports are advanced to silence the upstream-watch workflow. Shipped runtime status remains in [README](README.md).
+
+## Candidate contents
+
+Equivalent CrossOver implementations and prerequisites were checked against the existing patched baseline. Benefits below describe the repaired API contracts; they are not claims that a particular Runeon game issue has been reproduced or fixed. These changes apply only where the corresponding Wine DLL is used. In particular, the D3D10 changes concern the open Wine bridge and do not modify D3DMetal or DXMT.
+
+| Patch | First Wine tag / upstream commits | Behavior |
+|---|---|---|
+| [0045](patches/upstream/0045-wine-11.16-dinput-action-device-guid.patch) | `wine-11.16`: [`2a43c4b92910`](https://github.com/wine-mirror/wine/commit/2a43c4b9291083f8892f2100051131a87278e656), [`72ffda26fa71`](https://github.com/wine-mirror/wine/commit/72ffda26fa71d42ba01e6908f39f5972b238e1c0) | Match action app data by both device GUID and object ID; prevents keyboard and mouse actions with the same ID from sharing the wrong value. |
+| [0053](patches/upstream/0053-wine-11.16-d3d10-stateblock-disabled-byte-fields.patch) | `wine-11.16`: [`2d98b4fb0ae4`](https://github.com/wine-mirror/wine/commit/2d98b4fb0ae49aa22c735eda6f221da91b4bc3cb), [`a5c665c30fe3`](https://github.com/wine-mirror/wine/commit/a5c665c30fe3d1ba6748680e68e77a564d58a9d4) | Honor the low bit of all byte-sized state-block mask fields during Capture/Apply; disabled states stay disabled. This adds no D3D feature level. |
+| [0054](patches/upstream/0054-wine-11.17-winhttp-connection-query-buffer-length.patch) | `wine-11.17`: [`df71145f22f1`](https://github.com/wine-mirror/wine/commit/df71145f22f15e723697675e3beaf75094247c6c) | Give Connection and Proxy-Connection queries independent buffer capacities; the first oversized header cannot enlarge the capacity used for the second. |
+| [0055](patches/upstream/0055-wine-11.17-winhttp-pac-scheme-host-bounds.patch) | `wine-11.17`: [`03f4957cacee`](https://github.com/wine-mirror/wine/commit/03f4957caceeb8404a119f6b8bd8cc0e76dcb76e) | Bound the PAC lowercase-host buffer and defend the scheme buffer. Oversized schemes already fail earlier in this baseline; the reachable repair is the hostname copy. |
+| [0056](patches/upstream/0056-wine-11.17-secur32-schannel-invalid-context.patch) | `wine-11.17`: [`081d8b1dd9ff`](https://github.com/wine-mirror/wine/commit/081d8b1dd9ff4bdd067c54bb50d396e34c334c70) | Return SEC_E_INVALID_HANDLE for missing or wrong-type SChannel context objects before encryption/decryption. This does not solve arbitrary provider-pointer corruption or concurrent deletion. |
+| [0057](patches/upstream/0057-wine-11.17-windowscodecs-nonnull-stream-read-count.patch) | `wine-11.17`: [`111e5197390a`](https://github.com/wine-mirror/wine/commit/111e5197390aa008789b002222024229fa2b82cf) | Always pass a non-NULL read count to IStream and normalize successful short reads to S_FALSE. This covers the JPEG metadata path and the shared codec helper. |
+| [0058](patches/upstream/0058-wine-11.17-dwrite-ttc-header-read-size.patch) | `wine-11.17`: [`a6fc12e4a94b`](https://github.com/wine-mirror/wine/commit/a6fc12e4a94bf4dae2d5c3a297794107627dad0a) | Request the complete TTC header instead of pointer-sized data from DirectWrite font streams. This fixes fragment bounds, not text shaping. |
+| [0059](patches/upstream/0059-wine-11.17-d3d10-device-adapter-failure-reference.patch) | `wine-11.17`: [`5ae631904a4b`](https://github.com/wine-mirror/wine/commit/5ae631904a4b4a253e22408e5cfe107c8ebb33b9), [`0e2ee8ab3e8c`](https://github.com/wine-mirror/wine/commit/0e2ee8ab3e8c72dfcd798ba6d963b6f34625989d) | Acquire caller-supplied adapter references only after GetParent succeeds in D3D10 and D3D10.1 device creation, avoiding failure-path leaks. |
+| [0060](patches/upstream/0060-wine-11.17-d2d1-geometry-fill-brush-lifetime.patch) | `wine-11.17`: [`4334512575c7`](https://github.com/wine-mirror/wine/commit/4334512575c7be581ae9a2bd9d9d0d11e5038542) | Keep the first cloned brush owned by its command list when opacity-brush creation fails; list destruction must release it exactly once. |
+| [0061](patches/upstream/0061-wine-11.17-evr-video-window-swapchain-lifetime.patch) | `wine-11.17`: [`5d711b3bdc45`](https://github.com/wine-mirror/wine/commit/5d711b3bdc455addd7a720b553600abc869937be) | Clear the released swapchain pointer before EVR video-window replacement. A failed replacement must leave no dangling owner; same-window retry behavior is unchanged. |
+
+## Dependencies and adaptations
+
+- `0045` combines the original DirectInput test prerequisite and fix into one reversible final diff. The original assertions and authorship are retained without production-code adaptation.
+- `0053` similarly includes the original D3D10 tests. The only extra test adaptation is an explicit skip if device creation fails, avoiding a NULL-device dereference. A skipped device test is not a graphics pass. All 14 byte-sized fields are covered by the production fix.
+- `0059` groups the independent D3D10 and D3D10.1 adapter fixes. No production semantics were adapted in the selected backports. All other added upstream commits contain no original regression test; the independent checks below cover their specific contracts, with affected-module and product tests still required.
+- Full commit IDs, patch digests and first Wine releases remain authoritative in [the manifest](patches/manifest.json). Source bundles retain the patches, original attribution and [test sources](tests).
+
+## Deferred after deeper review
+
+| Group / upstream commits | Reason to defer |
+|---|---|
+| CoreAudio periods: `ddefc3d4569f`, `07c7fcc86fe5`, `8e09602ca6e4`, `da0b08472b4b` | Sets the actual shared device buffer size and fails stream creation if setting that property fails. Real device periods, read-only/unsupported settings, differing concurrent streams and device changes need validation. The original test only adds an accepted default-period value; zero-fuzz application does not cover these risks. |
+| WGI initialization: `b45d928aa12f` | Signaling before provider enumeration permits earlier GamepadAdded registration but does not guarantee it. Activation may return before the initial gamepad list is populated. Preconnected-controller and hotplug checks are missing; current event-registration tests do not prove this timing. |
+| XAudio2 failure unlock: `b68ea3b878e2` | The pinned bundled FAudio_CreateSourceVoice has only a successful return, so the repaired HRESULT failure branch is not normally reachable in this build. The upstream unlock-before-free order also permits a voice-reuse race on effect_chain; re-evaluate when FAudio error behavior changes, with a real failure probe. |
+| MF drain: `862453b70420` | One-at-a-time terminal output resumes in source_reader_get_read_result, but SOURCE_READER_ASYNC_SAMPLE_READY pops directly. At EOS, an already-pending async read can consume the sole queued sample and leave remaining decoder frames stranded; its next read can report EOS. This is a source-path counterexample, not a runtime reproduction, and needs a controlled multi-frame drain test. It does not depend on the deferred async Release change. |
+| Unreleased MF lifecycle/seek: `2f73d9efc2a0`, `5fc7c7958be1`, `7edd71a8d76c` | Changing Release to decrement is unsafe while async commands start at refcount zero: queue AddRef followed by caller Release can free a queued object. Initial ownership, queue failure and read/seek/flush lifetimes need a coordinated fix. Earlier SEEKING assignment also needs failure cleanup review. These changes are not added to this release candidate. |
+
+These decisions do not claim that upstream fixes are generally invalid. They reflect the pinned implementation and the validation available for this candidate. Broader macOS window-driver/ABI changes and an overall Wine version upgrade remain outside this increment.
+
+## Validation status
+
+| Check | Current result |
+|---|---|
+| Pinned-source replay and preservation | All 57 patch files replay with zero fuzz from the pinned archive; a comparison of 11,104 source files agrees. The 47 previous patch files and their manifest entries are unchanged. |
+| Complete x86_64/WoW64 build | `configure`, `make` and `make install` passed. |
+| Original upstream test compilation | The DirectInput and D3D10 test executables compile for x64 and x86: four executables. Complete upstream suite execution remains pending. |
+| Independent Windows API execution | Passed in isolated prefixes on both x64 and x86: SChannel 11, adapter 6, stateblock 32, DirectWrite 6, WIC 11 and DirectInput 4 assertions, totaling 70 per architecture. WIC queries a real APP1/Exif value and exercises both four-byte metadata reads. |
+| Previous-DLL API control | The same 70-check set reports 19 failures with `.8` DLLs: 6 SChannel, 2 adapter, 4 stateblock, 2 DirectWrite, 3 WIC and 2 DirectInput. This control replaces eight DLLs in a separate runtime using the candidate's same core and dependencies; it is not a complete old-product smoke test. |
+| WinHTTP execution | Both `headers` and `pac` modes pass on candidate x64 and x86. Headers contain 100 A characters and 40 B characters, followed by the expected body and EOF. The normal PAC hostname returns DIRECT; the 1,093-character hostname is rejected. Fixture requests are confirmed on loopback, with no external traffic. |
+| Previous-DLL WinHTTP control | The oversized-header and PAC paths reproduce stack-corruption page faults with `.8` DLLs after reaching their intended inputs. The header control first verifies the oversized headers; the PAC control first passes the normal hostname. Both enter fault/debugger handling and require a 25-second supervisor timeout with isolated server/debugger cleanup. They are not recorded as ordinary assertion failures or normal crash exits. The candidate eliminates these faults in these probes; this is not evidence of a game-level fix. |
+| Direct2D/EVR ownership fault injection | [lifetime-check.py](tests/lifetime-check.py) compiles the two real functions with dependency stubs: 51 candidate checks pass; `.8` produces six expected failures and two safely detected duplicate releases. Covers creation/replacement failure, recovery, success and destruction. This is function-level validation, not Wine or GPU execution. |
+| WIC read-result fault injection | [stream-read-check.py](tests/stream-read-check.py) runs nine scenarios with 38 assertions: candidate passes; `.8` produces 12 expected failures. Covers NULL/non-NULL count, full/short reads, S_FALSE normalization, and preserving E_FAIL without reading unwritten count. This is function-level validation, not real codec execution. |
+| Complete affected-module suites and product regression | Full suite execution, product existing-prefix checks, Steam CEF/stop/relaunch, and D3DMetal/DXMT/DXVK smoke remain pending. Isolated API-prefix results do not replace them. |
+| Source assets and runtime distribution | Public source publication and matching signed-runtime/Dev/Production gates remain pending. Any local tags and archives are local preparation only; no `.9` public Release or runtime distribution has occurred. |
+
+Reproducible check commands and the managed-runtime launch boundary are in [BUILDING](BUILDING.md). Compiling upstream tests is not running them; API and function-level passes do not replace the remaining product release gates in [MAINTENANCE](MAINTENANCE.md). Update this status only when the corresponding evidence exists.

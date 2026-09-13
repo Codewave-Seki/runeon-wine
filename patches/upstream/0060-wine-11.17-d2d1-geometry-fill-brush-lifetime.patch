@@ -1,0 +1,25 @@
+commit 4334512575c7be581ae9a2bd9d9d0d11e5038542
+Author:     Nikolay Sivov <nsivov@codeweavers.com>
+AuthorDate: Fri Aug 28 22:19:43 2026 +0200
+Commit:     Alexandre Julliard <julliard@winehq.org>
+CommitDate: Sat Aug 29 14:25:56 2026 +0200
+
+    d2d1: Fix potential brush use-after-free in geometry fill recording.
+    
+    Objects created within a list a kept referenced and are released at once
+    with the list.
+    
+    Signed-off-by: Nikolay Sivov <nsivov@codeweavers.com>
+
+diff --git a/dlls/d2d1/command_list.c b/dlls/d2d1/command_list.c
+index 4698fc1c2c..ae3fa0da8e 100644
+--- a/dlls/d2d1/command_list.c
++++ b/dlls/d2d1/command_list.c
+@@ -894,7 +894,6 @@ void d2d_command_list_fill_geometry(struct d2d_command_list *command_list,
+             orig_opacity_brush, &opacity_brush)))
+     {
+         command_list->state = D2D_COMMAND_LIST_STATE_ERROR;
+-        ID2D1Brush_Release(brush);
+         return;
+     }
+ 

@@ -1,0 +1,22 @@
+commit 5d711b3bdc455addd7a720b553600abc869937be
+Author:     Nikolay Sivov <nsivov@codeweavers.com>
+AuthorDate: Fri Aug 28 11:21:14 2026 +0200
+Commit:     Alexandre Julliard <julliard@winehq.org>
+CommitDate: Sat Aug 29 14:28:56 2026 +0200
+
+    evr/presenter: Fix potential use-after-free on swapchain interface.
+    
+    Signed-off-by: Nikolay Sivov <nsivov@codeweavers.com>
+
+diff --git a/dlls/evr/presenter.c b/dlls/evr/presenter.c
+index c876e4120c..1b579229f5 100644
+--- a/dlls/evr/presenter.c
++++ b/dlls/evr/presenter.c
+@@ -1446,6 +1446,7 @@ static HRESULT WINAPI video_presenter_control_SetVideoWindow(IMFVideoDisplayCont
+     {
+         if (presenter->swapchain)
+             IDirect3DSwapChain9_Release(presenter->swapchain);
++        presenter->swapchain = NULL;
+         presenter->video_window = window;
+         hr = video_presenter_create_swapchain(presenter);
+     }

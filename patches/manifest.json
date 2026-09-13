@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "patchSetId": "cx26.3-wine11.0-runeon.8",
+  "patchSetId": "cx26.3-wine11.0-runeon.9",
   "baseId": "crossover-26.3-wine-11.0",
   "audit": {
     "from": "wine-11.0",
@@ -754,6 +754,198 @@
       "summary": "Ignore bytes past the outer DER SEQUENCE when importing a PFX blob."
     },
     {
+      "order": 45,
+      "path": "patches/upstream/0045-wine-11.16-dinput-action-device-guid.patch",
+      "sha256": "19d39d31d468c9649ed9dcc4ec6a01eea3c7ba20888f4ca48c4c56643d1a865b",
+      "kind": "upstream-backport",
+      "status": "active",
+      "risk": "medium",
+      "firstWineRelease": "wine-11.16",
+      "upstreamCommits": [
+        "2a43c4b9291083f8892f2100051131a87278e656",
+        "72ffda26fa71d42ba01e6908f39f5972b238e1c0"
+      ],
+      "summary": "Match both the device GUID and control identifier when setting action-map app data, with the original regression test."
+    },
+    {
+      "order": 53,
+      "path": "patches/upstream/0053-wine-11.16-d3d10-stateblock-disabled-byte-fields.patch",
+      "sha256": "56fce1b4dd90a524571e43a7da21d1b2a9cbcd3ce60d1e850fbe8dae5585f037",
+      "kind": "upstream-backport",
+      "status": "active",
+      "risk": "medium",
+      "firstWineRelease": "wine-11.16",
+      "upstreamCommits": [
+        "2d98b4fb0ae49aa22c735eda6f221da91b4bc3cb",
+        "a5c665c30fe3d1ba6748680e68e77a564d58a9d4"
+      ],
+      "adaptation": "Combine the upstream test prerequisite and fix into one net diff; retain authorship and all upstream test assertions. Add an explicit no-device skip before using the D3D10 device. No production-source semantic adaptation.",
+      "summary": "Honor only the low bit of byte-sized D3D10 state block mask fields during capture and apply.",
+      "verification": [
+        {
+          "path": "dlls/d3d10/stateblock.c",
+          "contains": "if (stateblock_mask_get_bit(&stateblock->mask.OMBlendState, 1, 0))"
+        },
+        {
+          "path": "dlls/d3d10/tests/device.c",
+          "contains": "skip(\"Failed to create a D3D10 device."
+        }
+      ]
+    },
+    {
+      "order": 54,
+      "path": "patches/upstream/0054-wine-11.17-winhttp-connection-query-buffer-length.patch",
+      "sha256": "50e313c4820aa812162e1e0a8c5a4c2ad8743a578ac826efdaca1293be94baaf",
+      "kind": "upstream-backport",
+      "status": "active",
+      "risk": "low",
+      "firstWineRelease": "wine-11.17",
+      "upstreamCommits": [
+        "df71145f22f15e723697675e3beaf75094247c6c"
+      ],
+      "summary": "Reset independent buffer capacities for Connection and Proxy-Connection header queries.",
+      "verification": [
+        {
+          "path": "dlls/winhttp/request.c",
+          "contains": "DWORD size = sizeof(connection), size2 = size;"
+        }
+      ]
+    },
+    {
+      "order": 55,
+      "path": "patches/upstream/0055-wine-11.17-winhttp-pac-scheme-host-bounds.patch",
+      "sha256": "f9fe4965b069652f9cf1c64cbf8608e34d949c47230d3c3a6158b7f1999b50e9",
+      "kind": "upstream-backport",
+      "status": "active",
+      "risk": "low",
+      "firstWineRelease": "wine-11.17",
+      "upstreamCommits": [
+        "03f4957caceeb8404a119f6b8bd8cc0e76dcb76e"
+      ],
+      "summary": "Bound the PAC hostname lowercasing buffer and defend the fixed scheme buffer.",
+      "verification": [
+        {
+          "path": "dlls/winhttp/session.c",
+          "contains": "if (uc.dwHostNameLength > MAX_HOST_NAME_LENGTH) return FALSE;"
+        }
+      ]
+    },
+    {
+      "order": 56,
+      "path": "patches/upstream/0056-wine-11.17-secur32-schannel-invalid-context.patch",
+      "sha256": "1ed3235136995e49d28504e5579d05c717e7b884b9e2430148bd76019e06c221",
+      "kind": "upstream-backport",
+      "status": "active",
+      "risk": "low",
+      "firstWineRelease": "wine-11.17",
+      "upstreamCommits": [
+        "081d8b1dd9ff4bdd067c54bb50d396e34c334c70"
+      ],
+      "summary": "Reject missing, wrong-type and invalid SChannel context objects before encrypt/decrypt buffer processing.",
+      "verification": [
+        {
+          "path": "dlls/secur32/schannel.c",
+          "contains": "if (!context_handle || !(ctx = schan_get_object(context_handle->dwLower, SCHAN_HANDLE_CTX)))"
+        }
+      ]
+    },
+    {
+      "order": 57,
+      "path": "patches/upstream/0057-wine-11.17-windowscodecs-nonnull-stream-read-count.patch",
+      "sha256": "af2fa9dfc04343935904bcf490921e5c9d1dc060ec5776a2028fb08aed25b89a",
+      "kind": "upstream-backport",
+      "status": "active",
+      "risk": "medium",
+      "firstWineRelease": "wine-11.17",
+      "upstreamCommits": [
+        "111e5197390aa008789b002222024229fa2b82cf"
+      ],
+      "summary": "Pass a non-NULL read count to WIC streams and report successful short reads as S_FALSE.",
+      "verification": [
+        {
+          "path": "dlls/windowscodecs/wincodecs_common.c",
+          "contains": "if (SUCCEEDED(hr) && *bytes_read != read)"
+        }
+      ]
+    },
+    {
+      "order": 58,
+      "path": "patches/upstream/0058-wine-11.17-dwrite-ttc-header-read-size.patch",
+      "sha256": "80ddedc52e2b7a62ab8d4d4aec8c6c86cfdde2d010aaf573944be7a29c8c4a0e",
+      "kind": "upstream-backport",
+      "status": "active",
+      "risk": "low",
+      "firstWineRelease": "wine-11.17",
+      "upstreamCommits": [
+        "a6fc12e4a94bf4dae2d5c3a297794107627dad0a"
+      ],
+      "summary": "Request the complete TTC header from custom DirectWrite font streams.",
+      "verification": [
+        {
+          "path": "dlls/dwrite/opentype.c",
+          "contains": "hr = IDWriteFontFileStream_ReadFileFragment(stream, (const void **)&header, 0, sizeof(*header), &context);"
+        }
+      ]
+    },
+    {
+      "order": 59,
+      "path": "patches/upstream/0059-wine-11.17-d3d10-device-adapter-failure-reference.patch",
+      "sha256": "a1f7ad50eed4daf57ca87da64e5769bdd3e3eb28c2663909f3344307417e4521",
+      "kind": "upstream-backport",
+      "status": "active",
+      "risk": "low",
+      "firstWineRelease": "wine-11.17",
+      "upstreamCommits": [
+        "5ae631904a4b4a253e22408e5cfe107c8ebb33b9",
+        "0e2ee8ab3e8c72dfcd798ba6d963b6f34625989d"
+      ],
+      "summary": "Acquire caller-supplied D3D10/10.1 adapter references only after GetParent succeeds.",
+      "verification": [
+        {
+          "path": "dlls/d3d10/d3d10_main.c",
+          "contains": "hr = IDXGIAdapter_GetParent(adapter, &IID_IDXGIFactory, (void **)&factory);"
+        }
+      ]
+    },
+    {
+      "order": 60,
+      "path": "patches/upstream/0060-wine-11.17-d2d1-geometry-fill-brush-lifetime.patch",
+      "sha256": "8ea66628d559fea1345c3a2b26a1c4ad7548c71385912f37e276d2f725388cd8",
+      "kind": "upstream-backport",
+      "status": "active",
+      "risk": "medium",
+      "firstWineRelease": "wine-11.17",
+      "upstreamCommits": [
+        "4334512575c7be581ae9a2bd9d9d0d11e5038542"
+      ],
+      "summary": "Leave cloned geometry-fill brushes owned by the Direct2D command list on opacity-brush failure.",
+      "verification": [
+        {
+          "path": "dlls/d2d1/command_list.c",
+          "contains": "orig_opacity_brush, &opacity_brush)))"
+        }
+      ]
+    },
+    {
+      "order": 61,
+      "path": "patches/upstream/0061-wine-11.17-evr-video-window-swapchain-lifetime.patch",
+      "sha256": "2453c06a094ffc786135280fff89be86004ab31798424d5af47e164fe688809f",
+      "kind": "upstream-backport",
+      "status": "active",
+      "risk": "medium",
+      "firstWineRelease": "wine-11.17",
+      "upstreamCommits": [
+        "5d711b3bdc455addd7a720b553600abc869937be"
+      ],
+      "summary": "Clear the EVR swapchain pointer before attempting replacement for a new video window.",
+      "verification": [
+        {
+          "path": "dlls/evr/presenter.c",
+          "contains": "presenter->swapchain = NULL;"
+        }
+      ]
+    },
+    {
       "order": 100,
       "path": "patches/runeon/0100-steam-rockstar-cef-process-arguments.patch",
       "sha256": "546b0b22679bb5bf877c76d62de64a2ebcc132d817c35d1dfa5e3047a2b2cd54",
@@ -788,5 +980,12 @@
       ],
       "summary": "Let an application opt its Vuplex CEF host out of accelerated paint, gated on a per-application registry policy."
     }
-  ]
+  ],
+  "targetedReview": {
+    "from": "wine-11.15",
+    "through": "wine-11.17",
+    "scope": "Selected fixes only; not a complete audit of this release range.",
+    "basePatchSet": "cx26.3-wine11.0-runeon.8",
+    "report": "BACKPORTS-11.16-11.17.md"
+  }
 }

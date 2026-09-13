@@ -1,0 +1,23 @@
+commit a6fc12e4a94bf4dae2d5c3a297794107627dad0a
+Author:     Nikolay Sivov <nsivov@codeweavers.com>
+AuthorDate: Fri Aug 28 11:45:57 2026 +0200
+Commit:     Alexandre Julliard <julliard@winehq.org>
+CommitDate: Sat Aug 29 14:28:41 2026 +0200
+
+    dwrite/ot: Fix TTC header read size.
+    
+    Signed-off-by: Nikolay Sivov <nsivov@codeweavers.com>
+
+diff --git a/dlls/dwrite/opentype.c b/dlls/dwrite/opentype.c
+index 9adeeb64eb..f4faaa567e 100644
+--- a/dlls/dwrite/opentype.c
++++ b/dlls/dwrite/opentype.c
+@@ -1437,7 +1437,7 @@ static HRESULT opentype_ttc_analyzer(IDWriteFontFileStream *stream, UINT32 *font
+     void *context;
+     HRESULT hr;
+ 
+-    hr = IDWriteFontFileStream_ReadFileFragment(stream, (const void**)&header, 0, sizeof(header), &context);
++    hr = IDWriteFontFileStream_ReadFileFragment(stream, (const void **)&header, 0, sizeof(*header), &context);
+     if (FAILED(hr))
+         return hr;
+ 

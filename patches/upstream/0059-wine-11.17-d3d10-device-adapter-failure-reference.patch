@@ -1,0 +1,58 @@
+commit 5ae631904a4b4a253e22408e5cfe107c8ebb33b9
+Author:     Nikolay Sivov <nsivov@codeweavers.com>
+AuthorDate: Tue Sep 1 12:00:13 2026 +0200
+Commit:     Alexandre Julliard <julliard@winehq.org>
+CommitDate: Wed Sep 2 10:03:55 2026 +0200
+
+    d3d10: Do not reference adapter on failure path of the device creation.
+    
+    Signed-off-by: Nikolay Sivov <nsivov@codeweavers.com>
+
+diff --git a/dlls/d3d10/d3d10_main.c b/dlls/d3d10/d3d10_main.c
+index 565b5f4a0c..bd90decccf 100644
+--- a/dlls/d3d10/d3d10_main.c
++++ b/dlls/d3d10/d3d10_main.c
+@@ -60,13 +60,13 @@ static HRESULT d3d10_create_device(IDXGIAdapter *adapter, D3D10_DRIVER_TYPE driv
+ 
+     if (adapter)
+     {
+-        IDXGIAdapter_AddRef(adapter);
+         hr = IDXGIAdapter_GetParent(adapter, &IID_IDXGIFactory, (void **)&factory);
+         if (FAILED(hr))
+         {
+             WARN("Failed to get dxgi factory, returning %#lx.\n", hr);
+             return hr;
+         }
++        IDXGIAdapter_AddRef(adapter);
+     }
+     else
+     {
+
+commit 0e2ee8ab3e8c72dfcd798ba6d963b6f34625989d
+Author:     Nikolay Sivov <nsivov@codeweavers.com>
+AuthorDate: Tue Sep 1 12:08:01 2026 +0200
+Commit:     Alexandre Julliard <julliard@winehq.org>
+CommitDate: Wed Sep 2 10:03:57 2026 +0200
+
+    d3d10_1: Do not reference adapter on failure path of the device creation.
+    
+    Signed-off-by: Nikolay Sivov <nsivov@codeweavers.com>
+
+diff --git a/dlls/d3d10_1/d3d10_1_main.c b/dlls/d3d10_1/d3d10_1_main.c
+index c7cde0fcef..bd7aeeb57c 100644
+--- a/dlls/d3d10_1/d3d10_1_main.c
++++ b/dlls/d3d10_1/d3d10_1_main.c
+@@ -86,12 +86,12 @@ static HRESULT d3d10_create_device1(IDXGIAdapter *adapter, D3D10_DRIVER_TYPE dri
+ 
+     if (adapter)
+     {
+-        IDXGIAdapter_AddRef(adapter);
+         if (FAILED(hr = IDXGIAdapter_GetParent(adapter, &IID_IDXGIFactory, (void **)&factory)))
+         {
+             WARN("Failed to get dxgi factory, hr %#lx.\n", hr);
+             return hr;
+         }
++        IDXGIAdapter_AddRef(adapter);
+     }
+     else
+     {

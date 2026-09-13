@@ -1,0 +1,54 @@
+commit 081d8b1dd9ff4bdd067c54bb50d396e34c334c70
+Author:     Hans Leidekker <hans@codeweavers.com>
+AuthorDate: Fri Aug 28 16:04:04 2026 +0200
+Commit:     Alexandre Julliard <julliard@winehq.org>
+CommitDate: Fri Sep 4 11:06:35 2026 +0200
+
+    secur32: Properly validate context handle in schan_Encrypt/DecryptMessage().
+
+diff --git a/dlls/secur32/schannel.c b/dlls/secur32/schannel.c
+index e03efb54db..e9984a5610 100644
+--- a/dlls/secur32/schannel.c
++++ b/dlls/secur32/schannel.c
+@@ -1170,7 +1170,8 @@ static SECURITY_STATUS SEC_ENTRY schan_InitializeSecurityContextW(
+     dump_buffer_desc(pInput);
+     dump_buffer_desc(pOutput);
+ 
+-    return establish_context(phCredential, phContext, pszTargetName, pInput, fContextReq, TargetDataRep, phNewContext, pOutput, pfContextAttr, ptsExpiry, FALSE);
++    return establish_context(phCredential, phContext, pszTargetName, pInput, fContextReq, TargetDataRep,
++                             phNewContext, pOutput, pfContextAttr, ptsExpiry, FALSE);
+ }
+ 
+ /***********************************************************************
+@@ -1218,7 +1219,8 @@ static SECURITY_STATUS SEC_ENTRY schan_AcceptSecurityContext(
+     dump_buffer_desc(pInput);
+     dump_buffer_desc(pOutput);
+ 
+-    return establish_context(phCredential, phContext, NULL, pInput, fContextReq, TargetDataRep, phNewContext, pOutput, pfContextAttr, ptsTimeStamp, TRUE);
++    return establish_context(phCredential, phContext, NULL, pInput, fContextReq, TargetDataRep, phNewContext,
++                             pOutput, pfContextAttr, ptsTimeStamp, TRUE);
+ }
+ 
+ static void *get_alg_name(ALG_ID id, BOOL wide)
+@@ -1519,8 +1521,8 @@ static SECURITY_STATUS SEC_ENTRY schan_EncryptMessage(PCtxtHandle context_handle
+     TRACE("context_handle %p, quality %ld, message %p, message_seq_no %ld\n",
+             context_handle, quality, message, message_seq_no);
+ 
+-    if (!context_handle) return SEC_E_INVALID_HANDLE;
+-    ctx = schan_get_object(context_handle->dwLower, SCHAN_HANDLE_CTX);
++    if (!context_handle || !(ctx = schan_get_object(context_handle->dwLower, SCHAN_HANDLE_CTX)))
++        return SEC_E_INVALID_HANDLE;
+ 
+     dump_buffer_desc(message);
+ 
+@@ -1655,8 +1657,8 @@ static SECURITY_STATUS SEC_ENTRY schan_DecryptMessage(PCtxtHandle context_handle
+     TRACE("context_handle %p, message %p, message_seq_no %ld, quality %p\n",
+             context_handle, message, message_seq_no, quality);
+ 
+-    if (!context_handle) return SEC_E_INVALID_HANDLE;
+-    ctx = schan_get_object(context_handle->dwLower, SCHAN_HANDLE_CTX);
++    if (!context_handle || !(ctx = schan_get_object(context_handle->dwLower, SCHAN_HANDLE_CTX)))
++        return SEC_E_INVALID_HANDLE;
+ 
+     dump_buffer_desc(message);
+ 

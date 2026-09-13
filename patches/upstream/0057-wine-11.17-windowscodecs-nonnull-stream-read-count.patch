@@ -1,0 +1,38 @@
+commit 111e5197390aa008789b002222024229fa2b82cf
+Author:     Shaun Ren <sren@codeweavers.com>
+AuthorDate: Fri Aug 21 21:45:15 2026 -0400
+Commit:     Alexandre Julliard <julliard@winehq.org>
+CommitDate: Mon Aug 24 22:37:40 2026 +0200
+
+    windowscodecs: Always pass a valid pcbRead pointer to IStream::Read().
+    
+    Some non-conforming IStream implementations, such as SharpDX, do not
+    handle a NULL pcbRead for Read(). This causes the game "Surviving
+    Deponia Playtest" to display a black main menu.
+    
+    Fixes: 2a167eb4ea844a090ca0247cf233633f697e3a85
+
+diff --git a/dlls/windowscodecs/wincodecs_common.c b/dlls/windowscodecs/wincodecs_common.c
+index 8da1bfed20..a60e4b70d9 100644
+--- a/dlls/windowscodecs/wincodecs_common.c
++++ b/dlls/windowscodecs/wincodecs_common.c
+@@ -188,7 +188,18 @@ HRESULT CDECL stream_getsize(IStream *stream, ULONGLONG *size)
+ 
+ HRESULT CDECL stream_read(IStream *stream, void *buffer, ULONG read, ULONG *bytes_read)
+ {
+-    return IStream_Read(stream, buffer, read, bytes_read);
++    ULONG nread;
++    HRESULT hr;
++
++    /* Ensure that we always pass a non-NULL bytes_read pointer, as some
++     * implementations (e.g. SharpDX) can't handle it being NULL. */
++    if (!bytes_read)
++        bytes_read = &nread;
++
++    hr = IStream_Read(stream, buffer, read, bytes_read);
++    if (SUCCEEDED(hr) && *bytes_read != read)
++        return S_FALSE;
++    return hr;
+ }
+ 
+ HRESULT CDECL stream_seek(IStream *stream, LONGLONG ofs, DWORD origin, ULONGLONG *new_position)
