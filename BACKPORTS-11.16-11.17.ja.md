@@ -4,7 +4,7 @@
 
 > 英語版が正式な文書です。簡体字中国語版と日本語版は、内容を省略しない翻訳です。
 
-レビュー日: 2026-09-13。`cx26.3-wine11.0-runeon.9` は未配布のソース候補で、`.8` と同じ固定 CrossOver 26.3 / Wine 11.0 archive に基づきます。既存の 47 パッチファイルを保持し、13 の上流コミットを含む 10 ファイルを追加します。合計は 57 ファイルで、54 の upstream backport と変更していない三つの製品パッチからなります。この増分は ABI-sensitive なコードや製品ポリシーを変更しません。
+レビュー日: 2026-09-13。`cx26.3-wine11.0-runeon.9` は Dev seed `2026.09.13` が使用する公開 Pre-release で、`.8` と同じ固定 CrossOver 26.3 / Wine 11.0 archive に基づきます。既存の 47 パッチファイルを保持し、13 の上流コミットを含む 10 ファイルを追加します。合計は 57 ファイルで、54 の upstream backport と変更していない三つの製品パッチからなります。この増分は ABI-sensitive なコードや製品ポリシーを変更しません。
 
 今回は選定した Wine 11.16/11.17 変更の対象限定レビューであり、11.15 以降の 628 コミットすべての完全監査ではありません。完全監査の境界は `wine-11.15` のままです。upstream-watch workflow の通知を消すために `upstreamAuditThrough` を進めたり、過去の監査を書き換えたりしません。配布済み runtime の状態は引き続き [README](README.ja.md) を参照してください。
 
@@ -57,7 +57,8 @@
 | 旧 DLL の WinHTTP 対照 | `.8` DLL は過長 header と PAC の対象入力に到達した後、stack corruption の page fault を再現します。Header 対照は先に長い header を確認し、PAC 対照は先に通常 hostname を通過します。両方とも fault/debugger 処理へ入り、25 秒の監視 timeout と隔離 server/debugger の cleanup が必要でした。通常の assertion 失敗や通常の crash 終了コードとしては記録しません。候補ではこれらの probe の障害が解消しましたが、ゲーム単位の修正証明ではありません。 |
 | Direct2D/EVR 所有権の障害注入 | [lifetime-check.py](tests/lifetime-check.py) が二つの実関数を依存 stub とともにコンパイル・実行し、候補は 51 チェックに合格しました。`.8` は六つの想定失敗と、安全に検出した二つの重複解放を報告します。作成/置換失敗、回復、成功、破棄を含む関数単位の検証であり、Wine や GPU の実行ではありません。 |
 | WIC 読み取り結果の障害注入 | [stream-read-check.py](tests/stream-read-check.py) は九つのシナリオで 38 assertion を実行し、候補は合格、`.8` は 12 の想定失敗です。NULL/非 NULL count、完全/短い読み取り、S_FALSE 正規化、未書き込み count を読まずに E_FAIL を保つ動作を検証します。関数単位の検証で、実 codec の実行ではありません。 |
-| 完全な対象モジュール suite と製品回帰 | 完全な suite 実行、製品の既存 prefix チェック、Steam CEF/停止・再起動、D3DMetal/DXMT/DXVK smoke は未完了です。隔離した API prefix の結果では代替できません。 |
-| ソース assets と runtime 配布 | ソースの公開、対応する署名済み runtime、Dev/Production ゲートは未完了です。ローカルの tag と archive はローカル準備にとどまり、`.9` の公開 Release や runtime 配布は行っていません。 |
+| 新しい依存関係での再検証 | Open Wine `.9` は既存の GnuTLS/GStreamer 依存バージョンを維持し、MoltenVK `1.4.2` で完全に再ビルドしました。同じ各アーキテクチャ 70 の API assertion と、x64/x86 の headers/PAC 全四チェックに合格しました。追加の PAC trace では、一度のダウンロード後に script cache を再利用し、長い hostname の経路へ到達することを確認しました。ゲーム互換性や MoltenVK のグラフィックス機能を証明するチェックではありません。 |
+| 完全な対象モジュール suite と製品回帰 | 完全な suite 実行、製品の既存 prefix チェック、Steam CEF/停止・再起動、D3DMetal/DXMT/DXVK のゲーム smoke は未完了です。隔離した API prefix の結果では代替できません。 |
+| ソース assets と runtime 配布 | `.9` の公開 Pre-release と四つの不変の assets は公開済みです。[ソース manifest](release-manifests/cx26.3-wine11.0-runeon.9.source-archive.json) に commit、archive の digest とサイズを記録します。Dev seed `2026.09.13` は `.9` と MoltenVK `1.4.2` を組み合わせ、seed のビルド、署名、readiness、feed/ticket/download 検証が完了しています。ユーザーによる Steam/ゲームの実機受け入れ確認は未実施で、現在の Runeon App ソースからビルドする Dev `1.8 (3)` を使用する予定です。既存の公開 App インストーラーは変更しません。`.9` は Production へ昇格しておらず、正式版にも変更していません。Production は引き続き `.8` / seed `2026.09.06` です。 |
 
 再現可能なチェックコマンドと managed runtime の起動境界は [BUILDING](BUILDING.ja.md) を参照してください。上流テストのコンパイルは実行を意味せず、API と関数単位の合格は [MAINTENANCE](MAINTENANCE.ja.md) の未完了の製品リリースゲートを代替しません。対応する証拠を得た後にのみ状態を更新します。

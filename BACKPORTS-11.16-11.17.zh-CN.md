@@ -4,7 +4,7 @@
 
 > 英文文档是权威版本；简体中文与日语文档均为完整译本。
 
-审查日期：2026-09-13。`cx26.3-wine11.0-runeon.9` 是尚未交付的源码候选，沿用 `.8` 固定的 CrossOver 26.3 / Wine 11.0 archive，保留已有 47 个补丁文件，新增承载 13 个上游提交的 10 个文件：合计 57 个文件，其中 54 个上游 backport、三个未修改的产品补丁。本次增量不改变 ABI 敏感代码或产品策略。
+审查日期：2026-09-13。`cx26.3-wine11.0-runeon.9` 是 Dev seed `2026.09.13` 使用的公开 Pre-release，沿用 `.8` 固定的 CrossOver 26.3 / Wine 11.0 archive，保留已有 47 个补丁文件，新增承载 13 个上游提交的 10 个文件：合计 57 个文件，其中 54 个上游 backport、三个未修改的产品补丁。本次增量不改变 ABI 敏感代码或产品策略。
 
 本轮只对选出的 Wine 11.16/11.17 改动做定向审查，不是对 11.15 之后全部 628 个提交的完整审计。完整审计边界仍为 `wine-11.15`；不会为了消除 upstream-watch workflow 的提醒而推进 `upstreamAuditThrough` 或改写历史审计。已交付 runtime 状态继续以 [README](README.zh-CN.md) 为准。
 
@@ -57,7 +57,8 @@
 | 旧 DLL WinHTTP 对照 | `.8` DLL 的过长 header 和 PAC 路径达到目标输入后复现栈损坏 page fault。Header 对照先确认长字段，PAC 对照先通过正常 hostname；两者进入 fault/debugger 处理，均需 25 秒监督超时并清理隔离 server/debugger。没有将其记录为普通断言失败或正常的崩溃退出码。候选在这些探针中消除了故障，不代表游戏级修复证明。 |
 | Direct2D/EVR 所有权故障注入 | [lifetime-check.py](tests/lifetime-check.py) 提取两个真实函数，配依赖桩编译执行：候选 51 条检查通过；`.8` 有六条预期失败与两次安全捕获的重复释放。覆盖创建/替换失败、恢复、成功及销毁。这是函数级验证，不是 Wine 或 GPU 执行。 |
 | WIC 读取结果故障注入 | [stream-read-check.py](tests/stream-read-check.py) 执行九个场景、38 条断言：候选通过，`.8` 有 12 条预期失败。覆盖 NULL/非 NULL count、完整/短读、S_FALSE 规范化，以及保持 E_FAIL 且不读取未写 count。这是函数级验证，不是真实 codec 执行。 |
-| 完整受影响模块 suite 与产品回归 | 完整 suite 执行、产品已有 prefix 检查、Steam CEF/停止重启及 D3DMetal/DXMT/DXVK smoke 仍待完成，隔离 API prefix 的结果不能替代这些检查。 |
-| 源码资产与 runtime 分发 | 源码公开发布及匹配的签名 runtime、Dev/Production 门禁仍待完成。本地 tag 和 archive 只属于本地准备；尚未公开发布 `.9` Release 或分发 runtime。 |
+| 新依赖构建复测 | Open Wine `.9` 使用 MoltenVK `1.4.2` 完整重编，同时保持 GnuTLS/GStreamer 依赖版本不变；通过同一组每架构 70 条 API 断言及全部四项 x64/x86 headers/PAC 检查。追加 PAC trace 确认一次下载后复用脚本缓存，并进入长 hostname 路径。这些检查不证明游戏兼容性或 MoltenVK 图形能力。 |
+| 完整受影响模块 suite 与产品回归 | 完整 suite 执行、产品已有 prefix 检查、Steam CEF/停止重启及 D3DMetal/DXMT/DXVK 游戏 smoke 仍待完成，隔离 API prefix 的结果不能替代这些检查。 |
+| 源码资产与 runtime 分发 | `.9` 公开 Pre-release 及其四个不可变资产已发布；[源码 manifest](release-manifests/cx26.3-wine11.0-runeon.9.source-archive.json) 记录 commit、归档摘要与大小。Dev seed `2026.09.13` 搭配 `.9` 与 MoltenVK `1.4.2`，已完成 seed 构建、签名、readiness 和 feed/ticket/download 验证。真人 Steam/游戏验收仍待进行，将使用当前 Runeon App 源码构建的 Dev `1.8 (3)`。既有已发布 App 安装包保持不变。`.9` 未提升至 Production，也未转为正式版；Production 仍为 `.8` / seed `2026.09.06`。 |
 
 可重复检查命令及受管理 runtime 的启动边界见 [BUILDING](BUILDING.zh-CN.md)。编译上游测试不等于执行测试；API 与函数级通过不能替代 [MAINTENANCE](MAINTENANCE.zh-CN.md) 中尚未完成的产品发布门槛。只有取得对应证据后才能更新状态。
