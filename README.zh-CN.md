@@ -12,6 +12,7 @@ Runeon Wine 是 Runeon Steam Baseline runtime 的公开源码维护仓库，保�
 - Wine 基线：`Wine version 11.0`
 <!-- release-facts:current-patch-set -->
 - 当前 Dev 源码：`cx26.3-wine11.0-runeon.9`（正式版），搭配 seed `2026.09.13` 与 MoltenVK `1.4.2`
+- 本地未发布候选：[`cx26.3-wine11.0-runeon.10`](FLSGETVALUE2.zh-CN.md)，单独存放于 `patchsets/`，不作为默认 series 或已发布 runtime。
 - 当前 Production 源码及 latest 正式 Release：seed `2026.09.13` 对应 `cx26.3-wine11.0-runeon.9`，App 门槛 `>=1.8 (0)`
 - 验证：自动发布与分发检查已完成；用户已确认 Dev 组件更新、runtime 准备和 Steam 启动。未逐 build 重跑游戏与全新 prefix 验收；已发布 App 安装包保持 `1.8 (3)`
 - Production 保留回滚源码：seed `2026.09.06` 对应 `cx26.3-wine11.0-runeon.8`，seed `2026.08.11.1` 对应 `cx26.3-wine11.0-runeon.6`，seed `2026.08.03.2` 对应 `cx26.3-wine11.0-runeon.5`

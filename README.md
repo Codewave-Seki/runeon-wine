@@ -12,6 +12,7 @@ Runeon Wine is the public source-maintenance repository for Runeon's Steam Basel
 - Wine baseline: `Wine version 11.0`
 <!-- release-facts:current-patch-set -->
 - Active Dev source: `cx26.3-wine11.0-runeon.9` (stable), paired with seed `2026.09.13` and MoltenVK `1.4.2`
+- Local unshipped candidate: [`cx26.3-wine11.0-runeon.10`](FLSGETVALUE2.md), stored separately under `patchsets/`; it is not the default series or a released runtime.
 - Current Production source and latest stable Release: `cx26.3-wine11.0-runeon.9` for seed `2026.09.13`, App gate `>=1.8 (0)`
 - Validation: automated release and distribution checks completed; the user confirmed Dev component updates, runtime preparation and Steam startup. Per-build game and clean-prefix checks were not repeated; published App installers remain `1.8 (3)`
 - Retained Production rollback sources: `cx26.3-wine11.0-runeon.8` for seed `2026.09.06`, `cx26.3-wine11.0-runeon.6` for seed `2026.08.11.1`, and `cx26.3-wine11.0-runeon.5` for seed `2026.08.03.2`

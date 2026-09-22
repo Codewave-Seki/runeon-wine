@@ -12,6 +12,7 @@ Runeon Wine は、Runeon の Steam Baseline runtime 用に公開されている�
 - Wine ベースライン: `Wine version 11.0`
 <!-- release-facts:current-patch-set -->
 - 現在の Dev ソース: `cx26.3-wine11.0-runeon.9`（正式版）。seed `2026.09.13` と MoltenVK `1.4.2` を組み合わせます
+- 未公開のローカル候補：[`cx26.3-wine11.0-runeon.10`](FLSGETVALUE2.ja.md)。`patchsets/` に分離し、既定の series や公開 runtime にはしません。
 - 現在の Production ソースおよび latest 正式 Release: seed `2026.09.13` に対応する `cx26.3-wine11.0-runeon.9`。App 配布条件は `>=1.8 (0)`
 - 検証: 自動リリース・配布チェックは完了し、ユーザーは Dev のコンポーネント更新、runtime 準備、Steam 起動を確認しました。各 build のゲームと新規 prefix の受け入れ確認は再実施していません。公開 App インストーラーは `1.8 (3)` のままです
 - Production に保持する rollback ソース: seed `2026.09.06` の `cx26.3-wine11.0-runeon.8`、seed `2026.08.11.1` の `cx26.3-wine11.0-runeon.6`、seed `2026.08.03.2` の `cx26.3-wine11.0-runeon.5`
