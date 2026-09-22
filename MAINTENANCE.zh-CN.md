@@ -22,7 +22,9 @@ Runeon Wine 同时接受主动上游审计和 diagnostics 驱动调查两类输�
 
 ## 当前 Wine 11.x 审查基线
 
-当前 `.9` patch set 保留 `.8` 基线及其产品补丁。[Wine 11.16/11.17 定向审查](BACKPORTS-11.16-11.17.zh-CN.md) 新增承载 13 个上游提交的 10 个补丁文件，但不把完整审计边界推进到 `wine-11.15` 之后。Dev 与 Production seed `2026.09.13` 均使用 `.9` 与 MoltenVK `1.4.2`，App 门槛为 `1.8 (0)`。Production 复用在 Dev 验证过的同一份签名归档。构建、API 回归、签名、readiness、鉴权 feed/ticket 与完整下载验证已完成；用户已确认当前 Xcode Dev 源码版的组件更新、runtime 准备和 Steam 启动。分发已覆盖 `1.8 (0～3)`；没有逐 build 重跑游戏、停止重启交互与全新 prefix 验收。已发布 App 安装包保持 `1.8 (3)`。源码 Release 已正式发布，tag、commit 及四个附件的字节、大小、摘要均未变；`.8` / seed `2026.09.06` 保留为历史。
+当前 Dev 源码：[`cx26.3-wine11.0-runeon.10`](FLSGETVALUE2.zh-CN.md)（Pre-release），搭配 seed `2026.09.22` 与 MoltenVK `1.4.2`，App 门槛 `>=1.8 (0)`。须显式选择独立的 `patchsets/` 定义；默认 series 保持 `.9`。 验证：Dev 产物、API 接入与 feed/Range 检查已完成；完整下载回读因本机传输超时仍待复查；真实 Steam/游戏与 App 验收由用户在交付后执行，不标记为已通过。Dev 与 Production App 均保持 `1.8 (3)`；App `1.8 (4)` 等待更新说明确认后发布。
+
+`.9` 历史交付与验证（仍是当前 Production）：当前 `.9` patch set 保留 `.8` 基线及其产品补丁。[Wine 11.16/11.17 定向审查](BACKPORTS-11.16-11.17.zh-CN.md) 新增承载 13 个上游提交的 10 个补丁文件，但不把完整审计边界推进到 `wine-11.15` 之后。Dev 与 Production seed `2026.09.13` 均使用 `.9` 与 MoltenVK `1.4.2`，App 门槛为 `1.8 (0)`。Production 复用在 Dev 验证过的同一份签名归档。构建、API 回归、签名、readiness、鉴权 feed/ticket 与完整下载验证已完成；用户已确认当前 Xcode Dev 源码版的组件更新、runtime 准备和 Steam 启动。分发已覆盖 `1.8 (0～3)`；没有逐 build 重跑游戏、停止重启交互与全新 prefix 验收。已发布 App 安装包保持 `1.8 (3)`。源码 Release 已正式发布，tag、commit 及四个附件的字节、大小、摘要均未变；`.8` / seed `2026.09.06` 保留为历史。
 
 `cx26.3-wine11.0-runeon.8` 携带 `patches/runeon/0102-vuplex-accelerated-paint-policy.patch`。（`.7` 携带的是同一补丁的早期形态，**无法编译**——它在完整构建之前就被打了 tag。`static-check.sh` 与 `integration-check.sh` 只验证补丁能否应用，不验证产物能否构建，因此产品补丁必须先过完整构建再打 tag。）它只给 Wine 一种能力：让 Vuplex 3D WebView 的 CEF 宿主从 `OnAcceleratedPaint()` 回退到 CPU `OnPaint()`。该参数仅在调用方应用通过 `HKCU\Software\Wine\AppDefaults\<映像名>\Runeon` 的 `DisableVuplexAcceleratedPaint` 显式开启时才追加。Wine 中不出现任何游戏名或 Steam AppID——策略由调用方写入，哪些游戏需要回退不属于本仓库。宿主的识别条件是：命令行实际要运行的**映像名**以 `.vuplex` 结尾，且命令行含 `--vx-graphics-api=d3d11`、不含 `--type=`。因此 Chromium 子进程不受影响，某个参数里恰好出现 `.vuplex` 路径也不会误触发。回退的代价是每帧一次 CPU 拷贝，所以它是按应用可选而非默认开启。
 

@@ -2,7 +2,7 @@
 
 [English](FLSGETVALUE2.md) | [Simplified Chinese](FLSGETVALUE2.zh-CN.md) | [Japanese](FLSGETVALUE2.ja.md)
 
-`cx26.3-wine11.0-runeon.10` preserves `.9` and adds one downstream patch. It is local and unshipped. Production remains `.9`; there is no new tag, source release or runtime artifact.
+`cx26.3-wine11.0-runeon.10` preserves `.9` and adds one downstream patch. Its immutable Pre-release and corresponding source support Dev seed `2026.09.22`, with App gate `>=1.8 (0)`. Production and the default source definition remain `.9`. Real Steam/game acceptance is pending the user’s Dev validation.
 
 ## Cause and implementation
 
@@ -18,7 +18,7 @@ Run `scripts/static-check.sh` and `scripts/integration-check.sh <unpatched-sourc
 
 Local validation on 2026-09-22: the complete Wine build passed with the corrected product pipe2 configuration. Both x86 and x64 passed the API probe in a clean prefix and in a copy of an old test prefix upgraded by the candidate. The old runtime reproduced both missing exports; all legacy-getter negative controls failed as expected.
 
-Native Windows equivalence and an affected game have not been independently tested. Before distribution, complete the normal Steam/CEF, graphics, packaging, signing and release gates. No per-game exception or new compatibility claim is introduced. The product build must retain its macOS pipe2 feature override: SDK 27 can otherwise weak-link this unavailable symbol on older supported systems before Windows DLLs load.
+Native Windows equivalence and an affected game have not been independently tested. For this Dev delivery the user explicitly requested code compatibility and artifact/distribution verification first, followed by real-machine Steam/CEF and game acceptance. Production still requires the full release chain. No per-game exception or new compatibility claim is introduced. The product build must retain its macOS pipe2 feature override: SDK 27 can otherwise weak-link this unavailable symbol on older supported systems before Windows DLLs load.
 
 ```sh
 export RUNEON_WINE_PATCHSET_DEFINITION=patchsets/cx26.3-wine11.0-runeon.10
