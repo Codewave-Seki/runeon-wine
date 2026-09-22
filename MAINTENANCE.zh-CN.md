@@ -22,7 +22,7 @@ Runeon Wine 同时接受主动上游审计和 diagnostics 驱动调查两类输�
 
 ## 当前 Wine 11.x 审查基线
 
-当前 Dev 源码：[`cx26.3-wine11.0-runeon.10`](FLSGETVALUE2.zh-CN.md)（Pre-release），搭配 seed `2026.09.22` 与 MoltenVK `1.4.2`，App 门槛 `>=1.8 (0)`。须显式选择独立的 `patchsets/` 定义；默认 series 保持 `.9`。 验证：Dev 产物、API 接入与 feed/Range 检查已完成；完整下载回读因本机传输超时仍待复查；真实 Steam/游戏与 App 验收由用户在交付后执行，不标记为已通过。Dev 与 Production App 均保持 `1.8 (3)`；App `1.8 (4)` 等待更新说明确认后发布。
+当前 Dev 源码：[`cx26.3-wine11.0-runeon.10`](FLSGETVALUE2.zh-CN.md)（Pre-release），搭配 seed `2026.09.22` 与 MoltenVK `1.4.2`，App 门槛 `>=1.8 (0)`。须显式选择独立的 `patchsets/` 定义；默认 series 保持 `.9`。 验证：Dev 产物、API 接入、鉴权 feed/ticket 与完整下载 SHA-256 检查已完成。Dev App `1.8 (4)` 已发布，Production App 保持 `1.8 (3)`；真实 Steam/游戏与 App 交互仍待用户 Dev 真机验收。
 
 `.9` 历史交付与验证（仍是当前 Production）：当前 `.9` patch set 保留 `.8` 基线及其产品补丁。[Wine 11.16/11.17 定向审查](BACKPORTS-11.16-11.17.zh-CN.md) 新增承载 13 个上游提交的 10 个补丁文件，但不把完整审计边界推进到 `wine-11.15` 之后。Dev 与 Production seed `2026.09.13` 均使用 `.9` 与 MoltenVK `1.4.2`，App 门槛为 `1.8 (0)`。Production 复用在 Dev 验证过的同一份签名归档。构建、API 回归、签名、readiness、鉴权 feed/ticket 与完整下载验证已完成；用户已确认当前 Xcode Dev 源码版的组件更新、runtime 准备和 Steam 启动。分发已覆盖 `1.8 (0～3)`；没有逐 build 重跑游戏、停止重启交互与全新 prefix 验收。已发布 App 安装包保持 `1.8 (3)`。源码 Release 已正式发布，tag、commit 及四个附件的字节、大小、摘要均未变；`.8` / seed `2026.09.06` 保留为历史。
 

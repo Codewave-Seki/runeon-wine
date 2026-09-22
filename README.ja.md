@@ -14,7 +14,7 @@ Runeon Wine は、Runeon の Steam Baseline runtime 用に公開されている�
 - 既定のソース定義（Production）：`cx26.3-wine11.0-runeon.9`（正式版）。seed `2026.09.13` と MoltenVK `1.4.2` を組み合わせます
 - 現在の Dev ソース：[`cx26.3-wine11.0-runeon.10`](FLSGETVALUE2.ja.md)（Pre-release）。seed `2026.09.22` と MoltenVK `1.4.2` を使用し、App 配布条件は `>=1.8 (0)` です。独立した `patchsets/` 定義を明示的に選択します。既定の series は `.9` のままです。
 - 現在の Production ソースおよび latest 正式 Release: seed `2026.09.13` に対応する `cx26.3-wine11.0-runeon.9`。App 配布条件は `>=1.8 (0)`
-- 検証：Dev 成果物、API 統合、feed/Range チェックは完了しました。ローカル転送がタイムアウトしたため、全体ダウンロードの再検証は未完了です。実際の Steam/ゲームと App の受け入れ確認は配布後にユーザーが行い、完了したとは主張しません。Dev と Production の App は `1.8 (3)` のままです。App `1.8 (4)` はリリースノートの承認後に配布します。
+- 検証：Dev 成果物、API 統合、認証付き feed/ticket、および全体ダウンロードの SHA-256 確認は完了しました。Dev App `1.8 (4)` は配布済みで、Production App は `1.8 (3)` のままです。実際の Steam/ゲームと App の操作は、ユーザーによる Dev 実機確認を待っています。
 - Production に保持する rollback ソース: seed `2026.09.06` の `cx26.3-wine11.0-runeon.8`、seed `2026.08.11.1` の `cx26.3-wine11.0-runeon.6`、seed `2026.08.03.2` の `cx26.3-wine11.0-runeon.5`
 - 上流の監査済み範囲: `wine-11.15` まで
 
