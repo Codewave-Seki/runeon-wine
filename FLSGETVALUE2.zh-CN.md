@@ -2,7 +2,7 @@
 
 [English](FLSGETVALUE2.md) | [简体中文](FLSGETVALUE2.zh-CN.md) | [日本語](FLSGETVALUE2.ja.md)
 
-`cx26.3-wine11.0-runeon.10` 保留 `.9` 并新增一个下游补丁。不可变 Pre-release 与对应源码用于 Dev seed `2026.09.22`，App 门槛 `>=1.8 (0)`。Production 与默认源码定义保持 `.9`；真实 Steam/游戏仍待用户 Dev 真机验收。
+`cx26.3-wine11.0-runeon.10` 保留 `.9` 并新增一个下游补丁。不可变正式版/latest Release 与对应源码用于 Dev 和 Production seed `2026.09.22`，App 门槛 `>=1.8 (0)`。Production 复用同一份签名 Dev 归档；tag、commit 和四个附件不变。默认源码定义保持历史 `.9`，须显式选择 `.10`。
 
 ## 原因与实现
 
@@ -18,7 +18,7 @@
 
 2026-09-22 本地验证：使用修正后的产品 pipe2 配置完成完整 Wine 构建。x86/x64 均在干净 prefix 和由旧测试 prefix 副本升级的环境通过 API 探针；旧 runtime 复现两处导出缺失，全部旧 getter 负对照按预期失败。
 
-尚未独立验证原生 Windows 等价行为或受影响游戏。本次 Dev 交付由用户明确要求先完成代码兼容与产物分发验证，再由用户真机验收 Steam/CEF 和游戏；Production 仍须完整发布链。不增加游戏特判或新的兼容性承诺。产品构建必须保留 macOS pipe2 能力覆盖配置：否则 SDK 27 可在较旧受支持系统上弱链接不存在的符号，并在加载 Windows DLL 前失败。
+尚未独立验证原生 Windows 等价行为或受影响游戏。用户于 2026-09-23 反馈 Dev 未发现问题并授权 Production；该概括反馈不代表全部 Steam/CEF 或游戏场景已逐项实测。打包、readiness 与分发证据由产品仓库记录。不增加游戏特判或新的兼容性承诺。产品构建必须保留 macOS pipe2 能力覆盖配置：否则 SDK 27 可在较旧受支持系统上弱链接不存在的符号，并在加载 Windows DLL 前失败。
 
 ```sh
 export RUNEON_WINE_PATCHSET_DEFINITION=patchsets/cx26.3-wine11.0-runeon.10

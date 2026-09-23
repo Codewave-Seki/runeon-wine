@@ -6,7 +6,7 @@
   "repositoryVisibility": "public",
   "availability": "public-release",
   "releaseURL": "https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.10",
-  "releaseState": "prerelease",
+  "releaseState": "stable",
   "retention": "permanent",
   "assets": {
     "patch-set": {

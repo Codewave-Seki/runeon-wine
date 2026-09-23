@@ -11,11 +11,11 @@ Runeon Wine は、Runeon の Steam Baseline runtime 用に公開されている�
 - CodeWeavers ソース: `crossover-sources-26.3.0.tar.gz`
 - Wine ベースライン: `Wine version 11.0`
 <!-- release-facts:current-patch-set -->
-- 既定のソース定義（Production）：`cx26.3-wine11.0-runeon.9`（正式版）。seed `2026.09.13` と MoltenVK `1.4.2` を組み合わせます
-- 現在の Dev ソース：[`cx26.3-wine11.0-runeon.10`](FLSGETVALUE2.ja.md)（Pre-release）。seed `2026.09.22` と MoltenVK `1.4.2` を使用し、App 配布条件は `>=1.8 (0)` です。独立した `patchsets/` 定義を明示的に選択します。既定の series は `.9` のままです。
-- 現在の Production ソースおよび latest 正式 Release: seed `2026.09.13` に対応する `cx26.3-wine11.0-runeon.9`。App 配布条件は `>=1.8 (0)`
-- 検証：Dev 成果物、API 統合、認証付き feed/ticket、および全体ダウンロードの SHA-256 確認は完了しました。Dev App `1.8 (4)` は配布済みで、Production App は `1.8 (3)` のままです。実際の Steam/ゲームと App の操作は、ユーザーによる Dev 実機確認を待っています。
-- Production に保持する rollback ソース: seed `2026.09.06` の `cx26.3-wine11.0-runeon.8`、seed `2026.08.11.1` の `cx26.3-wine11.0-runeon.6`、seed `2026.08.03.2` の `cx26.3-wine11.0-runeon.5`
+- 既定のソース定義（履歴）：`cx26.3-wine11.0-runeon.9`。保持する seed `2026.09.13` と MoltenVK `1.4.2` を組み合わせます
+- 現在の Dev と Production ソース：[`cx26.3-wine11.0-runeon.10`](FLSGETVALUE2.ja.md)（正式版/latest）。seed `2026.09.22` と MoltenVK `1.4.2` を使用し、App 配布条件は `>=1.8 (0)` です。Production は同一の署名済み Dev archive を再ビルドせずに昇格します。独立した `patchsets/` 定義を明示的に選択します。既定の series は過去の `.9` のままです。
+- 現在の Production ソースおよび latest 正式 Release：seed `2026.09.22` に対応する `cx26.3-wine11.0-runeon.10`。App 配布条件は `>=1.8 (0)`
+- 検証：API、隔離 prefix、署名、release readiness は合格しました。ユーザーは 2026-09-23 に Dev で問題が見つからなかったと報告し、Production を承認しました。この包括的な確認は、すべての Steam/CEF、ゲーム、App 操作を個別に実測したことを意味しません。App インストーラーと配布検証は製品リポジトリが管理します。
+- Production に保持する rollback ソース：seed `2026.09.13` の `cx26.3-wine11.0-runeon.9`、seed `2026.09.06` の `cx26.3-wine11.0-runeon.8`、seed `2026.08.11.1` の `cx26.3-wine11.0-runeon.6`、seed `2026.08.03.2` の `cx26.3-wine11.0-runeon.5`
 - 上流の監査済み範囲: `wine-11.15` まで
 
 [`base/crossover-26.3-wine-11.0.json`](base/crossover-26.3-wine-11.0.json) は、ベースライン URL、SHA-256、およびソースルートに関する唯一の機械可読な情報源です。[`series`](series) がパッチの順序を定義し、[`patches/manifest.json`](patches/manifest.json) が出所、リスク、および完全な upstream commit ID を記録します。
@@ -28,7 +28,7 @@ Runeon Wine は、Runeon の Steam Baseline runtime 用に公開されている�
 - `ntdll`、`server`、`wow64`、`loader`、`winemac.drv`、`win32u`、Unix library/server protocol、または D3DMetal interface の変更は、既定で ABI-sensitive と扱い、個別のベースライン更新または強化された検証を必要とします。
 - component packaging、Developer ID 署名、Dev/Production feed、ダウンロード検証、release readiness は、引き続き Runeon 製品リポジトリが担当します。
 - 本リポジトリと GitHub Release assets は公開されています。実際に配布される各 Production runtime には、正確な patch-set bundle、完全な対応ソース、および SHA-256 ファイルを含む不変の正式 Release が必要です。Production への昇格前の候補は Pre-release のままにします。
-- `patchsets/cx26.3-wine11.0-runeon.0` は Production seed `2026.07.22` の正確な履歴ソース定義です。`patchsets/cx26.3-wine11.0-runeon.1` は、最初の未公開 Escape 修正候補を固定します。既定の [`series`](series) は Production の seed `2026.09.13` が使用する `.9` ソースを示します。それより前の patch set を再構築するには、それを含むコミットをチェックアウトする必要があり、現在の作業ツリーではありません。
+- `patchsets/cx26.3-wine11.0-runeon.0` は Production seed `2026.07.22` の正確な履歴ソース定義です。`patchsets/cx26.3-wine11.0-runeon.1` は、最初の未公開 Escape 修正候補を固定します。既定の [`series`](series) は 過去の Production seed `2026.09.13` が使用した `.9` ソースを示します。それより前の patch set を再構築するには、それを含むコミットをチェックアウトする必要があり、現在の作業ツリーではありません。
 - `release-manifests/` は、各公開 bundle の commit、Release URL、ファイル名、size、SHA-256、stable/prerelease 状態、および永続保持ルールを記録します。Production runtime が参照できるのは `stable` manifest のみです。Pre-release であることは、その修正が Production ユーザーへ提供済みであることを意味しません。
 
 ## リリース状況
@@ -44,7 +44,7 @@ Runeon Wine は、Runeon の Steam Baseline runtime 用に公開されている�
 - [`cx26.3-wine11.0-runeon.7`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.7) は Vuplex 機能を追加しましたが**コンパイルできません**。`dlls/kernelbase/process.c` がレジストリ API を使いながら `winreg.h` を include していないためです。完全なビルドを実行する前に tag が付けられたもので、不変の履歴候補として保持され、いかなる runtime にもビルドしてはなりません。
 - [`cx26.3-wine11.0-runeon.8`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.8) は `.7` にその include を追加した版で、**tag を付ける前に完全な x86_64/WoW64 ビルドで検証済み**です。保持する rollback 用 Production seed `2026.09.06` に対応する正式なソース Release であり、Production は Dev で検証されたものと完全に同一の artifact bytes を使用します。
 
-- `.9` の過去の配布と検証（現在の Production）：[`cx26.3-wine11.0-runeon.9`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.9): Dev と Production の seed `2026.09.13` は `.9` と MoltenVK `1.4.2` を使用し、App の配布条件は `1.8 (0)` 以上です。Production は Dev で検証した同一の署名済み archive を使用します。ビルド、API 回帰、署名、readiness、認証付き feed/ticket と全体ダウンロードの検証は完了しています。ユーザーは現在の Xcode Dev ソース版でコンポーネント更新、runtime 準備、Steam 起動を確認しました。配布は `1.8 (0-3)` で検証しましたが、各 build のゲーム、停止と再起動の操作、新規 prefix の受け入れ確認は再実施していません。公開 App インストーラーは `1.8 (3)` のままです。ソース Release は正式版となり、tag、commit、四つの添付 assets の bytes、size、digest は不変です。`.8` / seed `2026.09.06` は履歴として保持します。 `.8` を保持し、13 の Wine 11.16/11.17 コミットを含む 10 個の対象限定 backport ファイルを追加します。不変のソース情報は[リリース manifest](release-manifests/cx26.3-wine11.0-runeon.9.source-archive.json)、採用と検証の制限は[対象限定レビュー](BACKPORTS-11.16-11.17.ja.md)を参照してください。完全監査の境界は `wine-11.15` のままです。
+- `.9` の過去の配布と検証（2026-09-14、rollback として保持）：[`cx26.3-wine11.0-runeon.9`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.9): Dev と Production の seed `2026.09.13` は `.9` と MoltenVK `1.4.2` を使用し、App の配布条件は `1.8 (0)` 以上です。Production は Dev で検証した同一の署名済み archive を使用します。ビルド、API 回帰、署名、readiness、認証付き feed/ticket と全体ダウンロードの検証は完了しています。ユーザーは現在の Xcode Dev ソース版でコンポーネント更新、runtime 準備、Steam 起動を確認しました。配布は `1.8 (0-3)` で検証しましたが、各 build のゲーム、停止と再起動の操作、新規 prefix の受け入れ確認は再実施していません。公開 App インストーラーは `1.8 (3)` のままです。ソース Release は正式版となり、tag、commit、四つの添付 assets の bytes、size、digest は不変です。`.8` / seed `2026.09.06` は履歴として保持します。 `.8` を保持し、13 の Wine 11.16/11.17 コミットを含む 10 個の対象限定 backport ファイルを追加します。不変のソース情報は[リリース manifest](release-manifests/cx26.3-wine11.0-runeon.9.source-archive.json)、採用と検証の制限は[対象限定レビュー](BACKPORTS-11.16-11.17.ja.md)を参照してください。完全監査の境界は `wine-11.15` のままです。
 
 ## クイック検証
 
