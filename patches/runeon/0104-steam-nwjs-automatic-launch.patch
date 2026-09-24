@@ -1,7 +1,7 @@
 diff --git a/dlls/kernelbase/process.c b/dlls/kernelbase/process.c
 --- a/dlls/kernelbase/process.c
 +++ b/dlls/kernelbase/process.c
-@@ -38,6 +38,82 @@
+@@ -38,6 +38,99 @@
  
  static DWORD shutdown_flags = 0;
  static DWORD shutdown_priority = 0x280;
@@ -13,6 +13,7 @@ diff --git a/dlls/kernelbase/process.c b/dlls/kernelbase/process.c
 +static NTSTATUS runeon_nwjs_launch_command( RTL_USER_PROCESS_PARAMETERS *params, WCHAR **command )
 +{
 +    static const WCHAR *files[] = { L"nw.dll", L"nw_elf.dll", L"package.json" };
++    const WCHAR *argument, *end;
 +    const WCHAR *parent = NtCurrentTeb()->Peb->ProcessParameters->ImagePathName.Buffer;
 +    WCHAR enabled[2], grant[65], appid[32], path[32768], *name;
 +    UNICODE_STRING key, value;
@@ -25,6 +26,22 @@ diff --git a/dlls/kernelbase/process.c b/dlls/kernelbase/process.c
 +    if (!parent) return STATUS_SUCCESS;
 +    if ((name = wcsrchr( parent, '\\' ))) parent = name + 1;
 +    if (wcsicmp( parent, L"steam.exe" )) return STATUS_SUCCESS;
++
++    /* A pass-through helper must preserve lpApplicationName semantics.
++     * If the first argument differs, leave the original creation untouched. */
++    if (!(argument = params->CommandLine.Buffer) || wcschr( argument, '\n' )
++        || wcschr( argument, '\r' )) return STATUS_SUCCESS;
++    if (*argument == '"')
++    {
++        if (!(end = wcschr( ++argument, '"' ))) return STATUS_SUCCESS;
++        if (end[1] && end[1] != ' ' && end[1] != '\t') return STATUS_SUCCESS;
++    }
++    else
++    {
++        for (end = argument; *end && *end != ' ' && *end != '\t'; end++);
++    }
++    if ((end - argument) * sizeof(WCHAR) != params->ImagePathName.Length
++        || wcsnicmp( argument, params->ImagePathName.Buffer, end - argument )) return STATUS_SUCCESS;
 +
 +    RtlInitUnicodeString( &key, L"RUNEON_NWJS_AUTO_V1" );
 +    value.Buffer = enabled;
@@ -74,8 +91,8 @@ diff --git a/dlls/kernelbase/process.c b/dlls/kernelbase/process.c
 +
 +    length = wcslen(runeon_nwjs_wrapperW) + params->CommandLine.Length / sizeof(WCHAR)
 +             + wcslen(L"\"\" --runtime nwjs-auto -- ") + 1;
-+    if (length >= 32767) return STATUS_NAME_TOO_LONG;
-+    if (!(*command = HeapAlloc( GetProcessHeap(), 0, length * sizeof(WCHAR) ))) return STATUS_NO_MEMORY;
++    if (length >= 32767) return STATUS_SUCCESS;
++    if (!(*command = HeapAlloc( GetProcessHeap(), 0, length * sizeof(WCHAR) ))) return STATUS_SUCCESS;
 +    swprintf( *command, length, L"\"%s\" --runtime nwjs-auto -- %s",
 +              runeon_nwjs_wrapperW, params->CommandLine.Buffer );
 +    return STATUS_SUCCESS;
@@ -84,7 +101,7 @@ diff --git a/dlls/kernelbase/process.c b/dlls/kernelbase/process.c
  
  static BOOL is_steamwebhelper_command( const WCHAR *app_name, const WCHAR *cmd_line )
  {
-@@ -732,7 +808,7 @@
+@@ -732,7 +825,7 @@
  {
      const struct proc_thread_attr *handle_list = NULL, *job_list = NULL;
      WCHAR name[MAX_PATH];
@@ -93,7 +110,7 @@ diff --git a/dlls/kernelbase/process.c b/dlls/kernelbase/process.c
      RTL_USER_PROCESS_PARAMETERS *params = NULL;
      RTL_USER_PROCESS_INFORMATION rtl_info = { 0 };
      HANDLE parent = 0, debug = 0;
-@@ -841,6 +917,16 @@
+@@ -841,6 +934,16 @@
      {
          status = STATUS_NO_MEMORY;
          goto done;
@@ -110,7 +127,7 @@ diff --git a/dlls/kernelbase/process.c b/dlls/kernelbase/process.c
      }
  
      if (flags & (DEBUG_PROCESS | DEBUG_ONLY_THIS_PROCESS))
-@@ -964,6 +1050,7 @@
+@@ -964,6 +1067,7 @@
      if (epic_launcher_hack) startup_info->lpDesktop = orig_lpDesktop;
  
      RtlDestroyProcessParameters( params );
