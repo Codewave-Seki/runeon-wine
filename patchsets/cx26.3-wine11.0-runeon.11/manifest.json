@@ -1026,6 +1026,29 @@
       "runeonTasks": [
         "T793"
       ]
+    },
+    {
+      "order": 105,
+      "path": "patches/runeon/0105-dxgi-driver-version.patch",
+      "sha256": "4e772db4be7b165c2f8d84c482d77bb9a8d2aced675c8f804aff64243324ba1a",
+      "kind": "runeon-product",
+      "status": "active",
+      "risk": "high",
+      "summary": "Provide an optional DXGI shim that repairs successful -1 driver versions using exact device LUID matching.",
+      "runeonTasks": [
+        "T797"
+      ],
+      "testStrategy": "Standalone policy checks and cloned-runtime original/fixed/restored probes; App owns opt-in installation and private-provider removal.",
+      "verification": [
+        {
+          "path": "dlls/runeondxgi/driver.c",
+          "contains": "RUNEON_DXGI_DRIVER_VERSION_V1"
+        },
+        {
+          "path": "configure.ac",
+          "contains": "WINE_CONFIG_MAKEFILE(dlls/runeondxgi)"
+        }
+      ]
     }
   ],
   "targetedReview": {
@@ -1040,5 +1063,10 @@
     "status": "local-development",
     "basePatchSet": "cx26.3-wine11.0-runeon.10",
     "report": "NWJS-AUTO-LAUNCH.md"
+  },
+  "dxgiDriverVersion": {
+    "protocol": 1,
+    "status": "local-development",
+    "report": "DXGI-DRIVER-VERSION.md"
   }
 }

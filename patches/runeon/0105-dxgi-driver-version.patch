@@ -1,0 +1,266 @@
+From: Runeon contributors
+Subject: [PATCH] Add an opt-in DXGI driver version provider shim.
+
+Independent implementation using public COM and SetupAPI. The application
+assembles the user-local provider; installing this module alone is inert.
+No Apple binary, per-game match, or guessed driver version is included.
+
+--- a/configure.ac
++++ b/configure.ac
+@@ -3152,6 +3152,7 @@
+ WINE_CONFIG_MAKEFILE(dlls/rtutils)
+ WINE_CONFIG_MAKEFILE(dlls/rtworkq)
+ WINE_CONFIG_MAKEFILE(dlls/rtworkq/tests)
++WINE_CONFIG_MAKEFILE(dlls/runeondxgi)
+ WINE_CONFIG_MAKEFILE(dlls/samlib)
+ WINE_CONFIG_MAKEFILE(dlls/sane.ds)
+ WINE_CONFIG_MAKEFILE(dlls/sapi)
+--- a/configure
++++ b/configure
+@@ -23155,6 +23155,7 @@
+ wine_fn_config_makefile dlls/rtutils enable_rtutils
+ wine_fn_config_makefile dlls/rtworkq enable_rtworkq
+ wine_fn_config_makefile dlls/rtworkq/tests enable_tests
++wine_fn_config_makefile dlls/runeondxgi enable_runeondxgi
+ wine_fn_config_makefile dlls/samlib enable_samlib
+ wine_fn_config_makefile dlls/sane.ds enable_sane_ds
+ wine_fn_config_makefile dlls/sapi enable_sapi
+--- /dev/null
++++ b/dlls/runeondxgi/Makefile.in
+@@ -0,0 +1,3 @@
++MODULE = runeondxgi.dll
++IMPORTS = setupapi advapi32 uuid
++SOURCES = driver.c
+--- /dev/null
++++ b/dlls/runeondxgi/driver.c
+@@ -0,0 +1,220 @@
++/*
++ * DXGI driver version compatibility layer.
++ * Copyright 2026 Runeon contributors
++ * SPDX-License-Identifier: LGPL-2.1-or-later
++ *
++ * Uses public COM and SetupAPI contracts. The provider and device identities
++ * remain unchanged; only its successful -1 version result is repaired.
++ */
++#define COBJMACROS
++#include <windows.h>
++#include <initguid.h>
++#include <dxgi1_6.h>
++#include <setupapi.h>
++#include <devguid.h>
++#include <devpropdef.h>
++#include <stddef.h>
++#include <wchar.h>
++
++/* Wine's GPU LUID device property; see dlls/win32u/sysparams.c. */
++static const DEVPROPKEY gpu_luid_key = {{0x60b193cb,0x5276,0x4d0f,{0x96,0xfc,0xf1,0x73,0xab,0xad,0x3e,0xc6}},2};
++static const char version_marker[] = "RUNEON_DXGI_DRIVER_VERSION_V1";
++
++static BOOL parse_version(const WCHAR *text, LARGE_INTEGER *version)
++{
++    ULONGLONG result = 0;
++    unsigned int part;
++    for (part = 0; part < 4; ++part)
++    {
++        unsigned int value = 0, digits = 0;
++        while (*text >= '0' && *text <= '9')
++        {
++            if (++digits > 5) return FALSE;
++            value = value * 10 + *text++ - '0';
++            if (value > 65535) return FALSE;
++        }
++        if (!digits || (part < 3 ? *text++ != '.' : *text != 0)) return FALSE;
++        result = (result << 16) | value;
++    }
++    if (!result || result == ~(ULONGLONG)0) return FALSE;
++    version->QuadPart = result;
++    return TRUE;
++}
++
++static BOOL device_version(LUID luid, LARGE_INTEGER *version)
++{
++    HDEVINFO devices;
++    SP_DEVINFO_DATA device;
++    LARGE_INTEGER candidate;
++    DWORD index, matches = 0;
++    BOOL valid = FALSE;
++
++    devices = SetupDiGetClassDevsW(&GUID_DEVCLASS_DISPLAY, NULL, NULL, DIGCF_PRESENT);
++    if (devices == INVALID_HANDLE_VALUE) return FALSE;
++    device.cbSize = sizeof(device);
++    for (index = 0; SetupDiEnumDeviceInfo(devices, index, &device); ++index)
++    {
++        LUID current;
++        DEVPROPTYPE type;
++        DWORD size;
++        HKEY key;
++        WCHAR text[64];
++        if (!SetupDiGetDevicePropertyW(devices, &device, &gpu_luid_key, &type,
++                (BYTE *)&current, sizeof(current), &size, 0)
++                || type != DEVPROP_TYPE_UINT64 || size != sizeof(current)
++                || current.HighPart != luid.HighPart || current.LowPart != luid.LowPart) continue;
++        ++matches;
++        key = SetupDiOpenDevRegKey(devices, &device, DICS_FLAG_GLOBAL, 0, DIREG_DRV, KEY_READ);
++        if (key == INVALID_HANDLE_VALUE) continue;
++        size = sizeof(text);
++        valid = RegGetValueW(key, NULL, L"DriverVersion", RRF_RT_REG_SZ, NULL, text, &size) == ERROR_SUCCESS
++                && parse_version(text, &candidate);
++        RegCloseKey(key);
++    }
++    valid = valid && matches == 1 && GetLastError() == ERROR_NO_MORE_ITEMS;
++    SetupDiDestroyDeviceInfoList(devices);
++    if (valid) *version = candidate;
++    return valid;
++}
++
++typedef HRESULT (WINAPI *check_version_fn)(IDXGIAdapter *, REFIID, LARGE_INTEGER *);
++struct adapter_table { const IDXGIAdapterVtbl *table; check_version_fn original; };
++/* ponytail: bounded provider tables, leave further tables untouched; grow only if needed. */
++static struct adapter_table tables[32];
++static unsigned int table_count;
++static SRWLOCK table_lock = SRWLOCK_INIT;
++
++static HRESULT WINAPI check_version(IDXGIAdapter *adapter, REFIID iid, LARGE_INTEGER *version)
++{
++    check_version_fn original = NULL;
++    unsigned int i;
++    HRESULT hr;
++    DWORD error;
++    DXGI_ADAPTER_DESC desc;
++    LARGE_INTEGER replacement;
++    AcquireSRWLockShared(&table_lock);
++    for (i = 0; i < table_count; ++i)
++        if (tables[i].table == adapter->lpVtbl) { original = tables[i].original; break; }
++    ReleaseSRWLockShared(&table_lock);
++    if (!original) return E_UNEXPECTED; /* Only registered tables can point here. */
++    hr = original(adapter, iid, version);
++    error = GetLastError();
++    if (SUCCEEDED(hr) && version && version->QuadPart == -1
++            && SUCCEEDED(IDXGIAdapter_GetDesc(adapter, &desc))
++            && device_version(desc.AdapterLuid, &replacement))
++        *version = replacement;
++    SetLastError(error);
++    return hr;
++}
++
++static void patch_adapter(IDXGIAdapter *adapter)
++{
++    void **slot = (void **)((char *)adapter->lpVtbl + offsetof(IDXGIAdapterVtbl, CheckInterfaceSupport));
++    HMODULE pinned;
++    DWORD protection, ignored;
++    unsigned int i;
++    AcquireSRWLockExclusive(&table_lock);
++    for (i = 0; i < table_count; ++i) if (tables[i].table == adapter->lpVtbl) goto done;
++    if (table_count == sizeof(tables) / sizeof(tables[0]) || *slot == (void *)check_version) goto done;
++    /* The shared provider table outlives any one factory or caller's DLL handle. */
++    if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_PIN,
++            (const WCHAR *)check_version, &pinned)) goto done;
++    if (!VirtualProtect(slot, sizeof(*slot), PAGE_READWRITE, &protection)) goto done;
++    tables[table_count].table = adapter->lpVtbl;
++    tables[table_count].original = (check_version_fn)*slot;
++    if (InterlockedCompareExchangePointer(slot, (void *)check_version,
++            (void *)tables[table_count].original) == (void *)tables[table_count].original) ++table_count;
++    VirtualProtect(slot, sizeof(*slot), protection, &ignored);
++done:
++    ReleaseSRWLockExclusive(&table_lock);
++}
++
++static void prepare_factory(IUnknown *object)
++{
++    static const IID *const interfaces[] = {&IID_IDXGIAdapter, &IID_IDXGIAdapter1,
++        &IID_IDXGIAdapter2, &IID_IDXGIAdapter3, &IID_IDXGIAdapter4};
++    IDXGIFactory *factory;
++    IDXGIAdapter *adapter;
++    UINT index, i;
++    if (!object || FAILED(IUnknown_QueryInterface(object, &IID_IDXGIFactory, (void **)&factory))) return;
++    for (index = 0; SUCCEEDED(IDXGIFactory_EnumAdapters(factory, index, &adapter)); ++index)
++    {
++        for (i = 0; i < sizeof(interfaces) / sizeof(interfaces[0]); ++i)
++        {
++            IDXGIAdapter *view;
++            if (SUCCEEDED(IDXGIAdapter_QueryInterface(adapter, interfaces[i], (void **)&view)))
++            {
++                patch_adapter(view);
++                IDXGIAdapter_Release(view);
++            }
++        }
++        IDXGIAdapter_Release(adapter);
++    }
++    IDXGIFactory_Release(factory);
++}
++
++static INIT_ONCE provider_once = INIT_ONCE_STATIC_INIT;
++static HMODULE provider;
++
++static BOOL CALLBACK load_provider(INIT_ONCE *once, void *parameter, void **context)
++{
++    HMODULE self;
++    WCHAR path[32768], *name;
++    DWORD length;
++    (void)once; (void)parameter; (void)context;
++    if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
++            (const WCHAR *)load_provider, &self)) return TRUE;
++    length = GetModuleFileNameW(self, path, sizeof(path) / sizeof(path[0]));
++    if (!length || length >= sizeof(path) / sizeof(path[0])) return TRUE;
++    name = wcsrchr(path, '\\');
++    if (!name || (size_t)(name - path) + 10 >= sizeof(path) / sizeof(path[0])) return TRUE;
++    lstrcpyW(name + 1, L"rxdg.dll");
++    provider = LoadLibraryExW(path, NULL, LOAD_WITH_ALTERED_SEARCH_PATH);
++    if (provider) OutputDebugStringA(version_marker);
++    return TRUE;
++}
++
++static FARPROC provider_function(const char *name)
++{
++    InitOnceExecuteOnce(&provider_once, load_provider, NULL, NULL);
++    return provider ? GetProcAddress(provider, name) : NULL;
++}
++
++HRESULT WINAPI CreateDXGIFactory(REFIID iid, void **factory)
++{
++    HRESULT (WINAPI *create)(REFIID, void **) = (void *)provider_function("CreateDXGIFactory");
++    HRESULT hr;
++    DWORD error;
++    if (!create) return DXGI_ERROR_UNSUPPORTED;
++    hr = create(iid, factory);
++    error = GetLastError();
++    if (SUCCEEDED(hr) && factory) prepare_factory(*factory);
++    SetLastError(error);
++    return hr;
++}
++
++HRESULT WINAPI CreateDXGIFactory1(REFIID iid, void **factory)
++{
++    HRESULT (WINAPI *create)(REFIID, void **) = (void *)provider_function("CreateDXGIFactory1");
++    HRESULT hr;
++    DWORD error;
++    if (!create) return DXGI_ERROR_UNSUPPORTED;
++    hr = create(iid, factory);
++    error = GetLastError();
++    if (SUCCEEDED(hr) && factory) prepare_factory(*factory);
++    SetLastError(error);
++    return hr;
++}
++
++HRESULT WINAPI CreateDXGIFactory2(UINT flags, REFIID iid, void **factory)
++{
++    HRESULT (WINAPI *create)(UINT, REFIID, void **) = (void *)provider_function("CreateDXGIFactory2");
++    HRESULT hr;
++    DWORD error;
++    if (!create) return DXGI_ERROR_UNSUPPORTED;
++    hr = create(flags, iid, factory);
++    error = GetLastError();
++    if (SUCCEEDED(hr) && factory) prepare_factory(*factory);
++    SetLastError(error);
++    return hr;
++}
+--- /dev/null
++++ b/dlls/runeondxgi/runeondxgi.spec
+@@ -0,0 +1,7 @@
++1 stdcall CreateDXGIFactory(ptr ptr)
++2 stdcall CreateDXGIFactory1(ptr ptr)
++3 stdcall CreateDXGIFactory2(long ptr ptr)
++4 stdcall DXGID3D10CreateDevice(ptr ptr ptr long ptr long ptr) rxdg.DXGID3D10CreateDevice
++5 stdcall DXGID3D10RegisterLayers(ptr long) rxdg.DXGID3D10RegisterLayers
++6 stdcall DXGIGetDebugInterface1(long ptr ptr) rxdg.DXGIGetDebugInterface1
++7 stdcall DXGIDeclareAdapterRemovalSupport() rxdg.DXGIDeclareAdapterRemovalSupport
