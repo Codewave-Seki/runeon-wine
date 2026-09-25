@@ -1066,6 +1066,31 @@
           "contains": "case 0x10de: /* Nvidia */   return \"35.0.15.6094\";"
         }
       ]
+    },
+    {
+      "order": 106,
+      "path": "patches/runeon/0106-winegstreamer-unfixed-caps-pool.patch",
+      "sha256": "3e7e69b296e14e76ce0d60544ca8e295fa7d7dee3817c39a2f20e4443f61fbf4",
+      "kind": "runeon-product",
+      "status": "active",
+      "risk": "low",
+      "summary": "Decline a winegstreamer video buffer pool when the allocation caps cannot be described, leaving allocation to GStreamer instead of offering a zero-size pool.",
+      "provenance": {
+        "repository": "https://github.com/dappermint/winecx",
+        "commit": "9fcbfbe12bd9e3d03787909d9488009dcdba0a90",
+        "note": "Adapted downstream implementation, not a WineHQ release backport; WineHQ master still ignores this return value.",
+        "author": "millia ampora (dappermint)"
+      },
+      "testStrategy": "Patch applies to the pinned base; full Wine build compiles winegstreamer; product validation plays existing video paths to confirm no regression. The unfixed-caps branch has no local reproducer.",
+      "verification": [
+        {
+          "path": "dlls/winegstreamer/wg_transform.c",
+          "contains": "if (!gst_video_info_from_caps(&pool->info, caps))"
+        }
+      ],
+      "runeonTasks": [
+        "T806"
+      ]
     }
   ],
   "targetedReview": {

@@ -58,3 +58,4 @@ patches/runeon/0102-vuplex-accelerated-paint-policy.patch
 patches/runeon/0103-flsgetvalue2.patch
 patches/runeon/0104-steam-nwjs-automatic-launch.patch
 patches/runeon/0105-dxgi-driver-version.patch
+patches/runeon/0106-winegstreamer-unfixed-caps-pool.patch
