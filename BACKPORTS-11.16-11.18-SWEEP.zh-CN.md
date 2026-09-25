@@ -10,7 +10,7 @@
 |---|---|
 | `0062-wine-11.16-targeted-fixes.patch` | 首次发布于 `wine-11.16` 的 20 个 WineHQ 提交 |
 | `0063-wine-11.17-targeted-fixes.patch` | `wine-11.17` 的 107 个提交 |
-| `0064-wine-11.18-targeted-fixes.patch` | `wine-11.18` 的 77 个提交 |
+| `0064-wine-11.18-targeted-fixes.patch` | `wine-11.18` 的 76 个提交 |
 | `0065-wine-11.18-imm32-ime-keydown-lparam.patch` | 按 CrossOver 输入法代码适配的 `a6b3099042` |
 
 每个合并补丁都列出全部上游提交及作者，manifest 记录完整提交号。`0045`–`0061` 已包含的 13 个提交不重复。唯一的生产代码适配在 `0064`：`d22810d47b` 引用了本基线没有的 `intsafe.h`，因此 `bmpdecode.c` 定义了一个溢出约定相同的本地 `UIntMult()`。这是完整产品构建发现的问题，仅靠补丁能否干净应用发现不了。
@@ -34,6 +34,7 @@
 | D3D11 `Discard*`/资源共享及相关 wined3d 重构、`WINED3D_TEXTURE_GENERATE_MIPMAPS` 及依赖它的 d3d9 修复、D3DX10 精灵实现、quartz 全屏模拟、WMA 解码器与 wg_parser 标志/PTS 系列 | 功能或重构系列：改变图形、视频或窗口行为而 Runeon 无此需求，或依赖链条中已被排除的部分 |
 | secur32 的 LSA/negotiate 改动 | 属于被排除的 msv1_0/kerberos/lsass 工作；secur32 中的 SChannel 与通用修复保留 |
 | `mfreadwrite` `4d22860530` | 属于 `.9` 已推迟的异步命令引用计数系列 |
+| `PackageFullNameFromId`（`ef6c413c68`） | 需要较新 `appmodel.h` 中的包长度常量，由完整构建发现；Steam 游戏不使用 UWP 包接口 |
 | 工具栏、Shell 视图、卷标等小改动 | 对 Steam 与游戏无收益 |
 
 此前推迟的 CoreAudio 周期、WGI 初始化、XAudio2 解锁以及 MF drain/生命周期提交，按 [BACKPORTS-11.16-11.17.zh-CN.md](BACKPORTS-11.16-11.17.zh-CN.md) 的理由继续推迟。

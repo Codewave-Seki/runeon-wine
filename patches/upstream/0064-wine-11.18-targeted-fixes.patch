@@ -1,7 +1,7 @@
 From: Wine upstream contributors (see commit list)
 Subject: [PATCH] Backport targeted Wine 11.18 fixes.
 
-Squashed backport of 77 WineHQ commits first released in wine-11.18, applied in upstream
+Squashed backport of 76 WineHQ commits first released in wine-11.18, applied in upstream
 order on top of cx26.3-wine11.0-runeon.11 patches 0001-0106. Test-only hunks are omitted.
 Adaptation: d22810d47b includes intsafe.h, which this base lacks; bmpdecode.c
 defines a local UIntMult() with the same contract instead. No other adaptation.
@@ -15,7 +15,6 @@ defines a local UIntMult() with the same contract instead. No other adaptation.
   d6486b89e9 Matteo Bruni: d3dx9/effect: Fix object array element release.
   30a1714fb2 Matteo Bruni: d3d10: Compute dependent properties for all the state variables.
   15675d8486 Matteo Bruni: d3dx9: Add missing error checks in wide string allocations.
-  ef6c413c68 Nikolay Sivov: kernelbase: Partially implement PackageFullNameFromId().
   490f6d5dcb Andrey Gusev: d3dx: Check for NULL new_data in convert_dib_to_bmp().
   6f6f8cc2b2 Andrey Gusev: msi: Check for NULL prop,val in msi_parse_command_line().
   857fc25d9e Andrey Gusev: msi: Check for NULL t in append_storage_to_db().
@@ -967,18 +966,6 @@ index 0b2814d..dd26bb6 100644
          if (!(hwnd = get_ime_ui_window())) break;
          SendMessageW( hwnd, WM_IME_SELECT, FALSE, lparam );
          break;
-diff --git a/dlls/kernel32/kernel32.spec b/dlls/kernel32/kernel32.spec
-index 8aafa04..cc5b0eb 100644
---- a/dlls/kernel32/kernel32.spec
-+++ b/dlls/kernel32/kernel32.spec
-@@ -1176,6 +1176,7 @@
- @ stdcall -import PeekNamedPipe(long ptr long ptr ptr ptr)
- @ stdcall -import PostQueuedCompletionStatus(long long ptr ptr)
- @ stdcall -import PackageIdFromFullName(wstr long ptr ptr)
-+@ stdcall -import PackageFullNameFromId(ptr ptr ptr)
- @ stdcall PowerClearRequest(long long)
- @ stdcall PowerCreateRequest(ptr)
- @ stdcall PowerSetRequest(long long)
 diff --git a/dlls/kernelbase/file.c b/dlls/kernelbase/file.c
 index f61b279..187d4a4 100644
 --- a/dlls/kernelbase/file.c
@@ -1001,125 +988,6 @@ index f61b279..187d4a4 100644
              handle = CreateFileW( buffer, GENERIC_WRITE, 0, NULL, CREATE_NEW, FILE_ATTRIBUTE_NORMAL, 0 );
              if (handle != INVALID_HANDLE_VALUE)
              {  /* We created it */
-diff --git a/dlls/kernelbase/kernelbase.spec b/dlls/kernelbase/kernelbase.spec
-index 813419f..523089d 100644
---- a/dlls/kernelbase/kernelbase.spec
-+++ b/dlls/kernelbase/kernelbase.spec
-@@ -1052,7 +1052,7 @@
- # @ stub PackageFamilyNameFromFullName
- # @ stub PackageFamilyNameFromId
- # @ stub PackageFamilyNameFromProductId
--# @ stub PackageFullNameFromId
-+@ stdcall PackageFullNameFromId(ptr ptr ptr)
- # @ stub PackageFullNameFromProductId
- @ stdcall PackageIdFromFullName(wstr long ptr ptr)
- # @ stub PackageIdFromProductId
-diff --git a/dlls/kernelbase/version.c b/dlls/kernelbase/version.c
-index 495325b..10202ad 100644
---- a/dlls/kernelbase/version.c
-+++ b/dlls/kernelbase/version.c
-@@ -1698,6 +1698,17 @@ static UINT32 processor_arch_from_string(const WCHAR *str, unsigned int len)
-     return ~0u;
- }
- 
-+static const WCHAR *processor_arch_from_code(UINT32 code)
-+{
-+    unsigned int i;
-+
-+    for (i = 0; i < ARRAY_SIZE(arch_names); ++i)
-+        if (arch_names[i].code == code)
-+            return arch_names[i].name;
-+
-+    return NULL;
-+}
-+
- /***********************************************************************
-  *         PackageIdFromFullName   (kernelbase.@)
-  */
-@@ -1786,3 +1797,83 @@ LONG WINAPI PackageIdFromFullName(const WCHAR *full_name, UINT32 flags, UINT32 *
- 
-     return ERROR_SUCCESS;
- }
-+
-+/***********************************************************************
-+ *         PackageFullNameFromId   (kernelbase.@)
-+ */
-+LONG WINAPI PackageFullNameFromId(const PACKAGE_ID *id, UINT32 *length, WCHAR *buffer)
-+{
-+    WCHAR full_name[PACKAGE_FULL_NAME_MAX_LENGTH + 1];
-+    WCHAR version[PACKAGE_VERSION_MAX_LENGTH + 1];
-+    const WCHAR *arch;
-+    size_t len;
-+
-+    TRACE("id %p, length %p, buffer %p\n", id, length, buffer);
-+
-+    if (!id || !length)
-+        return ERROR_INVALID_PARAMETER;
-+
-+    len = id->name ? wcslen(id->name) : 0;
-+    if (len < PACKAGE_NAME_MIN_LENGTH || len > PACKAGE_NAME_MAX_LENGTH)
-+        return ERROR_INVALID_PARAMETER;
-+
-+    *full_name = 0;
-+    wcscpy(full_name, id->name);
-+    wcscat(full_name, L"_");
-+
-+    swprintf(version, ARRAYSIZE(version), L"%u.%u.%u.%u", id->version.Major, id->version.Minor,
-+            id->version.Build, id->version.Revision);
-+    wcscat(full_name, version);
-+    wcscat(full_name, L"_");
-+
-+    arch = processor_arch_from_code(id->processorArchitecture);
-+    if (!arch)
-+    {
-+        WARN("Unrecognized architecture id %u.\n", id->processorArchitecture);
-+        return ERROR_INVALID_PARAMETER;
-+    }
-+
-+    wcscat(full_name, arch);
-+    wcscat(full_name, L"_");
-+
-+    if (id->resourceId)
-+    {
-+        len = wcslen(id->resourceId);
-+
-+        if (len > PACKAGE_RESOURCEID_MAX_LENGTH)
-+            return ERROR_INVALID_PARAMETER;
-+
-+        wcscat(full_name, id->resourceId);
-+        wcscat(full_name, L"_");
-+    }
-+
-+    if (id->publisherId)
-+    {
-+        len = wcslen(id->publisherId);
-+
-+        if (len != PACKAGE_PUBLISHERID_MAX_LENGTH)
-+            return ERROR_INVALID_PARAMETER;
-+
-+        wcscat(full_name, id->publisherId);
-+    }
-+    else
-+    {
-+        if (!id->publisher)
-+            return ERROR_INVALID_PARAMETER;
-+
-+        FIXME("Publisher ID generation is not implemented.\n");
-+
-+        wcscat(full_name, L"123456789abcd");
-+    }
-+
-+    len = wcslen(full_name);
-+    *length = len + 1;
-+
-+    if (!buffer || *length <= len)
-+        return ERROR_INSUFFICIENT_BUFFER;
-+
-+    wcscpy(buffer, full_name);
-+    *length = len + 1;
-+
-+    return ERROR_SUCCESS;
-+}
 diff --git a/dlls/mf/clock.c b/dlls/mf/clock.c
 index 997994f..06e5e30 100644
 --- a/dlls/mf/clock.c

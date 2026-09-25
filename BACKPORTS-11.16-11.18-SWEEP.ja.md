@@ -10,7 +10,7 @@
 |---|---|
 | `0062-wine-11.16-targeted-fixes.patch` | `wine-11.16` で初めてリリースされた WineHQ コミット 20 件 |
 | `0063-wine-11.17-targeted-fixes.patch` | `wine-11.17` のコミット 107 件 |
-| `0064-wine-11.18-targeted-fixes.patch` | `wine-11.18` のコミット 77 件 |
+| `0064-wine-11.18-targeted-fixes.patch` | `wine-11.18` のコミット 76 件 |
 | `0065-wine-11.18-imm32-ime-keydown-lparam.patch` | CrossOver の IME コードに合わせて調整した `a6b3099042` |
 
 各統合パッチはすべてのアップストリームコミットと作者を列挙し、manifest は完全なコミット ID を記録します。`0045`–`0061` に含まれる 13 件は重複させていません。本番コードの調整は `0064` の 1 件のみです。`d22810d47b` はこのベースにない `intsafe.h` を読み込むため、`bmpdecode.c` にオーバーフローの約束事が同じローカルの `UIntMult()` を定義しました。これは完全な製品ビルドで判明したもので、パッチがきれいに適用できるかだけでは見つかりません。
@@ -34,6 +34,7 @@
 | D3D11 `Discard*`／リソース共有と関連する wined3d のリファクタリング、`WINED3D_TEXTURE_GENERATE_MIPMAPS` とそれに依存する d3d9 修正、D3DX10 スプライト実装、quartz フルスクリーンエミュレーション、WMA デコーダーと wg_parser のフラグ／PTS 系列 | 機能またはリファクタリングの系列で、Runeon に必要のないグラフィックス・動画・ウィンドウの動作変更、または除外した連鎖の一部に依存する |
 | secur32 の LSA/negotiate 変更 | 除外した msv1_0/kerberos/lsass の作業に属する。secur32 の SChannel と一般的な修正は採用 |
 | `mfreadwrite` `4d22860530` | `.9` で延期した非同期コマンドの参照カウント系列に属する |
+| `PackageFullNameFromId`（`ef6c413c68`） | 新しい `appmodel.h` のパッケージ長定数が必要で、完全ビルドで判明。Steam のゲームは UWP パッケージ API を使わない |
 | ツールバー、シェルビュー、ボリュームラベルなどの小変更 | Steam やゲームへの利点がない |
 
 以前に延期した CoreAudio 周期、WGI 初期化、XAudio2 のアンロック、MF drain／ライフサイクルのコミットは、[BACKPORTS-11.16-11.17.ja.md](BACKPORTS-11.16-11.17.ja.md) の理由により引き続き延期します。

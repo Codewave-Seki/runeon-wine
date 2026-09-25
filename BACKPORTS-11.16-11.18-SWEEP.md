@@ -10,7 +10,7 @@ Candidate `cx26.3-wine11.0-runeon.11` adds four upstream patches after `0106`:
 |---|---|
 | `0062-wine-11.16-targeted-fixes.patch` | 20 WineHQ commits first released in `wine-11.16` |
 | `0063-wine-11.17-targeted-fixes.patch` | 107 commits from `wine-11.17` |
-| `0064-wine-11.18-targeted-fixes.patch` | 77 commits from `wine-11.18` |
+| `0064-wine-11.18-targeted-fixes.patch` | 76 commits from `wine-11.18` |
 | `0065-wine-11.18-imm32-ime-keydown-lparam.patch` | `a6b3099042` adapted to the CrossOver IME code |
 
 Each squashed patch lists every upstream commit with its author. The manifest records the full commit IDs. The 13 commits already carried by `0045`–`0061` are not repeated. The only production adaptation is in `0064`: `d22810d47b` includes `intsafe.h`, which this base lacks, so `bmpdecode.c` defines a local `UIntMult()` with the same overflow contract. The full product build found this; clean patch application does not.
@@ -34,6 +34,7 @@ Of the 271 commits that applied, the following were then removed because a textu
 | D3D11 `Discard*`/resource-sharing and related wined3d refactors, `WINED3D_TEXTURE_GENERATE_MIPMAPS` and the dependent d3d9 fix, D3DX10 sprite implementation, quartz fullscreen emulation, WMA decoder and wg_parser flag/PTS series | Feature or refactor series that change graphics, video or windowing behaviour without a Runeon need, or depend on parts of their chain that were excluded. |
 | secur32 LSA/negotiate changes | Belongs to the excluded msv1_0/kerberos/lsass work. The SChannel and generic fixes in secur32 are kept. |
 | `mfreadwrite` `4d22860530` | Belongs to the async-command refcount series deferred in `.9`. |
+| `PackageFullNameFromId` (`ef6c413c68`) | Needs package-length constants from a later `appmodel.h`; found by the full build. UWP package APIs are not used by Steam games. |
 | Minor toolbar, shell view and volume-label changes | No benefit to Steam or games. |
 
 The previously deferred CoreAudio period, WGI initialisation, XAudio2 unlock and MF drain/lifecycle commits stay deferred for the reasons in [BACKPORTS-11.16-11.17.md](BACKPORTS-11.16-11.17.md).

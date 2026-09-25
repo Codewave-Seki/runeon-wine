@@ -1274,7 +1274,7 @@
     {
       "order": 109,
       "path": "patches/upstream/0064-wine-11.18-targeted-fixes.patch",
-      "sha256": "6adb8e0ce8682fa92960cd21f6c75befae2c2fd4b0da16df9083eb470650f1fb",
+      "sha256": "fc12b9c45486785ea74bb01829ad1dbe0b8ab0dc1a2a8856f365d8472a5c095a",
       "kind": "upstream-backport",
       "status": "active",
       "risk": "medium",
@@ -1289,7 +1289,6 @@
         "d6486b89e957c4e46b08e6cc9af46fd66acfb154",
         "30a1714fb2bb7aee8e02df4f02e0f6d3d5fb0863",
         "15675d84866a748fef0c28283ac00eb69af24c66",
-        "ef6c413c68f4c6ae877b659e8664fc1c3cb04cfb",
         "490f6d5dcbb2a5047345b8af88d114bbcaad69a8",
         "6f6f8cc2b2a3404b80d5ebfc8444ec8650505e11",
         "857fc25d9e28b41562bcc255bcd7e6712bd1b2ae",
