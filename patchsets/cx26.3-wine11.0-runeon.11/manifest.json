@@ -1274,7 +1274,7 @@
     {
       "order": 109,
       "path": "patches/upstream/0064-wine-11.18-targeted-fixes.patch",
-      "sha256": "b97c395769a07f3310bb6f6f795a9b0106806b61f85ccedf1d741b934fb9efde",
+      "sha256": "6adb8e0ce8682fa92960cd21f6c75befae2c2fd4b0da16df9083eb470650f1fb",
       "kind": "upstream-backport",
       "status": "active",
       "risk": "medium",
@@ -1372,7 +1372,8 @@
           "path": "dlls/crypt32/oid.c",
           "contains": "{ 6, SPC_SP_AGENCY_INFO_OBJID, 0, L\"SpcSpAgencyInfo\", NULL },"
         }
-      ]
+      ],
+      "adaptation": "d22810d47b includes intsafe.h, which this base lacks; bmpdecode.c defines a local UIntMult() with the same overflow contract."
     },
     {
       "order": 110,

@@ -3,7 +3,8 @@ Subject: [PATCH] Backport targeted Wine 11.18 fixes.
 
 Squashed backport of 77 WineHQ commits first released in wine-11.18, applied in upstream
 order on top of cx26.3-wine11.0-runeon.11 patches 0001-0106. Test-only hunks are omitted.
-No production-code adaptation was needed; every commit applied without fuzz.
+Adaptation: d22810d47b includes intsafe.h, which this base lacks; bmpdecode.c
+defines a local UIntMult() with the same contract instead. No other adaptation.
 
   a50748f6ba Esme Povirk: ole32: Fix offset update in propertystorage_read_scalar.
   5821f22093 Esme Povirk: ole32: Rewrite free loop on error path.
@@ -1711,116 +1712,6 @@ index 29ffbbe..b923baa 100644
                       COMException_rtti_base_descriptor,                                         \
                       Exception_rtti_base_descriptor,                                            \
                       Exception_Object_rtti_base_descriptor,                                     \
-diff --git a/dlls/vccorlib140/tests/Makefile.in b/dlls/vccorlib140/tests/Makefile.in
-index 79a76cb..863b1fc 100644
---- a/dlls/vccorlib140/tests/Makefile.in
-+++ b/dlls/vccorlib140/tests/Makefile.in
-@@ -1,5 +1,5 @@
- TESTDLL = vccorlib140.dll
--IMPORTS = combase ole32 oleaut32 user32 uuid
-+IMPORTS = combase ole32 oleaut32 user32 uuid vcruntime140
- 
- SOURCES = \
- 	vccorlib.c
-diff --git a/dlls/vccorlib140/tests/vccorlib.c b/dlls/vccorlib140/tests/vccorlib.c
-index 77838ac..4c9fc6d 100644
---- a/dlls/vccorlib140/tests/vccorlib.c
-+++ b/dlls/vccorlib140/tests/vccorlib.c
-@@ -23,6 +23,8 @@
- 
- #include <stdbool.h>
- #include <stdint.h>
-+#include <setjmp.h>
-+#include <stdlib.h>
- 
- #include "initguid.h"
- #include "activation.h"
-@@ -112,6 +114,7 @@ DEFINE_EXPECT(PreInitialize);
- DEFINE_EXPECT(PostInitialize);
- DEFINE_EXPECT(PreUninitialize);
- DEFINE_EXPECT(PostUninitialize);
-+DEFINE_EXPECT(purecall_handler);
- 
- #define WINRT_EXCEPTIONS                                     \
-     WINRT_EXCEPTION(AccessDenied, E_ACCESSDENIED)            \
-@@ -195,6 +198,7 @@ static void (WINAPI *p_EventSourceRemove)(IInspectable **, struct EventLock *, E
- static IInspectable *(WINAPI *p_EventSourceGetTargetArray)(IInspectable *, struct EventLock *);
- static IInspectable *(WINAPI *p_EventSourceGetTargetArrayEvent)(IInspectable *, ULONG, const GUID *, EventRegistrationToken *);
- static ULONG (WINAPI *p_EventSourceGetTargetArraySize)(IInspectable *);
-+static IInspectable *(__cdecl *platform_object_ctor)(IInspectable *);
- 
- static void *(__cdecl *p__RTtypeid)(const void *);
- static const char *(__thiscall *p_type_info_name)(void *);
-@@ -296,6 +300,7 @@ static BOOL init(void)
-             "?EventSourceGetTargetArrayEvent@Details@Platform@@YAPAXPAXIPBXPA_J@Z");
-     p_EventSourceGetTargetArraySize = (void *)GetProcAddress(hmod,
-             "?EventSourceGetTargetArraySize@Details@Platform@@YAIPAX@Z");
-+    platform_object_ctor = (void *)GetProcAddress(hmod, "??0Object@Platform@@Q$AAA@XZ");
- 
-     p_type_info_name = (void *)GetProcAddress(msvcrt, "?name@type_info@@QBAPBDXZ");
-     p_type_info_raw_name = (void *)GetProcAddress(msvcrt, "?raw_name@type_info@@QBAPBDXZ");
-@@ -382,6 +387,7 @@ static BOOL init(void)
-                 "?EventSourceGetTargetArrayEvent@Details@Platform@@YAPEAXPEAXIPEBXPEA_J@Z");
-         p_EventSourceGetTargetArraySize = (void *)GetProcAddress(hmod,
-                 "?EventSourceGetTargetArraySize@Details@Platform@@YAIPEAX@Z");
-+        platform_object_ctor = (void *)GetProcAddress(hmod, "??0Object@Platform@@QE$AAA@XZ");
- 
-         p_type_info_name = (void *)GetProcAddress(msvcrt, "?name@type_info@@QEBAPEBDXZ");
-         p_type_info_raw_name = (void *)GetProcAddress(msvcrt, "?raw_name@type_info@@QEBAPEBDXZ");
-@@ -466,6 +472,7 @@ static BOOL init(void)
-                 "?EventSourceGetTargetArrayEvent@Details@Platform@@YGPAXPAXIPBXPA_J@Z");
-         p_EventSourceGetTargetArraySize = (void *)GetProcAddress(hmod,
-                 "?EventSourceGetTargetArraySize@Details@Platform@@YGIPAX@Z");
-+        platform_object_ctor = (void *)GetProcAddress(hmod, "??0Object@Platform@@Q$AAA@XZ");
- 
-         p_type_info_name = (void *)GetProcAddress(msvcrt, "?name@type_info@@QBEPBDXZ");
-         p_type_info_raw_name = (void *)GetProcAddress(msvcrt, "?raw_name@type_info@@QBEPBDXZ");
-@@ -2623,6 +2630,39 @@ static void test_EventSource_marshaling(void)
-     }
- }
- 
-+static jmp_buf buf;
-+
-+static void __cdecl purecall_handler(void)
-+{
-+    CHECK_EXPECT(purecall_handler);
-+    /* purecall will abort, so we avoid that by longjmping. */
-+    longjmp(buf, 1);
-+}
-+
-+static void test_platform_object_ctor(void)
-+{
-+    IInspectable obj, *obj2;
-+
-+    obj.lpVtbl = NULL;
-+    obj2 = platform_object_ctor(&obj);
-+    ok(obj2 == &obj, "got obj2 %p != %p\n", obj2, &obj);
-+    todo_wine ok(!!obj.lpVtbl, "got lpVtbl %p\n", obj.lpVtbl);
-+
-+    if (obj.lpVtbl)
-+    {
-+        test_rtti_names(&obj, "class Platform::Object", ".?AVObject@Platform@@");
-+
-+        if (!setjmp(buf))
-+        {
-+            _set_purecall_handler(purecall_handler);
-+            SET_EXPECT(purecall_handler);
-+            IInspectable_AddRef(obj2);
-+        }
-+        CHECK_CALLED(purecall_handler, 1);
-+         _set_purecall_handler(NULL);
-+    }
-+}
-+
- START_TEST(vccorlib)
- {
-     if(!init())
-@@ -2643,4 +2683,5 @@ START_TEST(vccorlib)
-     test_Delegate();
-     test_EventSource();
-     test_EventSource_marshaling();
-+    test_platform_object_ctor();
- }
 diff --git a/dlls/vccorlib140/vccorlib.c b/dlls/vccorlib140/vccorlib.c
 index 39b55de..e877a14 100644
 --- a/dlls/vccorlib140/vccorlib.c
@@ -1917,18 +1808,31 @@ index 2aab6f6..fc0803b 100644
  @ cdecl -arch=win64 ??0ObjectDisposedException@Platform@@QE$AAA@PE$AAVString@1@@Z(ptr ptr) ObjectDisposedException_hstring_ctor
  @ cdecl -arch=win32 ??0ObjectDisposedException@Platform@@Q$AAA@XZ(ptr) ObjectDisposedException_ctor
 diff --git a/dlls/windowscodecs/bmpdecode.c b/dlls/windowscodecs/bmpdecode.c
-index ae6feda..67e98ac 100644
+index ae6feda..01d574f 100644
 --- a/dlls/windowscodecs/bmpdecode.c
 +++ b/dlls/windowscodecs/bmpdecode.c
-@@ -26,6 +26,7 @@
- #include "winreg.h"
- #include "wingdi.h"
- #include "objbase.h"
-+#include "intsafe.h"
+@@ -29,6 +29,20 @@
  
  #include "wincodecs_private.h"
  
-@@ -360,7 +361,7 @@ static HRESULT WINAPI BmpFrameDecode_GetThumbnail(IWICBitmapFrameDecode *iface,
++/* intsafe.h is not in this Wine base; same contract as its UIntMult(). */
++static HRESULT UIntMult(UINT a, UINT b, UINT *result)
++{
++    ULONGLONG product = (ULONGLONG)a * b;
++
++    if (product > ~0u)
++    {
++        *result = ~0u;
++        return HRESULT_FROM_WIN32(ERROR_ARITHMETIC_OVERFLOW);
++    }
++    *result = product;
++    return S_OK;
++}
++
+ #include "wine/debug.h"
+ 
+ WINE_DEFAULT_DEBUG_CHANNEL(wincodecs);
+@@ -360,7 +374,7 @@ static HRESULT WINAPI BmpFrameDecode_GetThumbnail(IWICBitmapFrameDecode *iface,
  
  static HRESULT BmpFrameDecode_ReadUncompressed(BmpDecoder* This)
  {
@@ -1937,7 +1841,7 @@ index ae6feda..67e98ac 100644
      UINT width, height;
      UINT datasize;
      int bottomup;
-@@ -383,8 +384,11 @@ static HRESULT BmpFrameDecode_ReadUncompressed(BmpDecoder* This)
+@@ -383,8 +397,11 @@ static HRESULT BmpFrameDecode_ReadUncompressed(BmpDecoder* This)
      }
  
      /* row sizes in BMP files must be divisible by 4 bytes */
@@ -1951,7 +1855,7 @@ index ae6feda..67e98ac 100644
  
      This->imagedata = malloc(datasize);
      if (!This->imagedata) return E_OUTOFMEMORY;
-@@ -506,8 +510,9 @@ static HRESULT BmpFrameDecode_ReadRLE8(BmpDecoder* This)
+@@ -506,8 +523,9 @@ static HRESULT BmpFrameDecode_ReadRLE8(BmpDecoder* This)
  
      width = This->bih.bV5Width;
      height = abs(This->bih.bV5Height);
@@ -1963,7 +1867,7 @@ index ae6feda..67e98ac 100644
      if (This->bih.bV5ClrUsed && This->bih.bV5ClrUsed < 256)
          palettesize = 4 * This->bih.bV5ClrUsed;
      else
-@@ -630,8 +635,9 @@ static HRESULT BmpFrameDecode_ReadRLE4(BmpDecoder* This)
+@@ -630,8 +648,9 @@ static HRESULT BmpFrameDecode_ReadRLE4(BmpDecoder* This)
  
      width = This->bih.bV5Width;
      height = abs(This->bih.bV5Height);
