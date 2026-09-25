@@ -62,6 +62,8 @@ load_base_manifest() {
   base_wine_version_line="$(json_value "$base_manifest" '.wineVersionLine')"
   upstream_base_tag="$(json_value "$base_manifest" '.upstreamBaseTag')"
   upstream_audit_through="$(json_value "$base_manifest" '.upstreamAuditThrough')"
+  # Optional: a filtered backport sweep reviewed newer tags without a full audit.
+  upstream_sweep_through="$(jq -r '.upstreamSweepThrough // empty' "$base_manifest")"
   upstream_repository="$(json_value "$base_manifest" '.upstreamRepository')"
   bundle_timestamp="$(json_value "$base_manifest" '.bundleTimestamp')"
 }

@@ -49,4 +49,4 @@ Several fixes target code that does not exist in CrossOver 26.3. Examples are th
 
 `scripts/static-check.sh` and `scripts/integration-check.sh` pass. Rebuilding the tree from the pinned archive plus the series matches the reviewed tree file for file. Every added low-level call was checked: only generic heap and critical-section functions are introduced. A full product Wine build is part of the local seed candidate. This sweep does not claim that any particular game issue is fixed.
 
-`upstreamAuditThrough` stays at `wine-11.15`, because this is a filtered sweep and not a complete audit.
+`upstreamAuditThrough` stays at `wine-11.15`, because this is a filtered sweep and not a complete audit. The base manifest records `upstreamSweepThrough: wine-11.18` instead, so the weekly upstream watch alerts again only when a newer tag appears.

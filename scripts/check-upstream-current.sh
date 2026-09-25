@@ -17,9 +17,18 @@ latest_tag="$(
 )"
 
 [[ -n "$latest_tag" ]] || die "could not resolve the latest Wine 11.x tag"
-if [[ "$latest_tag" != "$upstream_audit_through" ]]; then
-  die "new upstream Wine tag detected: audited through $upstream_audit_through, latest is $latest_tag"
+
+# A sweep never replaces the complete audit boundary; it only records that
+# newer tags were reviewed for backports, so the alert waits for the next tag.
+reviewed_through="$upstream_audit_through"
+if [[ -n "$upstream_sweep_through" ]] \
+  && [[ "$(printf '%s\n%s\n' "$upstream_audit_through" "$upstream_sweep_through" | sort -V | tail -1)" == "$upstream_sweep_through" ]]; then
+  reviewed_through="$upstream_sweep_through"
 fi
 
-printf 'upstream audit is current through %s\n' "$upstream_audit_through"
+if [[ "$latest_tag" != "$reviewed_through" ]]; then
+  die "new upstream Wine tag detected: audited through $upstream_audit_through, swept through ${upstream_sweep_through:-none}, latest is $latest_tag"
+fi
+
+printf 'upstream reviewed through %s (complete audit through %s)\n' "$reviewed_through" "$upstream_audit_through"
 

@@ -49,4 +49,4 @@
 
 `scripts/static-check.sh` 与 `scripts/integration-check.sh` 通过。从固定归档加补丁系列重建的源码树与审阅树逐文件一致。逐一检查了新增的底层调用，只引入了通用堆与临界区函数。产品完整 Wine 构建随本地 seed 候选执行。本批回移不声称修复了任何具体游戏问题。
 
-`upstreamAuditThrough` 仍为 `wine-11.15`，因为这是筛选式回移，不是完整审计。
+`upstreamAuditThrough` 仍为 `wine-11.15`，因为这是筛选式回移，不是完整审计。base manifest 另记 `upstreamSweepThrough: wine-11.18`，每周上游监视只在出现更新 tag 时再报警。

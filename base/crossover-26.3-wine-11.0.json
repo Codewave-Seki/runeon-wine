@@ -9,6 +9,8 @@
   "wineVersionLine": "Wine version 11.0",
   "upstreamBaseTag": "wine-11.0",
   "upstreamAuditThrough": "wine-11.15",
+  "upstreamSweepThrough": "wine-11.18",
+  "upstreamSweepReport": "BACKPORTS-11.16-11.18-SWEEP.md",
   "upstreamRepository": "https://github.com/wine-mirror/wine.git",
   "bundleTimestamp": "202608010000"
 }
