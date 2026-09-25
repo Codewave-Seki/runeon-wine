@@ -1047,6 +1047,18 @@
         {
           "path": "configure.ac",
           "contains": "WINE_CONFIG_MAKEFILE(dlls/runeondxgi)"
+        },
+        {
+          "path": "dlls/win32u/sysparams.c",
+          "contains": "case 0x8086: /* Intel */    return \"35.0.101.6314\";"
+        },
+        {
+          "path": "dlls/win32u/sysparams.c",
+          "contains": "case 0x1002: /* AMD */      return \"35.0.21025.1024\";"
+        },
+        {
+          "path": "dlls/win32u/sysparams.c",
+          "contains": "case 0x10de: /* Nvidia */   return \"35.0.15.6094\";"
         }
       ]
     }
