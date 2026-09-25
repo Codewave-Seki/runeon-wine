@@ -1011,20 +1011,25 @@
     {
       "order": 104,
       "path": "patches/runeon/0104-steam-nwjs-automatic-launch.patch",
-      "sha256": "a4a461abd7c3d79281c9a11d2d330a6fea5aece26d53b4b0a10a0b0fa47ecd63",
+      "sha256": "379fe3ee67816d842067bf211b6d1c0fa2a23903f8ab85bf465cc69564359e6e",
       "kind": "runeon-product",
       "status": "active",
       "risk": "high",
       "summary": "Route Steam-created NW.js candidates through an App-owned local preparation gate; no per-game matching or runtime policy in Wine.",
-      "testStrategy": "Compile kernelbase/process.c for i686 and x86_64; exercise the App-owned helper protocol. Full runtime build and real Steam Play remain release validation.",
+      "testStrategy": "Link full i686 and x86_64 kernelbase DLLs; exercise the App-owned helper protocol. Full runtime and real Steam Play remain release validation.",
       "verification": [
         {
           "path": "dlls/kernelbase/process.c",
           "contains": "runeon_nwjs_launch_command( params, &nwjs_cmdline )"
+        },
+        {
+          "path": "dlls/kernelbase/process.c",
+          "contains": "image.Machine != IMAGE_FILE_MACHINE_AMD64"
         }
       ],
       "runeonTasks": [
-        "T793"
+        "T793",
+        "T801"
       ]
     },
     {

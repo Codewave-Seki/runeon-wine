@@ -1,7 +1,7 @@
 diff --git a/dlls/kernelbase/process.c b/dlls/kernelbase/process.c
 --- a/dlls/kernelbase/process.c
 +++ b/dlls/kernelbase/process.c
-@@ -38,6 +38,99 @@
+@@ -38,6 +38,113 @@
  
  static DWORD shutdown_flags = 0;
  static DWORD shutdown_priority = 0x280;
@@ -17,7 +17,10 @@ diff --git a/dlls/kernelbase/process.c b/dlls/kernelbase/process.c
 +    const WCHAR *parent = NtCurrentTeb()->Peb->ProcessParameters->ImagePathName.Buffer;
 +    WCHAR enabled[2], grant[65], appid[32], path[32768], *name;
 +    UNICODE_STRING key, value;
-+    DWORD type, attributes;
++    DWORD attributes;
++    HANDLE file, section;
++    SECTION_IMAGE_INFORMATION image;
++    NTSTATUS status;
 +    size_t length, directory_length;
 +    unsigned int i;
 +    BOOL nonzero = FALSE;
@@ -70,8 +73,19 @@ diff --git a/dlls/kernelbase/process.c b/dlls/kernelbase/process.c
 +    }
 +    if (!nonzero) return STATUS_SUCCESS;
 +
-+    if (!GetBinaryTypeW( params->ImagePathName.Buffer, &type ) || type != SCS_64BIT_BINARY)
-+        return STATUS_SUCCESS;
++    /* kernelbase cannot import kernel32's GetBinaryTypeW. Query the image
++     * directly and leave unrecognized or unreadable executables untouched. */
++    file = CreateFileW( params->ImagePathName.Buffer, GENERIC_READ, FILE_SHARE_READ,
++                        NULL, OPEN_EXISTING, 0, 0 );
++    if (file == INVALID_HANDLE_VALUE) return STATUS_SUCCESS;
++    status = NtCreateSection( &section, STANDARD_RIGHTS_REQUIRED | SECTION_QUERY,
++                              NULL, NULL, PAGE_READONLY, SEC_IMAGE, file );
++    CloseHandle( file );
++    if (status) return STATUS_SUCCESS;
++    status = NtQuerySection( section, SectionImageInformation, &image, sizeof(image), NULL );
++    CloseHandle( section );
++    if (status || image.Machine != IMAGE_FILE_MACHINE_AMD64
++        || (image.ImageCharacteristics & IMAGE_FILE_DLL)) return STATUS_SUCCESS;
 +    length = params->ImagePathName.Length / sizeof(WCHAR);
 +    if (!length || length >= ARRAY_SIZE(path)) return STATUS_SUCCESS;
 +    memcpy( path, params->ImagePathName.Buffer, length * sizeof(WCHAR) );
@@ -101,7 +115,7 @@ diff --git a/dlls/kernelbase/process.c b/dlls/kernelbase/process.c
  
  static BOOL is_steamwebhelper_command( const WCHAR *app_name, const WCHAR *cmd_line )
  {
-@@ -732,7 +825,7 @@
+@@ -732,7 +839,7 @@
  {
      const struct proc_thread_attr *handle_list = NULL, *job_list = NULL;
      WCHAR name[MAX_PATH];
@@ -110,7 +124,7 @@ diff --git a/dlls/kernelbase/process.c b/dlls/kernelbase/process.c
      RTL_USER_PROCESS_PARAMETERS *params = NULL;
      RTL_USER_PROCESS_INFORMATION rtl_info = { 0 };
      HANDLE parent = 0, debug = 0;
-@@ -841,6 +934,16 @@
+@@ -841,6 +948,16 @@
      {
          status = STATUS_NO_MEMORY;
          goto done;
@@ -127,7 +141,7 @@ diff --git a/dlls/kernelbase/process.c b/dlls/kernelbase/process.c
      }
  
      if (flags & (DEBUG_PROCESS | DEBUG_ONLY_THIS_PROCESS))
-@@ -964,6 +1067,7 @@
+@@ -964,6 +1081,7 @@
      if (epic_launcher_hack) startup_info->lpDesktop = orig_lpDesktop;
  
      RtlDestroyProcessParameters( params );
