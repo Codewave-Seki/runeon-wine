@@ -37,6 +37,8 @@ done
 for english_document in "$repo_root"/*.md; do
   case "$english_document" in
     *.zh-CN.md|*.ja.md) continue ;;
+    # Agent instructions, not user documentation; English only.
+    */CLAUDE.md|*/AGENTS.md) continue ;;
   esac
 
   document_stem="${english_document%.md}"
