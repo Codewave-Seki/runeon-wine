@@ -22,7 +22,9 @@ Runeon Wine は、能動的な上流監査と diagnostics 主導の調査とい�
 
 ## 現在の Wine 11.x レビューベースライン
 
-現在の Dev と Production ソース：[`cx26.3-wine11.0-runeon.10`](FLSGETVALUE2.ja.md)（正式版/latest）。seed `2026.09.22` と MoltenVK `1.4.2` を使用し、App 配布条件は `>=1.8 (0)` です。Production は同一の署名済み Dev archive を再ビルドせずに昇格します。独立した `patchsets/` 定義を明示的に選択します。既定の series は過去の `.9` のままです。 検証：API、隔離 prefix、署名、release readiness は合格しました。ユーザーは 2026-09-23 に Dev で問題が見つからなかったと報告し、Production を承認しました。この包括的な確認は、すべての Steam/CEF、ゲーム、App 操作を個別に実測したことを意味しません。App インストーラーと配布検証は製品リポジトリが管理します。
+現在の Dev 候補：[`cx26.3-wine11.0-runeon.11`](BACKPORTS-11.16-11.18-SWEEP.ja.md)（Pre-release）。seed `2026.09.26` に対応し、App 配布条件は `>=1.8 (0)` です。`.10` に Wine 11.16–11.18 の選別バックポート、winegstreamer のビデオバッファプールのフォールバック、2 つのオプトイン入口を追加します。ビルド、署名、readiness、Dev 配布の確認は合格しました。実際の Steam/ゲームの受け入れ確認は未完了です。Production は変わりません。
+
+現在の Production ソース：[`cx26.3-wine11.0-runeon.10`](FLSGETVALUE2.ja.md)（正式版/latest）。seed `2026.09.22` と MoltenVK `1.4.2` を使用し、App 配布条件は `>=1.8 (0)` です。Production は同一の署名済み Dev archive を再ビルドせずに昇格します。独立した `patchsets/` 定義を明示的に選択します。既定の series は過去の `.9` のままです。 検証：API、隔離 prefix、署名、release readiness は合格しました。ユーザーは 2026-09-23 に Dev で問題が見つからなかったと報告し、Production を承認しました。この包括的な確認は、すべての Steam/CEF、ゲーム、App 操作を個別に実測したことを意味しません。App インストーラーと配布検証は製品リポジトリが管理します。
 
 `.9` の過去の配布と検証（2026-09-14、rollback として保持）：現在の `.9` patch set は `.8` ベースラインと製品パッチを保持します。[Wine 11.16/11.17 の対象限定レビュー](BACKPORTS-11.16-11.17.ja.md)で 13 の上流コミットを含む 10 パッチファイルを追加しますが、完全監査の境界は `wine-11.15` のままです。Dev と Production の seed `2026.09.13` は `.9` と MoltenVK `1.4.2` を使用し、App の配布条件は `1.8 (0)` 以上です。Production は Dev で検証した同一の署名済み archive を使用します。ビルド、API 回帰、署名、readiness、認証付き feed/ticket と全体ダウンロードの検証は完了しています。ユーザーは現在の Xcode Dev ソース版でコンポーネント更新、runtime 準備、Steam 起動を確認しました。配布は `1.8 (0-3)` で検証しましたが、各 build のゲーム、停止と再起動の操作、新規 prefix の受け入れ確認は再実施していません。公開 App インストーラーは `1.8 (3)` のままです。ソース Release は正式版となり、tag、commit、四つの添付 assets の bytes、size、digest は不変です。`.8` / seed `2026.09.06` は履歴として保持します。
 
