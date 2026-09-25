@@ -33,7 +33,7 @@ No Apple binary, per-game match, or guessed driver version is included.
 +SOURCES = driver.c
 --- /dev/null
 +++ b/dlls/runeondxgi/driver.c
-@@ -0,0 +1,220 @@
+@@ -0,0 +1,272 @@
 +/*
 + * DXGI driver version compatibility layer.
 + * Copyright 2026 Runeon contributors
@@ -77,7 +77,7 @@ No Apple binary, per-game match, or guessed driver version is included.
 +    return TRUE;
 +}
 +
-+static BOOL device_version(LUID luid, LARGE_INTEGER *version)
++static BOOL query_device_version(LUID luid, LARGE_INTEGER *version)
 +{
 +    HDEVINFO devices;
 +    SP_DEVINFO_DATA device;
@@ -110,6 +110,38 @@ No Apple binary, per-game match, or guessed driver version is included.
 +    valid = valid && matches == 1 && GetLastError() == ERROR_NO_MORE_ITEMS;
 +    SetupDiDestroyDeviceInfoList(devices);
 +    if (valid) *version = candidate;
++    return valid;
++}
++
++struct version_entry { LUID luid; LARGE_INTEGER version; BOOL valid; };
++/* ponytail: process-lifetime cache for 32 LUIDs; further devices use the uncached query. */
++static struct version_entry versions[32];
++static unsigned int version_count;
++static SRWLOCK version_lock = SRWLOCK_INIT;
++
++static BOOL device_version(LUID luid, LARGE_INTEGER *version)
++{
++    unsigned int i;
++    BOOL valid;
++    LARGE_INTEGER value = {{0}};
++    AcquireSRWLockExclusive(&version_lock);
++    for (i = 0; i < version_count; ++i)
++        if (versions[i].luid.HighPart == luid.HighPart && versions[i].luid.LowPart == luid.LowPart)
++        {
++            valid = versions[i].valid;
++            value = versions[i].version;
++            goto done;
++        }
++    valid = query_device_version(luid, &value);
++    if (version_count < sizeof(versions) / sizeof(versions[0]))
++    {
++        versions[version_count].luid = luid;
++        versions[version_count].version = value;
++        versions[version_count++].valid = valid;
++    }
++done:
++    ReleaseSRWLockExclusive(&version_lock);
++    if (valid) *version = value;
 +    return valid;
 +}
 +
@@ -147,7 +179,8 @@ No Apple binary, per-game match, or guessed driver version is included.
 +{
 +    void **slot = (void **)((char *)adapter->lpVtbl + offsetof(IDXGIAdapterVtbl, CheckInterfaceSupport));
 +    HMODULE pinned;
-+    DWORD protection, ignored;
++    DWORD protection, writable, ignored;
++    MEMORY_BASIC_INFORMATION memory;
 +    unsigned int i;
 +    AcquireSRWLockExclusive(&table_lock);
 +    for (i = 0; i < table_count; ++i) if (tables[i].table == adapter->lpVtbl) goto done;
@@ -155,7 +188,11 @@ No Apple binary, per-game match, or guessed driver version is included.
 +    /* The shared provider table outlives any one factory or caller's DLL handle. */
 +    if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_PIN,
 +            (const WCHAR *)check_version, &pinned)) goto done;
-+    if (!VirtualProtect(slot, sizeof(*slot), PAGE_READWRITE, &protection)) goto done;
++    if (!VirtualQuery(slot, &memory, sizeof(memory)) || memory.Protect & (PAGE_GUARD | PAGE_NOACCESS)) goto done;
++    writable = memory.Protect & (PAGE_EXECUTE | PAGE_EXECUTE_READ | PAGE_EXECUTE_READWRITE | PAGE_EXECUTE_WRITECOPY)
++            ? PAGE_EXECUTE_READWRITE : PAGE_READWRITE;
++    writable |= memory.Protect & (PAGE_NOCACHE | PAGE_WRITECOMBINE);
++    if (!VirtualProtect(slot, sizeof(*slot), writable, &protection)) goto done;
 +    tables[table_count].table = adapter->lpVtbl;
 +    tables[table_count].original = (check_version_fn)*slot;
 +    if (InterlockedCompareExchangePointer(slot, (void *)check_version,
@@ -206,7 +243,22 @@ No Apple binary, per-game match, or guessed driver version is included.
 +    if (!name || (size_t)(name - path) + 10 >= sizeof(path) / sizeof(path[0])) return TRUE;
 +    lstrcpyW(name + 1, L"rxdg.dll");
 +    provider = LoadLibraryExW(path, NULL, LOAD_WITH_ALTERED_SEARCH_PATH);
++    if (!provider) provider = LoadLibraryW(L"rxdg.dll");
 +    if (provider) OutputDebugStringA(version_marker);
++    else OutputDebugStringA("RUNEON_DXGI: rxdg.dll could not be loaded from the wrapper directory or builtin search; repair the prefix component pair.");
++    return TRUE;
++}
++
++BOOL WINAPI DllMain(HINSTANCE instance, DWORD reason, void *reserved)
++{
++    (void)reserved;
++    if (reason == DLL_PROCESS_ATTACH)
++    {
++        DisableThreadLibraryCalls(instance);
++        /* The original provider's initialization must finish when DXGI loads,
++         * even if the caller creates a D3D device before using our factories. */
++        InitOnceExecuteOnce(&provider_once, load_provider, NULL, NULL);
++    }
 +    return TRUE;
 +}
 +

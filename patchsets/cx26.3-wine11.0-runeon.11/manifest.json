@@ -1030,7 +1030,7 @@
     {
       "order": 105,
       "path": "patches/runeon/0105-dxgi-driver-version.patch",
-      "sha256": "4e772db4be7b165c2f8d84c482d77bb9a8d2aced675c8f804aff64243324ba1a",
+      "sha256": "09ccfab2f11c370a8068889bafac40692825eb2f12521d7af396056c7d8a5bc4",
       "kind": "runeon-product",
       "status": "active",
       "risk": "high",
