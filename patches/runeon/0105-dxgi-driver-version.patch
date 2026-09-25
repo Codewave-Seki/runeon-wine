@@ -3,7 +3,8 @@ Subject: [PATCH] Add an opt-in DXGI driver version provider shim.
 
 Independent implementation using public COM and SetupAPI. The application
 assembles the user-local provider; installing this module alone is inert.
-No Apple binary, per-game match, or guessed driver version is included.
+Versions follow the pinned win32u vendor table for the DXGI-visible vendor.
+No Apple binary, per-game match, or unknown-vendor fallback is included.
 
 --- a/configure.ac
 +++ b/configure.ac
@@ -29,11 +30,11 @@ No Apple binary, per-game match, or guessed driver version is included.
 +++ b/dlls/runeondxgi/Makefile.in
 @@ -0,0 +1,3 @@
 +MODULE = runeondxgi.dll
-+IMPORTS = setupapi advapi32 uuid
++IMPORTS = setupapi uuid
 +SOURCES = driver.c
 --- /dev/null
 +++ b/dlls/runeondxgi/driver.c
-@@ -0,0 +1,272 @@
+@@ -0,0 +1,265 @@
 +/*
 + * DXGI driver version compatibility layer.
 + * Copyright 2026 Runeon contributors
@@ -56,35 +57,29 @@ No Apple binary, per-game match, or guessed driver version is included.
 +static const DEVPROPKEY gpu_luid_key = {{0x60b193cb,0x5276,0x4d0f,{0x96,0xfc,0xf1,0x73,0xab,0xad,0x3e,0xc6}},2};
 +static const char version_marker[] = "RUNEON_DXGI_DRIVER_VERSION_V1";
 +
-+static BOOL parse_version(const WCHAR *text, LARGE_INTEGER *version)
++/* Match dlls/win32u/sysparams.c::driver_vendor_to_version in the pinned Wine base.
++ * Use the DXGI-visible vendor; unknown vendors have no correction. */
++static LONGLONG vendor_version(UINT vendor)
 +{
-+    ULONGLONG result = 0;
-+    unsigned int part;
-+    for (part = 0; part < 4; ++part)
++    switch (vendor)
 +    {
-+        unsigned int value = 0, digits = 0;
-+        while (*text >= '0' && *text <= '9')
-+        {
-+            if (++digits > 5) return FALSE;
-+            value = value * 10 + *text++ - '0';
-+            if (value > 65535) return FALSE;
-+        }
-+        if (!digits || (part < 3 ? *text++ != '.' : *text != 0)) return FALSE;
-+        result = (result << 16) | value;
++    case 0x8086: return (35LL << 48) | (101LL << 16) | 6314;   /* Intel: 35.0.101.6314 */
++    case 0x1002: return (35LL << 48) | (21025LL << 16) | 1024; /* AMD: 35.0.21025.1024 */
++    case 0x10de: return (35LL << 48) | (15LL << 16) | 6094;    /* NVIDIA: 35.0.15.6094 */
++    default: return -1;
 +    }
-+    if (!result || result == ~(ULONGLONG)0) return FALSE;
-+    version->QuadPart = result;
-+    return TRUE;
 +}
 +
-+static BOOL query_device_version(LUID luid, LARGE_INTEGER *version)
++static BOOL query_device_version(LUID luid, UINT vendor, LARGE_INTEGER *version)
 +{
 +    HDEVINFO devices;
 +    SP_DEVINFO_DATA device;
 +    LARGE_INTEGER candidate;
 +    DWORD index, matches = 0;
-+    BOOL valid = FALSE;
++    BOOL valid;
 +
++    candidate.QuadPart = vendor_version(vendor);
++    if (candidate.QuadPart == -1) return FALSE;
 +    devices = SetupDiGetClassDevsW(&GUID_DEVCLASS_DISPLAY, NULL, NULL, DIGCF_PRESENT);
 +    if (devices == INVALID_HANDLE_VALUE) return FALSE;
 +    device.cbSize = sizeof(device);
@@ -93,49 +88,43 @@ No Apple binary, per-game match, or guessed driver version is included.
 +        LUID current;
 +        DEVPROPTYPE type;
 +        DWORD size;
-+        HKEY key;
-+        WCHAR text[64];
 +        if (!SetupDiGetDevicePropertyW(devices, &device, &gpu_luid_key, &type,
 +                (BYTE *)&current, sizeof(current), &size, 0)
 +                || type != DEVPROP_TYPE_UINT64 || size != sizeof(current)
 +                || current.HighPart != luid.HighPart || current.LowPart != luid.LowPart) continue;
 +        ++matches;
-+        key = SetupDiOpenDevRegKey(devices, &device, DICS_FLAG_GLOBAL, 0, DIREG_DRV, KEY_READ);
-+        if (key == INVALID_HANDLE_VALUE) continue;
-+        size = sizeof(text);
-+        valid = RegGetValueW(key, NULL, L"DriverVersion", RRF_RT_REG_SZ, NULL, text, &size) == ERROR_SUCCESS
-+                && parse_version(text, &candidate);
-+        RegCloseKey(key);
 +    }
-+    valid = valid && matches == 1 && GetLastError() == ERROR_NO_MORE_ITEMS;
++    valid = matches == 1 && GetLastError() == ERROR_NO_MORE_ITEMS;
 +    SetupDiDestroyDeviceInfoList(devices);
 +    if (valid) *version = candidate;
 +    return valid;
 +}
 +
-+struct version_entry { LUID luid; LARGE_INTEGER version; BOOL valid; };
++struct version_entry { LUID luid; UINT vendor; LARGE_INTEGER version; BOOL valid; };
 +/* ponytail: process-lifetime cache for 32 LUIDs; further devices use the uncached query. */
 +static struct version_entry versions[32];
 +static unsigned int version_count;
 +static SRWLOCK version_lock = SRWLOCK_INIT;
 +
-+static BOOL device_version(LUID luid, LARGE_INTEGER *version)
++static BOOL device_version(LUID luid, UINT vendor, LARGE_INTEGER *version)
 +{
 +    unsigned int i;
 +    BOOL valid;
 +    LARGE_INTEGER value = {{0}};
 +    AcquireSRWLockExclusive(&version_lock);
 +    for (i = 0; i < version_count; ++i)
-+        if (versions[i].luid.HighPart == luid.HighPart && versions[i].luid.LowPart == luid.LowPart)
++        if (versions[i].luid.HighPart == luid.HighPart && versions[i].luid.LowPart == luid.LowPart
++                && versions[i].vendor == vendor)
 +        {
 +            valid = versions[i].valid;
 +            value = versions[i].version;
 +            goto done;
 +        }
-+    valid = query_device_version(luid, &value);
++    valid = query_device_version(luid, vendor, &value);
 +    if (version_count < sizeof(versions) / sizeof(versions[0]))
 +    {
 +        versions[version_count].luid = luid;
++        versions[version_count].vendor = vendor;
 +        versions[version_count].version = value;
 +        versions[version_count++].valid = valid;
 +    }
@@ -169,7 +158,7 @@ No Apple binary, per-game match, or guessed driver version is included.
 +    error = GetLastError();
 +    if (SUCCEEDED(hr) && version && version->QuadPart == -1
 +            && SUCCEEDED(IDXGIAdapter_GetDesc(adapter, &desc))
-+            && device_version(desc.AdapterLuid, &replacement))
++            && device_version(desc.AdapterLuid, desc.VendorId, &replacement))
 +        *version = replacement;
 +    SetLastError(error);
 +    return hr;
@@ -255,8 +244,13 @@ No Apple binary, per-game match, or guessed driver version is included.
 +    if (reason == DLL_PROCESS_ATTACH)
 +    {
 +        DisableThreadLibraryCalls(instance);
-+        /* The original provider's initialization must finish when DXGI loads,
-+         * even if the caller creates a D3D device before using our factories. */
++        /* Wine-only compatibility constraint: delaying provider load until a factory
++         * call caused an Apple 4.0b2 D3D11 device-first access fault (T798).
++         * Attachment-time load passed factory/device-first checks on M3 Max.
++         * LoadLibrary under the loader lock is not safe in general: a provider
++         * that starts and waits for a loader-dependent thread can deadlock.
++         * Keep default-off; validate concurrent device creation in target games
++         * before enabling. Do not introduce thread waits in this entry point. */
 +        InitOnceExecuteOnce(&provider_once, load_provider, NULL, NULL);
 +    }
 +    return TRUE;

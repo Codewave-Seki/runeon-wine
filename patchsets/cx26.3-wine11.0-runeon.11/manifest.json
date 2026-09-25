@@ -1030,11 +1030,11 @@
     {
       "order": 105,
       "path": "patches/runeon/0105-dxgi-driver-version.patch",
-      "sha256": "09ccfab2f11c370a8068889bafac40692825eb2f12521d7af396056c7d8a5bc4",
+      "sha256": "c02e87c315c1074cc15387341433f374256a9a7bbaf76a654797f0eb3673a231",
       "kind": "runeon-product",
       "status": "active",
       "risk": "high",
-      "summary": "Provide an optional DXGI shim that repairs successful -1 driver versions using exact device LUID matching.",
+      "summary": "Provide an optional DXGI shim that repairs successful -1 versions using the reported vendor and the pinned win32u table, with exact device LUID matching.",
       "runeonTasks": [
         "T797"
       ],
