@@ -1,0 +1,2424 @@
+From: Wine upstream contributors (see commit list)
+Subject: [PATCH] Backport targeted Wine 11.18 fixes.
+
+Squashed backport of 77 WineHQ commits first released in wine-11.18, applied in upstream
+order on top of cx26.3-wine11.0-runeon.11 patches 0001-0106. Test-only hunks are omitted.
+No production-code adaptation was needed; every commit applied without fuzz.
+
+  a50748f6ba Esme Povirk: ole32: Fix offset update in propertystorage_read_scalar.
+  5821f22093 Esme Povirk: ole32: Rewrite free loop on error path.
+  e42cc66975 Esme Povirk: ole32: Handle failures in StgStreamImpl_CopyTo.
+  b7bf171ee7 Esme Povirk: ole32: Use common error path.
+  de7152e0a1 Esme Povirk: ole32: Check for read past end of stream.
+  c00d4e54e4 Matteo Bruni: d3dx9: NULL the out pointer for unsupported interfaces in ID3DXBuffer QueryInterface().
+  d6486b89e9 Matteo Bruni: d3dx9/effect: Fix object array element release.
+  30a1714fb2 Matteo Bruni: d3d10: Compute dependent properties for all the state variables.
+  15675d8486 Matteo Bruni: d3dx9: Add missing error checks in wide string allocations.
+  ef6c413c68 Nikolay Sivov: kernelbase: Partially implement PackageFullNameFromId().
+  490f6d5dcb Andrey Gusev: d3dx: Check for NULL new_data in convert_dib_to_bmp().
+  6f6f8cc2b2 Andrey Gusev: msi: Check for NULL prop,val in msi_parse_command_line().
+  857fc25d9e Andrey Gusev: msi: Check for NULL t in append_storage_to_db().
+  83567b4de8 Dmitry Timoshkov: crypt32: Properly encode CMSG_ENCODED_MESSAGE in the PKCS signed message decoder.
+  5702075840 Nikolay Sivov: wined3d/spirv: Fix a typo in bitwise mask test.
+  e8aab51af2 Paul Gofman: wined3d: Support vertex blending for position in process_vertices_strided().
+  bd0f453b7b Paul Gofman: wined3d: Support vertex blending for lighting in process_vertices_strided().
+  59c2487ec0 Hans Leidekker: msi: Validate localpath length in open_package().
+  b12c118cd0 Hans Leidekker: msi: Handle NULL usersid/prodcode in get_deferred_action().
+  737a2eaa65 Hans Leidekker: msi: Handle missing SourceDir property in change_media().
+  95092a62b0 Hans Leidekker: msi: Check for allocation failure in MsiLoadStringA().
+  1beecdbe81 Hans Leidekker: msi: Check the result of MSI_RecordGetString() in is_uninstallable().
+  71a7b57f66 Hans Leidekker: msi: Check for allocation failure in marshal_record().
+  ef8b61b1ff Hans Leidekker: msi: Check for MSI_CreateRecord() failure in ITERATE_FindRelatedProducts().
+  98b5e601a7 Hans Leidekker: msi: Fix potential use-after-free in st_find_free_entry().
+  5a88abc026 Hans Leidekker: msi: Fix memory leak on error in do_msidbCustomActionTypeDll().
+  4c6b477ca8 Hans Leidekker: msi: Clean up on failure in MsiFormatRecordA().
+  5a34ae548e Hans Leidekker: msi: Avoid underflow in MSI_GetUserInfo().
+  7b48b54cc9 Hans Leidekker: msi: Avoid underflow in UPDATE_execute().
+  2c838cdb31 Matteo Bruni: d3dx10: Add missing wide string allocation error check in D3DX10CreateAsyncFileLoaderA().
+  231b1fc0c7 Matteo Bruni: d3dx11: Add missing wide string allocation error check in D3DX11CreateAsyncFileLoaderA().
+  e7724a3733 Matteo Bruni: d3dx9: Fix potential leak in OptimizeInplace()'s failure path.
+  e5c55144a8 Matteo Bruni: d3d10: Add a comment for intentional behavior in pres_not() and pres_or().
+  f4d8c9ac94 Matteo Bruni: d3dx9: Fix sampler parameters release.
+  cb426f518d Matteo Bruni: d3dx9: Free effect on creation failure.
+  2bac3e145a Matteo Bruni: d3dx9: Always initialize effect output parameter in D3DXCreateEffect*().
+  46040aba51 Matteo Bruni: d3dx9/mesh: Validate skin weights data more strictly.
+  66d978c37c Vibhav Pant: vccorlib140/tests: Add tests for Platform::Object::Object().
+  913e31f201 Vibhav Pant: vccorlib140: Implement Platform::Object::Object().
+  5b7db73f17 Charlotte Pabst: winegstreamer: Read input in chunks of 256KiB.
+  f360ce3e9b Nikolay Sivov: mfreadwrite: Fix end-of-segment notifications for MF_SINK_WRITER_ALL_STREAMS.
+  4ce3be29b2 Nikolay Sivov: xmllite/writer: Improve failure handling in WriteRawChars().
+  81b91d695a Alex Henrie: combase: Fix double free on error path in dispatch_rpc.
+  eb4d67e498 Bernhard Übelacker: sechost: Avoid buffer-overlow with too short strings in ConvertStringSidToSid.
+  0016dd69fa Nikolay Sivov: winegstreamer/aac: Fix a copy-paste mistake in SetOutputType().
+  29ca3c9235 Nikolay Sivov: winegstreamer: Fix a copy-paste mistake in internal video type mapping helper.
+  14947569cf Nikolay Sivov: winegstreamer: Fix typos in trace messages.
+  43761b4f33 Sean Reid: winebus.sys: Truncate input reports to their declared length.
+  dc64d49e35 Alex Henrie: setupapi: Fix "DelService" search in SetupInstallServicesFromInfSectionW.
+  6879d807ca Nikolay Sivov: d2d1: Add Premultiply effect stub.
+  82e6473430 Alistair Leslie-Hughes: oleaut32: Don't skip characters after 'c' in VarTokenizeFormatString.
+  2cb6ba3b9d Dmitry Timoshkov: crypt32: Use public symbolic names.
+  0ef68151e1 Vibhav Pant: vccorlib140: Use the correct prefix in IPrintable RTTI descriptors for exceptions.
+  74e2da14e6 Tobiasz Laskowski: kernel32: Use upper case hex in temp files names.
+  07e96fffeb Alex Henrie: dwrite: Correct interface name in warning in rendertarget_DrawGlyphRun.
+  d22810d47b Esme Povirk: windowscodecs: Check for multiplication overflow in BMP decoder.
+  62c9210ded Hans Leidekker: rsaenh: Handle get_key_container() failure in RSAENH_CPSetKeyParam().
+  4426edc42a Hans Leidekker: ncrypt: Validate data parameter in NCryptImportKey().
+  6d7d38deb9 Marc-Aurel Zent: imm32: Cancel IME composition on hkl deactivation.
+  53a8bd07fc Alex Henrie: gdiplus: Fix typo in DLL name in comment above GdipAddPathArcI.
+  f8b1ce3c42 Alistair Leslie-Hughes: oleaut32: Correctly compare the last character in VarFormatPercent.
+  601c15ae64 Conor McCarthy: mf/clock: Don't notify a sink that is also the time source in AddClockStateSink().
+  791fc577bb Conor McCarthy: mf/evr: Always send MEStreamSinkStopped in OnClockStop().
+  d171c7f02e Conor McCarthy: mf/evr: Always send MEStreamSinkPaused in OnClockPaused().
+  e69d5211d6 Conor McCarthy: mf/session: Ignore MEStreamSinkStopped if prerolling or starting sinks.
+  69b6db4d63 Matteo Bruni: d3dx9/effect: Validate parameter object id.
+  33db24d0c5 Matteo Bruni: d3dx9/effect: Downgrade OOB effect value traces from FIXME() to WARN().
+  aece4f6315 Matteo Bruni: d3dx: Validate RLE-compressed TGA data more strictly.
+  d015c25d4e Matteo Bruni: d3dx9/mesh: Fix normal data size validation.
+  f6f8f0b79e Matteo Bruni: d3dx9/mesh: Don't overflow vertex declaration buffer in SetDeclaration().
+  686123da83 Matteo Bruni: d3dx9/mesh: Don't overflow vertex declaration buffer in UpdateSemantics().
+  9727d07d07 Matteo Bruni: d3dx9/mesh: Don't overflow vertex declaration buffer in D3DXCreateMesh().
+  cee9e84782 Matteo Bruni: d3dx9/mesh: Add bounds checking in declaration_equals().
+  8bedd937e5 Anton Baskanov: dmband: Handle GUID_Download and GUID_Unload.
+  2dce08ea74 Anton Baskanov: dmime: Don't leak collection in midi_parser_parse().
+  14f7c39e9b Anton Baskanov: dmusic: Allow downloading an instrument to multiple ports.
+  a0e3d94ec3 Anton Baskanov: dmusic: Keep track of instrument download count.
+
+diff --git a/dlls/combase/rpc.c b/dlls/combase/rpc.c
+index c51b59d..dc33877 100644
+--- a/dlls/combase/rpc.c
++++ b/dlls/combase/rpc.c
+@@ -2037,11 +2037,7 @@ static void __RPC_STUB dispatch_rpc(RPC_MESSAGE *msg)
+         if (PostMessageW(apartment_getwindow(apt), DM_EXECUTERPC, 0, (LPARAM)params))
+             WaitForSingleObject(params->handle, INFINITE);
+         else
+-        {
+             ERR("PostMessage failed with error %lu\n", GetLastError());
+-            IRpcChannelBuffer_Release(params->chan);
+-            IRpcStubBuffer_Release(params->stub);
+-        }
+         CloseHandle(params->handle);
+     }
+     else
+diff --git a/dlls/crypt32/msg.c b/dlls/crypt32/msg.c
+index fcd01e0..d73fe9c 100644
+--- a/dlls/crypt32/msg.c
++++ b/dlls/crypt32/msg.c
+@@ -341,7 +341,7 @@ static BOOL CDataEncodeMsg_GetParam(HCRYPTMSG hCryptMsg, DWORD dwParamType,
+         else
+         {
+             CRYPT_CONTENT_INFO info;
+-            char rsa_data[] = "1.2.840.113549.1.7.1";
++            char rsa_data[] = szOID_RSA_data;
+ 
+             info.pszObjId = rsa_data;
+             info.Content.cbData = msg->bare_content_len;
+@@ -3198,8 +3198,28 @@ static BOOL CDecodeSignedMsg_GetParam(CDecodeMsg *msg, DWORD dwParamType,
+             SetLastError(CRYPT_E_INVALID_MSG_TYPE);
+         break;
+     case CMSG_ENCODED_MESSAGE:
+-        if (msg->msg_data.pbData)
+-            ret = CRYPT_CopyParam(pvData, pcbData, msg->msg_data.pbData, msg->msg_data.cbData);
++        if (msg->u.signed_data.info)
++        {
++            CRYPT_CONTENT_INFO info;
++
++            ret = CRYPT_AsnEncodeCMSSignedInfo(msg->u.signed_data.info, NULL, &info.Content.cbData);
++            if (ret)
++            {
++                info.Content.pbData = CryptMemAlloc(info.Content.cbData);
++                if (info.Content.pbData)
++                {
++                    ret = CRYPT_AsnEncodeCMSSignedInfo(msg->u.signed_data.info, info.Content.pbData, &info.Content.cbData);
++                    if (ret)
++                    {
++                        char oid_rsa_signed[] = szOID_RSA_signedData;
++
++                        info.pszObjId = oid_rsa_signed;
++                        ret = CryptEncodeObjectEx(X509_ASN_ENCODING, PKCS_CONTENT_INFO, &info, 0, NULL, pvData, pcbData);
++                    }
++                    CryptMemFree(info.Content.pbData);
++                }
++            }
++        }
+         else
+             SetLastError(CRYPT_E_INVALID_MSG_TYPE);
+         break;
+diff --git a/dlls/crypt32/oid.c b/dlls/crypt32/oid.c
+index de63819..f0b79f1 100644
+--- a/dlls/crypt32/oid.c
++++ b/dlls/crypt32/oid.c
+@@ -26,6 +26,7 @@
+ #include "winbase.h"
+ #define CRYPT_OID_INFO_HAS_EXTRA_FIELDS
+ #include "wincrypt.h"
++#include "wintrust.h"
+ #include "winreg.h"
+ #include "winternl.h"
+ #include "winuser.h"
+@@ -1387,9 +1388,9 @@ static const struct OIDInfoConstructor {
+  { 6, szOID_NETSCAPE_CA_POLICY_URL, 0, (LPCWSTR)IDS_NETSCAPE_CA_POLICY_URL, NULL },
+  { 6, szOID_NETSCAPE_SSL_SERVER_NAME, 0, (LPCWSTR)IDS_NETSCAPE_SSL_SERVER_NAME, NULL },
+  { 6, szOID_NETSCAPE_COMMENT, 0, (LPCWSTR)IDS_NETSCAPE_COMMENT, NULL },
+- { 6, "1.3.6.1.4.1.311.2.1.10", 0, L"SpcSpAgencyInfo", NULL },
+- { 6, "1.3.6.1.4.1.311.2.1.27", 0, L"SpcFinancialCriteria", NULL },
+- { 6, "1.3.6.1.4.1.311.2.1.26", 0, L"SpcMinimalCriteria", NULL },
++ { 6, SPC_SP_AGENCY_INFO_OBJID, 0, L"SpcSpAgencyInfo", NULL },
++ { 6, SPC_FINANCIAL_CRITERIA_OBJID, 0, L"SpcFinancialCriteria", NULL },
++ { 6, SPC_MINIMAL_CRITERIA_OBJID, 0, L"SpcMinimalCriteria", NULL },
+  { 6, szOID_COUNTRY_NAME, 0, (LPCWSTR)IDS_COUNTRY, NULL },
+  { 6, szOID_ORGANIZATION_NAME, 0, (LPCWSTR)IDS_ORGANIZATION, NULL },
+  { 6, szOID_ORGANIZATIONAL_UNIT_NAME, 0, (LPCWSTR)IDS_ORGANIZATIONAL_UNIT, NULL },
+diff --git a/dlls/d2d1/effect.c b/dlls/d2d1/effect.c
+index b66fe73..2baabfc 100644
+--- a/dlls/d2d1/effect.c
++++ b/dlls/d2d1/effect.c
+@@ -1804,6 +1804,23 @@ static HRESULT __stdcall scale_factory(IUnknown **effect)
+     return d2d_effect_create_impl(effect, &properties, sizeof(properties));
+ }
+ 
++static const WCHAR premultiply_description[] =
++L"<?xml version='1.0'?>                                                   \
++  <Effect>                                                                \
++    <Property name='DisplayName' type='string' value='Premultiply'/>      \
++    <Property name='Author'      type='string' value='The Wine Project'/> \
++    <Property name='Category'    type='string' value='Stub'/>             \
++    <Property name='Description' type='string' value='Premultiply'/>      \
++    <Inputs >                                                             \
++      <Input name='Source'/>                                              \
++    </Inputs>                                                             \
++  </Effect>";
++
++static HRESULT __stdcall premultiply_factory(IUnknown **effect)
++{
++    return d2d_effect_create_impl(effect, NULL, 0);
++}
++
+ void d2d_effects_init_builtins(struct d2d_factory *factory)
+ {
+     static const struct builtin_description
+@@ -1835,6 +1852,7 @@ void d2d_effects_init_builtins(struct d2d_factory *factory)
+         { &CLSID_D2D1HueRotation, X2(hue_rotation) },
+         { &CLSID_D2D1Saturation, X2(saturation) },
+         { &CLSID_D2D1Scale, X2(scale) },
++        { &CLSID_D2D1Premultiply, X(premultiply) },
+ #undef X2
+ #undef X
+     };
+diff --git a/dlls/d3d10/effect.c b/dlls/d3d10/effect.c
+index 52a94f4..b1154a5 100644
+--- a/dlls/d3d10/effect.c
++++ b/dlls/d3d10/effect.c
+@@ -331,6 +331,7 @@ static void pres_not(float **args, unsigned int n, const struct preshader_instr
+ 
+     for (i = 0; i < instr->comp_count; ++i)
+     {
++        /* This is logically wrong, but it's what native does (see tests). */
+         int v = ~arg1[0];
+         retval[i] = *(float *)&v;
+     }
+@@ -655,6 +656,7 @@ static void pres_or(float **args, unsigned int n, const struct preshader_instr *
+ 
+     for (i = 0; i < instr->comp_count; ++i)
+     {
++        /* This is logically wrong, but it's what native does (see tests). */
+         unsigned int v = arg1[0] | arg2[0];
+         retval[i] = *(float *)&v;
+     }
+@@ -9102,6 +9104,8 @@ static HRESULT STDMETHODCALLTYPE d3d10_effect_blend_variable_GetBackingStore(ID3
+     if (!(v = d3d10_get_state_variable(v, index, &v->effect->blend_states)))
+         return E_FAIL;
+ 
++    d3d10_effect_update_dependent_props(&v->u.state.dependencies, &v->u.state.desc);
++
+     *desc = v->u.state.desc.blend;
+ 
+     return S_OK;
+@@ -9582,6 +9586,8 @@ static HRESULT STDMETHODCALLTYPE d3d10_effect_rasterizer_variable_GetBackingStor
+     if (!(v = d3d10_get_state_variable(v, index, &v->effect->rs_states)))
+         return E_FAIL;
+ 
++    d3d10_effect_update_dependent_props(&v->u.state.dependencies, &v->u.state.desc);
++
+     *desc = v->u.state.desc.rasterizer;
+ 
+     return S_OK;
+@@ -9821,6 +9827,8 @@ static HRESULT STDMETHODCALLTYPE d3d10_effect_sampler_variable_GetBackingStore(I
+     if (!(v = d3d10_get_state_variable(v, index, &v->effect->samplers)))
+         return E_FAIL;
+ 
++    d3d10_effect_update_dependent_props(&v->u.state.dependencies, &v->u.state.desc);
++
+     *desc = v->u.state.desc.sampler.desc;
+ 
+     return S_OK;
+diff --git a/dlls/d3dx10_43/async.c b/dlls/d3dx10_43/async.c
+index e2cd14a..5b5319d 100644
+--- a/dlls/d3dx10_43/async.c
++++ b/dlls/d3dx10_43/async.c
+@@ -461,6 +461,9 @@ HRESULT WINAPI D3DX10CreateAsyncFileLoaderA(const char *filename, ID3DX10DataLoa
+ 
+     len = MultiByteToWideChar(CP_ACP, 0, filename, -1, NULL, 0);
+     filename_w = malloc(len * sizeof(*filename_w));
++    if (!filename_w)
++        return E_OUTOFMEMORY;
++
+     MultiByteToWideChar(CP_ACP, 0, filename, -1, filename_w, len);
+ 
+     hr = D3DX10CreateAsyncFileLoaderW(filename_w, loader);
+diff --git a/dlls/d3dx11_43/async.c b/dlls/d3dx11_43/async.c
+index 074a852..8965de0 100644
+--- a/dlls/d3dx11_43/async.c
++++ b/dlls/d3dx11_43/async.c
+@@ -308,6 +308,9 @@ HRESULT WINAPI D3DX11CreateAsyncFileLoaderA(const char *filename, ID3DX11DataLoa
+ 
+     len = MultiByteToWideChar(CP_ACP, 0, filename, -1, NULL, 0);
+     filename_w = malloc(len * sizeof(*filename_w));
++    if (!filename_w)
++        return E_OUTOFMEMORY;
++
+     MultiByteToWideChar(CP_ACP, 0, filename, -1, filename_w, len);
+ 
+     hr = D3DX11CreateAsyncFileLoaderW(filename_w, loader);
+diff --git a/dlls/d3dx9_36/core.c b/dlls/d3dx9_36/core.c
+index 9152b49..8c92907 100644
+--- a/dlls/d3dx9_36/core.c
++++ b/dlls/d3dx9_36/core.c
+@@ -36,20 +36,20 @@ static inline struct ID3DXBufferImpl *impl_from_ID3DXBuffer(ID3DXBuffer *iface)
+     return CONTAINING_RECORD(iface, struct ID3DXBufferImpl, ID3DXBuffer_iface);
+ }
+ 
+-static HRESULT WINAPI ID3DXBufferImpl_QueryInterface(ID3DXBuffer *iface, REFIID riid, void **ppobj)
++static HRESULT WINAPI ID3DXBufferImpl_QueryInterface(ID3DXBuffer *iface, REFIID riid, void **out)
+ {
+-    TRACE("iface %p, riid %s, object %p\n", iface, debugstr_guid(riid), ppobj);
++    TRACE("iface %p, riid %s, object %p\n", iface, debugstr_guid(riid), out);
+ 
+-    if (IsEqualGUID(riid, &IID_IUnknown)
+-      || IsEqualGUID(riid, &IID_ID3DXBuffer))
++    if (IsEqualGUID(riid, &IID_IUnknown) || IsEqualGUID(riid, &IID_ID3DXBuffer))
+     {
+         IUnknown_AddRef(iface);
+-        *ppobj = iface;
++        *out = iface;
+         return D3D_OK;
+     }
+ 
+     WARN("%s not implemented, returning E_NOINTERFACE\n", debugstr_guid(riid));
+ 
++    *out = NULL;
+     return E_NOINTERFACE;
+ }
+ 
+diff --git a/dlls/d3dx9_36/d3dx_helpers.c b/dlls/d3dx9_36/d3dx_helpers.c
+index 684bc50..24acc86 100644
+--- a/dlls/d3dx9_36/d3dx_helpers.c
++++ b/dlls/d3dx9_36/d3dx_helpers.c
+@@ -1325,6 +1325,8 @@ static BOOL convert_dib_to_bmp(const void **data, unsigned int *size)
+ 
+     new_size = *size + sizeof(BITMAPFILEHEADER);
+     new_data = malloc(new_size);
++    if (!new_data)
++        return FALSE;
+     CopyMemory(new_data + sizeof(BITMAPFILEHEADER), *data, *size);
+ 
+     /* Add BMP header */
+@@ -1596,7 +1598,7 @@ static HRESULT d3dx_image_tga_rle_decode_row(const uint8_t **src, uint32_t src_b
+     const uint8_t *src_ptr = *src;
+     uint32_t pixel_count = 0;
+ 
+-    while (pixel_count != row_width)
++    while (src_bytes_left && pixel_count != row_width)
+     {
+         uint32_t rle_count = (src_ptr[0] & 0x7f) + 1;
+         uint32_t rle_packet_size = 1;
+@@ -1620,9 +1622,9 @@ static HRESULT d3dx_image_tga_rle_decode_row(const uint8_t **src, uint32_t src_b
+         src_ptr += rle_packet_size;
+         src_bytes_left -= rle_packet_size;
+         pixel_count += rle_count;
+-        if (!src_bytes_left && pixel_count != row_width)
+-            return D3DXERR_INVALIDDATA;
+     }
++    if (pixel_count != row_width)
++        return D3DXERR_INVALIDDATA;
+ 
+     *src = src_ptr;
+     return D3D_OK;
+diff --git a/dlls/d3dx9_36/effect.c b/dlls/d3dx9_36/effect.c
+index 72e216d..7238732 100644
+--- a/dlls/d3dx9_36/effect.c
++++ b/dlls/d3dx9_36/effect.c
+@@ -551,7 +551,10 @@ static void free_parameter_object_data(struct d3dx_parameter *param, const void
+     if (param->class != D3DXPC_OBJECT)
+         return;
+ 
+-    count = min(param->element_count ? param->element_count : 1, bytes / sizeof(void *));
++    if (is_param_type_sampler(param->type))
++        count = 1;
++    else
++        count = min(param->element_count ? param->element_count : 1, bytes / sizeof(void *));
+ 
+     for (i = 0; i < count; ++i)
+     {
+@@ -568,7 +571,7 @@ static void free_parameter_object_data(struct d3dx_parameter *param, const void
+             case D3DXPT_TEXTURECUBE:
+             case D3DXPT_PIXELSHADER:
+             case D3DXPT_VERTEXSHADER:
+-                if (*(IUnknown **)data)
++                if (((IUnknown **)data)[i])
+                     IUnknown_Release(((IUnknown **)data)[i]);
+                 break;
+ 
+@@ -5282,6 +5285,12 @@ static HRESULT d3dx_parse_value(struct d3dx_effect *effect, struct d3dx_paramete
+                 case D3DXPT_VERTEXSHADER:
+                     param->object_id = read_u32(ptr);
+                     TRACE("Id: %u\n", param->object_id);
++                    if (param->object_id >= effect->object_count)
++                    {
++                        WARN("Object index out of bounds: index %u >= object count %u.\n",
++                                param->object_id, effect->object_count);
++                        return D3DXERR_INVALIDDATA;
++                    }
+                     effect->objects[param->object_id].param = param;
+                     param->data = value;
+                     break;
+@@ -6194,7 +6203,7 @@ static HRESULT d3dx_parse_resource(struct d3dx_effect *effect, const char *data,
+ 
+         if (index >= effect->params.count)
+         {
+-            FIXME("Index out of bounds: index %u >= parameter count %u.\n", index, effect->params.count);
++            WARN("Index out of bounds: index %u >= parameter count %u.\n", index, effect->params.count);
+             return E_FAIL;
+         }
+ 
+@@ -6203,7 +6212,7 @@ static HRESULT d3dx_parse_resource(struct d3dx_effect *effect, const char *data,
+         {
+             if (element_index >= parameter->element_count && parameter->element_count != 0)
+             {
+-                FIXME("Index out of bounds: element_index %u >= element_count %u.\n", element_index, parameter->element_count);
++                WARN("Index out of bounds: element_index %u >= element_count %u.\n", element_index, parameter->element_count);
+                 return E_FAIL;
+             }
+ 
+@@ -6214,7 +6223,7 @@ static HRESULT d3dx_parse_resource(struct d3dx_effect *effect, const char *data,
+         sampler = parameter->data;
+         if (state_index >= sampler->state_count)
+         {
+-            FIXME("Index out of bounds: state_index %u >= state_count %u.\n", state_index, sampler->state_count);
++            WARN("Index out of bounds: state_index %u >= state_count %u.\n", state_index, sampler->state_count);
+             return E_FAIL;
+         }
+ 
+@@ -6227,7 +6236,7 @@ static HRESULT d3dx_parse_resource(struct d3dx_effect *effect, const char *data,
+ 
+         if (technique_index >= effect->technique_count)
+         {
+-            FIXME("Index out of bounds: technique_index %u >= technique_count %u.\n", technique_index,
++            WARN("Index out of bounds: technique_index %u >= technique_count %u.\n", technique_index,
+                   effect->technique_count);
+             return E_FAIL;
+         }
+@@ -6235,14 +6244,14 @@ static HRESULT d3dx_parse_resource(struct d3dx_effect *effect, const char *data,
+         technique = &effect->techniques[technique_index];
+         if (index >= technique->pass_count)
+         {
+-            FIXME("Index out of bounds: index %u >= pass_count %u.\n", index, technique->pass_count);
++            WARN("Index out of bounds: index %u >= pass_count %u.\n", index, technique->pass_count);
+             return E_FAIL;
+         }
+ 
+         pass = &technique->passes[index];
+         if (state_index >= pass->state_count)
+         {
+-            FIXME("Index out of bounds: state_index %u >= state_count %u.\n", state_index, pass->state_count);
++            WARN("Index out of bounds: state_index %u >= state_count %u.\n", state_index, pass->state_count);
+             return E_FAIL;
+         }
+ 
+@@ -6768,6 +6777,8 @@ HRESULT WINAPI D3DXCreateEffectEx(struct IDirect3DDevice9 *device, const void *s
+             device, srcdata, srcdatalen, defines, include,
+             skip_constants, flags, pool, effect, compilation_errors);
+ 
++    if (effect)
++        *effect = NULL;
+     if (compilation_errors)
+         *compilation_errors = NULL;
+ 
+@@ -6790,6 +6801,7 @@ HRESULT WINAPI D3DXCreateEffectEx(struct IDirect3DDevice9 *device, const void *s
+     if (FAILED(hr))
+     {
+         WARN("Failed to create effect object, hr %#lx.\n", hr);
++        free(object);
+         return hr;
+     }
+ 
+diff --git a/dlls/d3dx9_36/mesh.c b/dlls/d3dx9_36/mesh.c
+index c858960..1f30a34 100644
+--- a/dlls/d3dx9_36/mesh.c
++++ b/dlls/d3dx9_36/mesh.c
+@@ -660,8 +660,8 @@ static BOOL declaration_equals(const D3DVERTEXELEMENT9 *declaration1, const D3DV
+     UINT size1 = 0, size2 = 0;
+ 
+     /* Find the size of each declaration */
+-    while (declaration1[size1].Stream != 0xff) size1++;
+-    while (declaration2[size2].Stream != 0xff) size2++;
++    while (size1 < MAX_FVF_DECL_SIZE && declaration1[size1].Stream != 0xff) size1++;
++    while (size2 < MAX_FVF_DECL_SIZE && declaration2[size2].Stream != 0xff) size2++;
+ 
+     /* If not same size then they are definitely not equal */
+     if (size1 != size2)
+@@ -1380,8 +1380,8 @@ static HRESULT WINAPI d3dx9_mesh_UpdateSemantics(ID3DXMesh *iface, D3DVERTEXELEM
+         return D3DERR_INVALIDCALL;
+     }
+ 
+-    /* New declaration must not contain non-zero Stream value  */
+-    for (i = 0; declaration[i].Stream != 0xff; i++)
++    /* New declaration must not contain non-zero Stream values */
++    for (i = 0; i < MAX_FVF_DECL_SIZE && declaration[i].Stream != 0xff; i++)
+     {
+         if (declaration[i].Stream != 0)
+         {
+@@ -1389,6 +1389,11 @@ static HRESULT WINAPI d3dx9_mesh_UpdateSemantics(ID3DXMesh *iface, D3DVERTEXELEM
+             return D3DERR_INVALIDCALL;
+         }
+     }
++    if (i >= MAX_FVF_DECL_SIZE)
++    {
++        WARN("Declaration is too long, ignoring.\n");
++        return D3D_OK;
++    }
+ 
+     This->num_elem = i + 1;
+     copy_declaration(This->cached_declaration, declaration, This->num_elem);
+@@ -1671,11 +1676,12 @@ static HRESULT WINAPI d3dx9_mesh_OptimizeInplace(ID3DXMesh *iface, DWORD flags,
+         return E_NOTIMPL;
+     }
+ 
++    dword_indices = malloc(This->numfaces * 3 * sizeof(DWORD));
++    if (!dword_indices) return E_OUTOFMEMORY;
++
+     hr = iface->lpVtbl->LockIndexBuffer(iface, 0, &indices);
+     if (FAILED(hr)) goto cleanup;
+ 
+-    dword_indices = malloc(This->numfaces * 3 * sizeof(DWORD));
+-    if (!dword_indices) return E_OUTOFMEMORY;
+     if (This->options & D3DXMESH_32BIT) {
+         memcpy(dword_indices, indices, This->numfaces * 3 * sizeof(DWORD));
+     } else {
+@@ -2269,10 +2275,15 @@ HRESULT WINAPI D3DXCreateMesh(DWORD numfaces, DWORD numvertices, DWORD options,
+     {
+         return D3DERR_INVALIDCALL;
+     }
+-    for (i = 0; declaration[i].Stream != 0xff; i++)
++    for (i = 0; i < MAX_FVF_DECL_SIZE - 1 && declaration[i].Stream != 0xff; i++)
+         if (declaration[i].Stream != 0)
+             return D3DERR_INVALIDCALL;
+     num_elem = i + 1;
++    if (num_elem >= MAX_FVF_DECL_SIZE)
++    {
++        WARN("Declaration is too long.\n");
++        return D3DERR_INVALIDCALL;
++    }
+ 
+     if (options & D3DXMESH_32BIT)
+         index_format = D3DFMT_INDEX32;
+@@ -2866,7 +2877,7 @@ static HRESULT parse_normals(ID3DXFileData *filedata, struct mesh_data *mesh, DW
+     mesh->num_normals = *(uint32_t *)data;
+     data += sizeof(uint32_t);
+     if (data_size < sizeof(uint32_t) * 2 + mesh->num_normals * sizeof(D3DXVECTOR3) +
+-            num_face_indices * sizeof(uint32_t))
++            mesh->num_poly_faces * sizeof(uint32_t) + num_face_indices * sizeof(uint32_t))
+     {
+         WARN("Truncated data (%Id bytes).\n", data_size);
+         goto end;
+@@ -2965,7 +2976,7 @@ static HRESULT parse_skin_mesh_header(ID3DXFileData *filedata, struct mesh_data
+ static HRESULT parse_skin_weights_info(ID3DXFileData *filedata, struct mesh_data *mesh_data, DWORD flags)
+ {
+     unsigned int index = mesh_data->skin_weights_info_count;
+-    unsigned int influence_count;
++    uint32_t influence_count;
+     const char *name;
+     const BYTE *data;
+     SIZE_T data_size;
+@@ -2985,6 +2996,13 @@ static HRESULT parse_skin_weights_info(ID3DXFileData *filedata, struct mesh_data
+     if (FAILED(hr = filedata->lpVtbl->Lock(filedata, &data_size, (const void **)&data)))
+         return hr;
+ 
++    if (data_size < sizeof(name) + sizeof(influence_count))
++    {
++        WARN("Truncated data (%Id bytes).\n", data_size);
++        filedata->lpVtbl->Unlock(filedata);
++        return E_FAIL;
++    }
++
+     /* FIXME: String will have to be retrieved directly instead of through a
+      * pointer once our ID3DXFileData implementation is fixed. */
+     name = *(const char **)data;
+diff --git a/dlls/d3dx9_36/skin.c b/dlls/d3dx9_36/skin.c
+index 72655a7..c07f7b9 100644
+--- a/dlls/d3dx9_36/skin.c
++++ b/dlls/d3dx9_36/skin.c
+@@ -355,7 +355,7 @@ static HRESULT WINAPI d3dx9_skin_info_SetDeclaration(ID3DXSkinInfo *iface, const
+ 
+     if (!declaration)
+         return D3DERR_INVALIDCALL;
+-    for (count = 0; declaration[count].Stream != 0xff; count++) {
++    for (count = 0; count < MAX_FVF_DECL_SIZE - 1 && declaration[count].Stream != 0xff; count++) {
+         if (declaration[count].Stream != 0) {
+             WARN("Invalid vertex element %u; contains non-zero stream %u\n",
+                  count, declaration[count].Stream);
+@@ -363,6 +363,11 @@ static HRESULT WINAPI d3dx9_skin_info_SetDeclaration(ID3DXSkinInfo *iface, const
+         }
+     }
+     count++;
++    if (count >= MAX_FVF_DECL_SIZE)
++    {
++        WARN("Declaration is too long, ignoring.\n");
++        return D3D_OK;
++    }
+ 
+     memcpy(skin->vertex_declaration, declaration, count * sizeof(*declaration));
+ 
+diff --git a/dlls/d3dx9_36/surface.c b/dlls/d3dx9_36/surface.c
+index 8734907..a3f7f58 100644
+--- a/dlls/d3dx9_36/surface.c
++++ b/dlls/d3dx9_36/surface.c
+@@ -187,6 +187,7 @@ HRESULT WINAPI D3DXGetImageInfoFromFileA(const char *file, D3DXIMAGE_INFO *info)
+ 
+     strlength = MultiByteToWideChar(CP_ACP, 0, file, -1, NULL, 0);
+     widename = malloc(strlength * sizeof(*widename));
++    if (!widename) return E_OUTOFMEMORY;
+     MultiByteToWideChar(CP_ACP, 0, file, -1, widename, strlength);
+ 
+     hr = D3DXGetImageInfoFromFileW(widename, info);
+@@ -420,6 +421,7 @@ HRESULT WINAPI D3DXLoadSurfaceFromFileA(IDirect3DSurface9 *dst_surface,
+ 
+     strlength = MultiByteToWideChar(CP_ACP, 0, src_file, -1, NULL, 0);
+     src_file_w = malloc(strlength * sizeof(*src_file_w));
++    if (!src_file_w) return E_OUTOFMEMORY;
+     MultiByteToWideChar(CP_ACP, 0, src_file, -1, src_file_w, strlength);
+ 
+     hr = D3DXLoadSurfaceFromFileW(dst_surface, dst_palette, dst_rect,
+diff --git a/dlls/d3dx9_36/texture.c b/dlls/d3dx9_36/texture.c
+index 8064503..ae1c3ea 100644
+--- a/dlls/d3dx9_36/texture.c
++++ b/dlls/d3dx9_36/texture.c
+@@ -792,6 +792,7 @@ HRESULT WINAPI D3DXCreateTextureFromFileExA(struct IDirect3DDevice9 *device, con
+ 
+     len = MultiByteToWideChar(CP_ACP, 0, srcfile, -1, NULL, 0);
+     widename = malloc(len * sizeof(*widename));
++    if (!widename) return E_OUTOFMEMORY;
+     MultiByteToWideChar(CP_ACP, 0, srcfile, -1, widename, len);
+ 
+     hr = D3DXCreateTextureFromFileExW(device, widename, width, height, miplevels,
+diff --git a/dlls/dmband/bandtrack.c b/dlls/dmband/bandtrack.c
+index 45346ad..339f712 100644
+--- a/dlls/dmband/bandtrack.c
++++ b/dlls/dmband/bandtrack.c
+@@ -278,9 +278,7 @@ static HRESULT WINAPI band_track_SetParam(IDirectMusicTrack8 *iface, REFGUID typ
+     }
+     else if (IsEqualGUID(type, &GUID_Disable_Auto_Download))
+         This->header.bAutoDownload = FALSE;
+-    else if (IsEqualGUID(type, &GUID_Download))
+-        FIXME("GUID_Download not handled yet\n");
+-    else if (IsEqualGUID(type, &GUID_DownloadToAudioPath))
++    else if (IsEqualGUID(type, &GUID_Download) || IsEqualGUID(type, &GUID_DownloadToAudioPath))
+     {
+         IDirectMusicPerformance *performance;
+         IDirectMusicAudioPath *audio_path;
+@@ -289,6 +287,7 @@ static HRESULT WINAPI band_track_SetParam(IDirectMusicTrack8 *iface, REFGUID typ
+         HRESULT hr;
+ 
+         if (FAILED(hr = IDirectMusicAudioPath_QueryInterface(object, &IID_IDirectMusicPerformance8, (void **)&performance))
++                && IsEqualGUID(type, &GUID_DownloadToAudioPath)
+                 && SUCCEEDED(hr = IDirectMusicAudioPath_QueryInterface(object, &IID_IDirectMusicAudioPath, (void **)&audio_path)))
+         {
+             hr = IDirectMusicAudioPath_GetObjectInPath(audio_path, DMUS_PCHANNEL_ALL, DMUS_PATH_PERFORMANCE, 0,
+@@ -313,7 +312,7 @@ static HRESULT WINAPI band_track_SetParam(IDirectMusicTrack8 *iface, REFGUID typ
+         FIXME("GUID_IDirectMusicBand not handled yet\n");
+     else if (IsEqualGUID(type, &GUID_StandardMIDIFile))
+         FIXME("GUID_StandardMIDIFile not handled yet\n");
+-    else if (IsEqualGUID(type, &GUID_UnloadFromAudioPath))
++    else if (IsEqualGUID(type, &GUID_Unload) || IsEqualGUID(type, &GUID_UnloadFromAudioPath))
+     {
+         struct band_entry *entry;
+         HRESULT hr;
+diff --git a/dlls/dmime/midi.c b/dlls/dmime/midi.c
+index ee78c6c..ea73608 100644
+--- a/dlls/dmime/midi.c
++++ b/dlls/dmime/midi.c
+@@ -451,12 +451,21 @@ static HRESULT midi_parser_parse(struct midi_parser *parser, IDirectMusicSegment
+         parser->time = 0;
+         memset(parser->note_states, 0, sizeof(parser->note_states));
+     }
+-    if (FAILED(hr)) return hr;
++    if (FAILED(hr))
++    {
++        if (collection)
++            IDirectMusicCollection_Release(collection);
++        return hr;
++    }
+ 
+     TRACE("End of file\n");
+ 
+     if ((seq_items = calloc(parser->seqtrack_items_count, sizeof(DMUS_IO_SEQ_ITEM))) == NULL)
++    {
++        if (collection)
++            IDirectMusicCollection_Release(collection);
+         return E_OUTOFMEMORY;
++    }
+ 
+     i = 0;
+     LIST_FOR_EACH_ENTRY(item, &parser->seqtrack_items, struct midi_seqtrack_item, entry)
+@@ -465,7 +474,11 @@ static HRESULT midi_parser_parse(struct midi_parser *parser, IDirectMusicSegment
+     qsort(seq_items, parser->seqtrack_items_count, sizeof(DMUS_IO_SEQ_ITEM), midi_seqtrack_item_compare);
+ 
+     music_length = (ULONGLONG)music_length * DMUS_PPQ / parser->division + 1;
+-    if (collection) IDirectMusicTrack_SetParam(parser->bandtrack, &GUID_ConnectToDLSCollection, 0, collection);
++    if (collection)
++    {
++        IDirectMusicTrack_SetParam(parser->bandtrack, &GUID_ConnectToDLSCollection, 0, collection);
++        IDirectMusicCollection_Release(collection);
++    }
+     if (SUCCEEDED(hr)) hr = IDirectMusicSegment8_SetLength(segment, music_length);
+     if (SUCCEEDED(hr)) hr = IDirectMusicSegment8_InsertTrack(segment, parser->bandtrack, 0xffff);
+     if (SUCCEEDED(hr)) hr = IDirectMusicSegment8_InsertTrack(segment, parser->chordtrack, 0xffff);
+diff --git a/dlls/dmusic/instrument.c b/dlls/dmusic/instrument.c
+index 5cfbce5..aa6ef3d 100644
+--- a/dlls/dmusic/instrument.c
++++ b/dlls/dmusic/instrument.c
+@@ -76,16 +76,26 @@ static void region_destroy(struct region *region)
+     free(region);
+ }
+ 
++struct downloaded_instrument
++{
++    IDirectMusicDownloadedInstrument IDirectMusicDownloadedInstrument_iface;
++    struct list entry;
++    LONG ref;
++
++    LONG download_count;
++    IDirectMusicPortDownload *port;
++    IDirectMusicDownload *download;
++    struct list downloaded_waves;
++};
++
+ struct instrument
+ {
+     IDirectMusicInstrument IDirectMusicInstrument_iface;
+-    IDirectMusicDownloadedInstrument IDirectMusicDownloadedInstrument_iface;
+     LONG ref;
+ 
+     INSTHEADER header;
+-    IDirectMusicDownload *download;
++    struct list downloaded_instruments;
+     struct collection *collection;
+-    struct list downloaded_waves;
+     struct list articulations;
+     struct list regions;
+ };
+@@ -144,9 +154,18 @@ static ULONG WINAPI instrument_Release(LPDIRECTMUSICINSTRUMENT iface)
+ 
+     if (!ref)
+     {
++        struct downloaded_instrument *downloaded_instrument, *next_downloaded_instrument;
+         struct articulation *articulation, *next_articulation;
+         struct region *region, *next_region;
+ 
++        LIST_FOR_EACH_ENTRY_SAFE(downloaded_instrument, next_downloaded_instrument,
++                &This->downloaded_instruments, struct downloaded_instrument, entry)
++        {
++            list_remove(&downloaded_instrument->entry);
++            list_init(&downloaded_instrument->entry);
++            IDirectMusicDownloadedInstrument_Release(&downloaded_instrument->IDirectMusicDownloadedInstrument_iface);
++        }
++
+         LIST_FOR_EACH_ENTRY_SAFE(articulation, next_articulation, &This->articulations, struct articulation, entry)
+         {
+             list_remove(&articulation->entry);
+@@ -197,9 +216,9 @@ static const IDirectMusicInstrumentVtbl instrument_vtbl =
+     instrument_SetPatch,
+ };
+ 
+-static inline struct instrument* impl_from_IDirectMusicDownloadedInstrument(IDirectMusicDownloadedInstrument *iface)
++static inline struct downloaded_instrument* impl_from_IDirectMusicDownloadedInstrument(IDirectMusicDownloadedInstrument *iface)
+ {
+-    return CONTAINING_RECORD(iface, struct instrument, IDirectMusicDownloadedInstrument_iface);
++    return CONTAINING_RECORD(iface, struct downloaded_instrument, IDirectMusicDownloadedInstrument_iface);
+ }
+ 
+ static HRESULT WINAPI downloaded_instrument_QueryInterface(IDirectMusicDownloadedInstrument *iface, REFIID riid, VOID **ret_iface)
+@@ -220,14 +239,25 @@ static HRESULT WINAPI downloaded_instrument_QueryInterface(IDirectMusicDownloade
+ 
+ static ULONG WINAPI downloaded_instrument_AddRef(IDirectMusicDownloadedInstrument *iface)
+ {
+-    struct instrument *This = impl_from_IDirectMusicDownloadedInstrument(iface);
+-    return IDirectMusicInstrument_AddRef(&This->IDirectMusicInstrument_iface);
++    struct downloaded_instrument *This = impl_from_IDirectMusicDownloadedInstrument(iface);
++    ULONG ref = InterlockedIncrement(&This->ref);
++
++    TRACE("(%p): new ref = %lu\n", iface, ref);
++
++    return ref;
+ }
+ 
+ static ULONG WINAPI downloaded_instrument_Release(IDirectMusicDownloadedInstrument *iface)
+ {
+-    struct instrument *This = impl_from_IDirectMusicDownloadedInstrument(iface);
+-    return IDirectMusicInstrument_Release(&This->IDirectMusicInstrument_iface);
++    struct downloaded_instrument *This = impl_from_IDirectMusicDownloadedInstrument(iface);
++    ULONG ref = InterlockedDecrement(&This->ref);
++
++    TRACE("(%p): new ref = %lu\n", iface, ref);
++
++    if (!ref)
++        free(This);
++
++    return ref;
+ }
+ 
+ static const IDirectMusicDownloadedInstrumentVtbl downloaded_instrument_vtbl =
+@@ -244,10 +274,9 @@ static HRESULT instrument_create(struct collection *collection, IDirectMusicInst
+     *ret_iface = NULL;
+     if (!(instrument = calloc(1, sizeof(*instrument)))) return E_OUTOFMEMORY;
+     instrument->IDirectMusicInstrument_iface.lpVtbl = &instrument_vtbl;
+-    instrument->IDirectMusicDownloadedInstrument_iface.lpVtbl = &downloaded_instrument_vtbl;
+     instrument->ref = 1;
+     collection_internal_addref((instrument->collection = collection));
+-    list_init(&instrument->downloaded_waves);
++    list_init(&instrument->downloaded_instruments);
+     list_init(&instrument->articulations);
+     list_init(&instrument->regions);
+ 
+@@ -1148,16 +1177,28 @@ HRESULT instrument_download_to_port(IDirectMusicInstrument *iface, IDirectMusicP
+         IDirectMusicDownloadedInstrument **downloaded)
+ {
+     struct instrument *This = impl_from_IDirectMusicInstrument(iface);
++    struct downloaded_instrument *downloaded_instrument;
+     struct downloaded_wave *downloaded_wave;
+     struct articulation *articulation;
+     struct download_buffer *buffer;
+-    IDirectMusicDownload *download;
+     DWORD size, offset_count;
+     struct region *region;
+     IDirectMusicObject *wave;
+     HRESULT hr;
+ 
+-    if (This->download) goto done;
++    LIST_FOR_EACH_ENTRY(downloaded_instrument, &This->downloaded_instruments, struct downloaded_instrument, entry)
++        if (downloaded_instrument->port == port)
++            goto done;
++
++    if (&downloaded_instrument->entry == &This->downloaded_instruments)
++    {
++        if (!(downloaded_instrument = calloc(1, sizeof(struct downloaded_instrument))))
++            return E_OUTOFMEMORY;
++        downloaded_instrument->IDirectMusicDownloadedInstrument_iface.lpVtbl = &downloaded_instrument_vtbl;
++        downloaded_instrument->ref = 1;
++        downloaded_instrument->port = port;
++        list_init(&downloaded_instrument->downloaded_waves);
++    }
+ 
+     size = sizeof(DMUS_DOWNLOADINFO);
+     size += sizeof(ULONG) + sizeof(DMUS_INSTRUMENT);
+@@ -1185,9 +1226,13 @@ HRESULT instrument_download_to_port(IDirectMusicInstrument *iface, IDirectMusicP
+         }
+     }
+ 
+-    if (FAILED(hr = IDirectMusicPortDownload_AllocateBuffer(port, size, &download))) return hr;
++    if (FAILED(hr = IDirectMusicPortDownload_AllocateBuffer(port, size, &downloaded_instrument->download)))
++    {
++        free(downloaded_instrument);
++        return hr;
++    }
+ 
+-    if (SUCCEEDED(hr = IDirectMusicDownload_GetBuffer(download, (void **)&buffer, &size))
++    if (SUCCEEDED(hr = IDirectMusicDownload_GetBuffer(downloaded_instrument->download, (void **)&buffer, &size))
+             && SUCCEEDED(hr = IDirectMusicPortDownload_GetDLId(port, &buffer->info.dwDLId, 1)))
+     {
+         BYTE *ptr = (BYTE *)&buffer->offsets[offset_count];
+@@ -1231,12 +1276,12 @@ HRESULT instrument_download_to_port(IDirectMusicInstrument *iface, IDirectMusicP
+             dmus_region->WSMP = region->wave_sample;
+             dmus_region->WLOOP[0] = region->wave_loop;
+ 
+-            LIST_FOR_EACH_ENTRY(downloaded_wave, &This->downloaded_waves, struct downloaded_wave, entry)
++            LIST_FOR_EACH_ENTRY(downloaded_wave, &downloaded_instrument->downloaded_waves, struct downloaded_wave, entry)
+             {
+                 if (downloaded_wave->index == region->wave_link.ulTableIndex)
+                     break;
+             }
+-            if (&downloaded_wave->entry == &This->downloaded_waves)
++            if (&downloaded_wave->entry == &downloaded_instrument->downloaded_waves)
+             {
+                 downloaded_wave = calloc(1, sizeof(struct downloaded_wave));
+                 if (!downloaded_wave)
+@@ -1255,7 +1300,7 @@ HRESULT instrument_download_to_port(IDirectMusicInstrument *iface, IDirectMusicP
+                     free(downloaded_wave);
+                     goto failed;
+                 }
+-                list_add_tail(&This->downloaded_waves, &downloaded_wave->entry);
++                list_add_tail(&downloaded_instrument->downloaded_waves, &downloaded_wave->entry);
+             }
+ 
+             dmus_region->WaveLink.ulTableIndex = downloaded_wave->id;
+@@ -1264,28 +1309,34 @@ HRESULT instrument_download_to_port(IDirectMusicInstrument *iface, IDirectMusicP
+                     &dmus_region->ulRegionArtIdx, &index);
+         }
+ 
+-        if (FAILED(hr = IDirectMusicPortDownload_Download(port, download))) goto failed;
++        if (FAILED(hr = IDirectMusicPortDownload_Download(port, downloaded_instrument->download)))
++            goto failed;
+     }
+ 
+-    This->download = download;
++    list_add_tail(&This->downloaded_instruments, &downloaded_instrument->entry);
+ 
+ done:
+-    *downloaded = &This->IDirectMusicDownloadedInstrument_iface;
++    ++downloaded_instrument->download_count;
++    *downloaded = &downloaded_instrument->IDirectMusicDownloadedInstrument_iface;
+     IDirectMusicDownloadedInstrument_AddRef(*downloaded);
+     return S_OK;
+ 
+ failed:
+     WARN("Failed to download instrument to port, hr %#lx\n", hr);
+-    IDirectMusicDownload_Release(download);
++    IDirectMusicDownload_Release(downloaded_instrument->download);
++    free(downloaded_instrument);
+     return hr;
+ }
+ 
+ HRESULT instrument_unload_from_port(IDirectMusicDownloadedInstrument *iface, IDirectMusicPortDownload *port)
+ {
+-    struct instrument *This = impl_from_IDirectMusicDownloadedInstrument(iface);
++    struct downloaded_instrument *This = impl_from_IDirectMusicDownloadedInstrument(iface);
+     HRESULT hr;
+ 
+-    if (!This->download) return DMUS_E_NOT_DOWNLOADED_TO_PORT;
++    if (!This->download_count || This->port != port) return DMUS_E_NOT_DOWNLOADED_TO_PORT;
++
++    --This->download_count;
++    if (This->download_count) return S_FALSE;
+ 
+     if (FAILED(hr = IDirectMusicPortDownload_Unload(port, This->download)))
+         WARN("Failed to unload instrument download buffer, hr %#lx\n", hr);
+@@ -1311,7 +1362,12 @@ HRESULT instrument_unload_from_port(IDirectMusicDownloadedInstrument *iface, IDi
+     }
+ 
+     IDirectMusicDownload_Release(This->download);
+-    This->download = NULL;
++
++    if (!list_empty(&This->entry))
++    {
++        list_remove(&This->entry);
++        IDirectMusicDownloadedInstrument_Release(&This->IDirectMusicDownloadedInstrument_iface);
++    }
+ 
+     return hr;
+ }
+diff --git a/dlls/dwrite/gdiinterop.c b/dlls/dwrite/gdiinterop.c
+index 7db3bdb..e757444 100644
+--- a/dlls/dwrite/gdiinterop.c
++++ b/dlls/dwrite/gdiinterop.c
+@@ -364,7 +364,7 @@ static HRESULT WINAPI rendertarget_DrawGlyphRun(IDWriteBitmapRenderTarget1 *ifac
+         return E_INVALIDARG;
+ 
+     if (FAILED(hr = IDWriteFontFace_QueryInterface(run->fontFace, &IID_IDWriteFontFace3, (void **)&fontface))) {
+-        WARN("Failed to get IDWriteFontFace2 interface, hr %#lx.\n", hr);
++        WARN("Failed to get IDWriteFontFace3 interface, hr %#lx.\n", hr);
+         return hr;
+     }
+ 
+diff --git a/dlls/gdiplus/graphicspath.c b/dlls/gdiplus/graphicspath.c
+index e2dd8ca..7ed3352 100644
+--- a/dlls/gdiplus/graphicspath.c
++++ b/dlls/gdiplus/graphicspath.c
+@@ -403,7 +403,7 @@ GpStatus WINGDIPAPI GdipAddPathArc(GpPath *path, REAL x, REAL y, REAL width,
+ }
+ 
+ /*******************************************************************************
+- * GdipAddPathArcI   [GDUPLUS.2]
++ * GdipAddPathArcI   [GDIPLUS.2]
+  *
+  * See GdipAddPathArc
+  */
+diff --git a/dlls/imm32/imm.c b/dlls/imm32/imm.c
+index 0b2814d..dd26bb6 100644
+--- a/dlls/imm32/imm.c
++++ b/dlls/imm32/imm.c
+@@ -680,6 +680,12 @@ static BOOL CALLBACK enum_activate_layout( HIMC himc, LPARAM lparam )
+     return TRUE;
+ }
+ 
++static BOOL CALLBACK enum_deactivate_layout( HIMC himc, LPARAM lparam )
++{
++    ImmNotifyIME( himc, NI_COMPOSITIONSTR, CPS_CANCEL, 0 );
++    return TRUE;
++}
++
+ BOOL WINAPI ImmActivateLayout( HKL hkl )
+ {
+     TRACE( "hkl %p\n", hkl );
+@@ -3268,6 +3274,7 @@ static LRESULT ime_internal_msg( WPARAM wparam, LPARAM lparam)
+         SendMessageW( hwnd, WM_IME_SELECT, TRUE, lparam );
+         break;
+    case IME_INTERNAL_HKL_DEACTIVATE:
++        ImmEnumInputContext( 0, enum_deactivate_layout, 0 );
+         if (!(hwnd = get_ime_ui_window())) break;
+         SendMessageW( hwnd, WM_IME_SELECT, FALSE, lparam );
+         break;
+diff --git a/dlls/kernel32/kernel32.spec b/dlls/kernel32/kernel32.spec
+index 8aafa04..cc5b0eb 100644
+--- a/dlls/kernel32/kernel32.spec
++++ b/dlls/kernel32/kernel32.spec
+@@ -1176,6 +1176,7 @@
+ @ stdcall -import PeekNamedPipe(long ptr long ptr ptr ptr)
+ @ stdcall -import PostQueuedCompletionStatus(long long ptr ptr)
+ @ stdcall -import PackageIdFromFullName(wstr long ptr ptr)
++@ stdcall -import PackageFullNameFromId(ptr ptr ptr)
+ @ stdcall PowerClearRequest(long long)
+ @ stdcall PowerCreateRequest(ptr)
+ @ stdcall PowerSetRequest(long long)
+diff --git a/dlls/kernelbase/file.c b/dlls/kernelbase/file.c
+index f61b279..187d4a4 100644
+--- a/dlls/kernelbase/file.c
++++ b/dlls/kernelbase/file.c
+@@ -2471,7 +2471,7 @@ UINT WINAPI DECLSPEC_HOTPATCH GetTempFileNameW( LPCWSTR path, LPCWSTR prefix, UI
+     if (prefix) for (i = 3; (i > 0) && (*prefix); i--) *p++ = *prefix++;
+ 
+     unique &= 0xffff;
+-    if (unique) swprintf( p, MAX_PATH - (p - buffer), L"%x.tmp", unique );
++    if (unique) swprintf( p, MAX_PATH - (p - buffer), L"%X.tmp", unique );
+     else
+     {
+         /* get a "random" unique number and try to create the file */
+@@ -2485,7 +2485,7 @@ UINT WINAPI DECLSPEC_HOTPATCH GetTempFileNameW( LPCWSTR path, LPCWSTR prefix, UI
+         unique = num;
+         do
+         {
+-            swprintf( p, MAX_PATH - (p - buffer), L"%x.tmp", unique );
++            swprintf( p, MAX_PATH - (p - buffer), L"%X.tmp", unique );
+             handle = CreateFileW( buffer, GENERIC_WRITE, 0, NULL, CREATE_NEW, FILE_ATTRIBUTE_NORMAL, 0 );
+             if (handle != INVALID_HANDLE_VALUE)
+             {  /* We created it */
+diff --git a/dlls/kernelbase/kernelbase.spec b/dlls/kernelbase/kernelbase.spec
+index 813419f..523089d 100644
+--- a/dlls/kernelbase/kernelbase.spec
++++ b/dlls/kernelbase/kernelbase.spec
+@@ -1052,7 +1052,7 @@
+ # @ stub PackageFamilyNameFromFullName
+ # @ stub PackageFamilyNameFromId
+ # @ stub PackageFamilyNameFromProductId
+-# @ stub PackageFullNameFromId
++@ stdcall PackageFullNameFromId(ptr ptr ptr)
+ # @ stub PackageFullNameFromProductId
+ @ stdcall PackageIdFromFullName(wstr long ptr ptr)
+ # @ stub PackageIdFromProductId
+diff --git a/dlls/kernelbase/version.c b/dlls/kernelbase/version.c
+index 495325b..10202ad 100644
+--- a/dlls/kernelbase/version.c
++++ b/dlls/kernelbase/version.c
+@@ -1698,6 +1698,17 @@ static UINT32 processor_arch_from_string(const WCHAR *str, unsigned int len)
+     return ~0u;
+ }
+ 
++static const WCHAR *processor_arch_from_code(UINT32 code)
++{
++    unsigned int i;
++
++    for (i = 0; i < ARRAY_SIZE(arch_names); ++i)
++        if (arch_names[i].code == code)
++            return arch_names[i].name;
++
++    return NULL;
++}
++
+ /***********************************************************************
+  *         PackageIdFromFullName   (kernelbase.@)
+  */
+@@ -1786,3 +1797,83 @@ LONG WINAPI PackageIdFromFullName(const WCHAR *full_name, UINT32 flags, UINT32 *
+ 
+     return ERROR_SUCCESS;
+ }
++
++/***********************************************************************
++ *         PackageFullNameFromId   (kernelbase.@)
++ */
++LONG WINAPI PackageFullNameFromId(const PACKAGE_ID *id, UINT32 *length, WCHAR *buffer)
++{
++    WCHAR full_name[PACKAGE_FULL_NAME_MAX_LENGTH + 1];
++    WCHAR version[PACKAGE_VERSION_MAX_LENGTH + 1];
++    const WCHAR *arch;
++    size_t len;
++
++    TRACE("id %p, length %p, buffer %p\n", id, length, buffer);
++
++    if (!id || !length)
++        return ERROR_INVALID_PARAMETER;
++
++    len = id->name ? wcslen(id->name) : 0;
++    if (len < PACKAGE_NAME_MIN_LENGTH || len > PACKAGE_NAME_MAX_LENGTH)
++        return ERROR_INVALID_PARAMETER;
++
++    *full_name = 0;
++    wcscpy(full_name, id->name);
++    wcscat(full_name, L"_");
++
++    swprintf(version, ARRAYSIZE(version), L"%u.%u.%u.%u", id->version.Major, id->version.Minor,
++            id->version.Build, id->version.Revision);
++    wcscat(full_name, version);
++    wcscat(full_name, L"_");
++
++    arch = processor_arch_from_code(id->processorArchitecture);
++    if (!arch)
++    {
++        WARN("Unrecognized architecture id %u.\n", id->processorArchitecture);
++        return ERROR_INVALID_PARAMETER;
++    }
++
++    wcscat(full_name, arch);
++    wcscat(full_name, L"_");
++
++    if (id->resourceId)
++    {
++        len = wcslen(id->resourceId);
++
++        if (len > PACKAGE_RESOURCEID_MAX_LENGTH)
++            return ERROR_INVALID_PARAMETER;
++
++        wcscat(full_name, id->resourceId);
++        wcscat(full_name, L"_");
++    }
++
++    if (id->publisherId)
++    {
++        len = wcslen(id->publisherId);
++
++        if (len != PACKAGE_PUBLISHERID_MAX_LENGTH)
++            return ERROR_INVALID_PARAMETER;
++
++        wcscat(full_name, id->publisherId);
++    }
++    else
++    {
++        if (!id->publisher)
++            return ERROR_INVALID_PARAMETER;
++
++        FIXME("Publisher ID generation is not implemented.\n");
++
++        wcscat(full_name, L"123456789abcd");
++    }
++
++    len = wcslen(full_name);
++    *length = len + 1;
++
++    if (!buffer || *length <= len)
++        return ERROR_INSUFFICIENT_BUFFER;
++
++    wcscpy(buffer, full_name);
++    *length = len + 1;
++
++    return ERROR_SUCCESS;
++}
+diff --git a/dlls/mf/clock.c b/dlls/mf/clock.c
+index 997994f..06e5e30 100644
+--- a/dlls/mf/clock.c
++++ b/dlls/mf/clock.c
+@@ -479,7 +479,9 @@ static HRESULT WINAPI present_clock_AddClockStateSink(IMFPresentationClock *ifac
+         };
+         struct clock_state_change_param param;
+ 
+-        if (!clock->is_shut_down && clock->state != MFCLOCK_STATE_INVALID)
++        if (!clock->is_shut_down && clock->state != MFCLOCK_STATE_INVALID
++                /* Don't notify a sink that is also the time source */
++                && clock->time_source_sink != sink->state_sink)
+         {
+             param.u.offset = clock->start_offset;
+             clock_notify_async_sink(clock, MFGetSystemTime(), param, notifications[clock->state], sink->state_sink);
+diff --git a/dlls/mf/evr.c b/dlls/mf/evr.c
+index eb366ea..bca5fa3 100644
+--- a/dlls/mf/evr.c
++++ b/dlls/mf/evr.c
+@@ -1976,7 +1976,6 @@ static HRESULT WINAPI video_renderer_clock_sink_OnClockStop(IMFClockStateSink *i
+         for (i = 0; i < renderer->stream_count; ++i)
+         {
+             struct video_stream *stream = renderer->streams[i];
+-            IMFMediaEventQueue_QueueEventParamVar(stream->event_queue, MEStreamSinkStopped, &GUID_NULL, S_OK, NULL);
+ 
+             EnterCriticalSection(&stream->cs);
+             stream->flags &= ~(EVR_STREAM_PREROLLED | EVR_STREAM_SAMPLE_NEEDED);
+@@ -1985,6 +1984,12 @@ static HRESULT WINAPI video_renderer_clock_sink_OnClockStop(IMFClockStateSink *i
+         renderer->state = EVR_STATE_STOPPED;
+     }
+ 
++    for (i = 0; i < renderer->stream_count; ++i)
++    {
++        struct video_stream *stream = renderer->streams[i];
++        IMFMediaEventQueue_QueueEventParamVar(stream->event_queue, MEStreamSinkStopped, &GUID_NULL, S_OK, NULL);
++    }
++
+     LeaveCriticalSection(&renderer->cs);
+ 
+     return S_OK;
+@@ -2001,13 +2006,10 @@ static HRESULT WINAPI video_renderer_clock_sink_OnClockPause(IMFClockStateSink *
+ 
+     IMFVideoPresenter_OnClockPause(renderer->presenter, systime);
+ 
+-    if (renderer->state == EVR_STATE_RUNNING)
++    for (i = 0; i < renderer->stream_count; ++i)
+     {
+-        for (i = 0; i < renderer->stream_count; ++i)
+-        {
+-            struct video_stream *stream = renderer->streams[i];
+-            IMFMediaEventQueue_QueueEventParamVar(stream->event_queue, MEStreamSinkPaused, &GUID_NULL, S_OK, NULL);
+-        }
++        struct video_stream *stream = renderer->streams[i];
++        IMFMediaEventQueue_QueueEventParamVar(stream->event_queue, MEStreamSinkPaused, &GUID_NULL, S_OK, NULL);
+     }
+ 
+     renderer->state = EVR_STATE_PAUSED;
+diff --git a/dlls/mf/session.c b/dlls/mf/session.c
+index 8d2ca07..c86da4f 100644
+--- a/dlls/mf/session.c
++++ b/dlls/mf/session.c
+@@ -3072,7 +3072,7 @@ static BOOL session_is_output_nodes_state(struct media_session *session, enum ob
+     return TRUE;
+ }
+ 
+-static enum object_state session_get_object_state_for_event(MediaEventType event)
++static enum object_state session_get_object_state_for_event(struct media_session *session, MediaEventType event)
+ {
+     switch (event)
+     {
+@@ -3086,9 +3086,15 @@ static enum object_state session_get_object_state_for_event(MediaEventType event
+         case MEStreamPaused:
+         case MEStreamSinkPaused:
+             return OBJ_STATE_PAUSED;
++        case MEStreamSinkStopped:
++            /* MEStreamSinkStopped may be sent when starting a new topology because of the sequence (which occurs in native):
++             * media sink SetPresentationClock() -> AddClockStateSink() -> callback Invoke() -> OnClockStop().
++             * Callback notification is suppressed for the first topology because the clock state is MFCLOCK_STATE_INVALID. */
++            if (session->command_state == COMMAND_STATE_PREROLLING_SINKS || session->command_state == COMMAND_STATE_STARTING_SINKS)
++                return OBJ_STATE_INVALID;
++            /* fall through */
+         case MESourceStopped:
+         case MEStreamStopped:
+-        case MEStreamSinkStopped:
+             return OBJ_STATE_STOPPED;
+         case MEStreamSinkPrerolled:
+             return OBJ_STATE_PREROLLED;
+@@ -3162,7 +3168,7 @@ static void session_set_source_object_state(struct media_session *session, IUnkn
+     DWORD i, count;
+     HRESULT hr;
+ 
+-    if ((state = session_get_object_state_for_event(event_type)) == OBJ_STATE_INVALID)
++    if ((state = session_get_object_state_for_event(session, event_type)) == OBJ_STATE_INVALID)
+         return;
+ 
+     switch (event_type)
+@@ -3340,7 +3346,7 @@ static void session_set_sink_stream_state(struct media_session *session, IMFStre
+     HRESULT hr = S_OK;
+     BOOL changed;
+ 
+-    if ((state = session_get_object_state_for_event(event_type)) == OBJ_STATE_INVALID)
++    if ((state = session_get_object_state_for_event(session, event_type)) == OBJ_STATE_INVALID)
+         return;
+ 
+     if (!(changed = session_set_node_object_state(session, (IUnknown *)stream, MF_TOPOLOGY_OUTPUT_NODE, state)))
+diff --git a/dlls/mfreadwrite/writer.c b/dlls/mfreadwrite/writer.c
+index e57bf47..f5d098a 100644
+--- a/dlls/mfreadwrite/writer.c
++++ b/dlls/mfreadwrite/writer.c
+@@ -716,12 +716,14 @@ static HRESULT WINAPI sink_writer_NotifyEndOfSegment(IMFSinkWriterEx *iface, DWO
+     EnterCriticalSection(&writer->cs);
+ 
+     if (writer->state != SINK_WRITER_STATE_WRITING)
++    {
+         hr = MF_E_INVALIDREQUEST;
++    }
+     else if (index == MF_SINK_WRITER_ALL_STREAMS)
+     {
+         for (i = 0; i < writer->streams.count; ++i)
+         {
+-            if (FAILED(hr = sink_writer_notify_end_of_segment(writer, index)))
++            if (FAILED(hr = sink_writer_notify_end_of_segment(writer, i)))
+             {
+                 WARN("Failed to place a marker for stream %u.\n", i);
+                 break;
+@@ -729,7 +731,9 @@ static HRESULT WINAPI sink_writer_NotifyEndOfSegment(IMFSinkWriterEx *iface, DWO
+         }
+     }
+     else
++    {
+         hr = sink_writer_notify_end_of_segment(writer, index);
++    }
+ 
+     LeaveCriticalSection(&writer->cs);
+ 
+diff --git a/dlls/msi/action.c b/dlls/msi/action.c
+index 40fd015..e37262a 100644
+--- a/dlls/msi/action.c
++++ b/dlls/msi/action.c
+@@ -230,6 +230,7 @@ UINT msi_parse_command_line( MSIPACKAGE *package, LPCWSTR szCommandLine,
+         while (ptr[len - 1] == ' ') len--;
+ 
+         prop = malloc( (len + 1) * sizeof(WCHAR) );
++        if (!prop) return ERROR_OUTOFMEMORY;
+         memcpy( prop, ptr, len * sizeof(WCHAR) );
+         prop[len] = 0;
+         if (!preserve_case) wcsupr( prop );
+@@ -239,6 +240,11 @@ UINT msi_parse_command_line( MSIPACKAGE *package, LPCWSTR szCommandLine,
+ 
+         num_quotes = 0;
+         val = malloc( (wcslen( ptr2 ) + 1) * sizeof(WCHAR) );
++        if (!val)
++        {
++            free( prop );
++            return ERROR_OUTOFMEMORY;
++        }
+         len = parse_prop( ptr2, val, &num_quotes );
+         if (num_quotes % 2)
+         {
+diff --git a/dlls/msi/custom.c b/dlls/msi/custom.c
+index df91542..6c3ce6c 100644
+--- a/dlls/msi/custom.c
++++ b/dlls/msi/custom.c
+@@ -177,13 +177,12 @@ static WCHAR *get_deferred_action(const WCHAR *action, const WCHAR *actiondata,
+     LPWSTR deferred;
+     DWORD len;
+ 
+-    if (!actiondata)
+-        return wcsdup(action);
++    if (!usersid || !prodcode) return NULL;
++    if (!actiondata) return wcsdup(action);
+ 
+-    len = lstrlenW(action) + lstrlenW(actiondata) +
+-          lstrlenW(usersid) + lstrlenW(prodcode) +
++    len = lstrlenW(action) + lstrlenW(actiondata) + lstrlenW(usersid) + lstrlenW(prodcode) +
+           lstrlenW(L"[%s<=>%s<=>%s]%s") - 7;
+-    deferred = malloc(len * sizeof(WCHAR));
++    if (!(deferred = malloc(len * sizeof(WCHAR)))) return NULL;
+ 
+     swprintf(deferred, len, L"[%s<=>%s<=>%s]%s", actiondata, usersid, prodcode, action);
+     return deferred;
+@@ -769,9 +768,7 @@ static custom_action_info *do_msidbCustomActionTypeDll(
+     RPC_STATUS status;
+     BOOL ret;
+ 
+-    info = malloc( sizeof *info );
+-    if (!info)
+-        return NULL;
++    if (!(info = calloc( 1, sizeof(*info) ))) return NULL;
+ 
+     msiobj_addref( &package->hdr );
+     info->package = package;
+@@ -795,6 +792,7 @@ static custom_action_info *do_msidbCustomActionTypeDll(
+         if (status != RPC_S_OK)
+         {
+             ERR("RpcServerUseProtseqEp failed: %#lx\n", status);
++            free_custom_action_data( info );
+             return NULL;
+         }
+ 
+@@ -803,6 +801,7 @@ static custom_action_info *do_msidbCustomActionTypeDll(
+         if (status != RPC_S_OK)
+         {
+             ERR("RpcServerRegisterIfEx failed: %#lx\n", status);
++            free_custom_action_data( info );
+             return NULL;
+         }
+ 
+diff --git a/dlls/msi/database.c b/dlls/msi/database.c
+index 75b27e5..7bb53bb 100644
+--- a/dlls/msi/database.c
++++ b/dlls/msi/database.c
+@@ -78,6 +78,7 @@ void append_storage_to_db( MSIDATABASE *db, IStorage *stg )
+     MSITRANSFORM *t;
+ 
+     t = malloc( sizeof *t );
++    if (!t) return;
+     t->stg = stg;
+     IStorage_AddRef( stg );
+     list_add_head( &db->transforms, &t->entry );
+diff --git a/dlls/msi/format.c b/dlls/msi/format.c
+index 0daebec..7dd6962 100644
+--- a/dlls/msi/format.c
++++ b/dlls/msi/format.c
+@@ -1000,7 +1000,7 @@ UINT WINAPI MsiFormatRecordA(MSIHANDLE hinst, MSIHANDLE hrec, char *buf, DWORD *
+ 
+     r = MSI_FormatRecordW(package, rec, NULL, &len);
+     if (r != ERROR_SUCCESS)
+-        return r;
++        goto done;
+ 
+     value = malloc(++len * sizeof(WCHAR));
+     if (!value)
+diff --git a/dlls/msi/media.c b/dlls/msi/media.c
+index 5d61346..43b6d72 100644
+--- a/dlls/msi/media.c
++++ b/dlls/msi/media.c
+@@ -66,7 +66,7 @@ static UINT change_media(MSIPACKAGE *package, MSIMEDIAINFO *mi)
+     LPWSTR source_dir;
+     UINT r = IDRETRY;
+ 
+-    source_dir = msi_dup_property(package->db, L"SourceDir");
++    if (!(source_dir = msi_dup_property(package->db, L"SourceDir"))) return ERROR_INSTALL_SOURCE_ABSENT;
+     record = MSI_CreateRecord(2);
+ 
+     while (r == IDRETRY && !source_matches_volume(mi, source_dir))
+diff --git a/dlls/msi/msi.c b/dlls/msi/msi.c
+index f551594..df8cb55 100644
+--- a/dlls/msi/msi.c
++++ b/dlls/msi/msi.c
+@@ -791,6 +791,12 @@ static UINT open_package( const WCHAR *product, const WCHAR *usersid,
+ 
+     if ((localpath = msi_reg_get_val_str( props, L"LocalPackage" )))
+     {
++        if (lstrlenW( localpath ) >= ARRAY_SIZE(sourcepath))
++        {
++            free( localpath );
++            RegCloseKey( props );
++            return ERROR_INSTALL_SOURCE_ABSENT;
++        }
+         lstrcpyW( sourcepath, localpath );
+         free( localpath );
+     }
+@@ -2407,7 +2413,7 @@ LANGID WINAPI MsiLoadStringA( MSIHANDLE handle, UINT id, LPSTR lpBuffer,
+     LANGID r;
+     INT len;
+ 
+-    bufW = malloc(nBufferMax * sizeof(WCHAR));
++    if (!(bufW = malloc(nBufferMax * sizeof(WCHAR)))) return 0;
+     r = MsiLoadStringW(handle, id, bufW, nBufferMax, lang);
+     if( r )
+     {
+@@ -3574,7 +3580,7 @@ static USERINFOSTATE MSI_GetUserInfo(LPCWSTR szProduct,
+     {
+         if (lpUserNameBuf && !user)
+         {
+-            (*pcchUserNameBuf)--;
++            if (*pcchUserNameBuf) (*pcchUserNameBuf)--;
+             goto done;
+         }
+ 
+@@ -3603,7 +3609,7 @@ static USERINFOSTATE MSI_GetUserInfo(LPCWSTR szProduct,
+     {
+         if (!serial)
+         {
+-            (*pcchSerialBuf)--;
++            if (*pcchSerialBuf) (*pcchSerialBuf)--;
+             goto done;
+         }
+ 
+diff --git a/dlls/msi/patch.c b/dlls/msi/patch.c
+index e11c288..a50ab69 100644
+--- a/dlls/msi/patch.c
++++ b/dlls/msi/patch.c
+@@ -826,7 +826,7 @@ static DWORD is_uninstallable( MSIDATABASE *db )
+     if (MSI_ViewFetch( view, &rec ) == ERROR_SUCCESS)
+     {
+         const WCHAR *value = MSI_RecordGetString( rec, 1 );
+-        ret = wcstol( value, NULL, 10 );
++        if (value) ret = wcstol( value, NULL, 10 );
+         msiobj_release( &rec->hdr );
+     }
+ 
+diff --git a/dlls/msi/record.c b/dlls/msi/record.c
+index 3671133..03ae80f 100644
+--- a/dlls/msi/record.c
++++ b/dlls/msi/record.c
+@@ -1115,7 +1115,11 @@ struct wire_record *marshal_record(MSIHANDLE handle)
+     if (!(rec = msihandle2msiinfo(handle, MSIHANDLETYPE_RECORD)))
+         return NULL;
+ 
+-    ret = midl_user_allocate(sizeof(*ret) + rec->count * sizeof(ret->fields[0]));
++    if (!(ret = midl_user_allocate(sizeof(*ret) + rec->count * sizeof(ret->fields[0]))))
++    {
++        msiobj_release(&rec->hdr);
++        return NULL;
++    }
+     ret->count = rec->count;
+     ret->cookie = rec->cookie;
+ 
+diff --git a/dlls/msi/string.c b/dlls/msi/string.c
+index 38381b8..d0690c0 100644
+--- a/dlls/msi/string.c
++++ b/dlls/msi/string.c
+@@ -142,14 +142,13 @@ static int st_find_free_entry( string_table *st )
+     sz = st->maxcount + 1 + st->maxcount / 2;
+     if (!(p = realloc( st->strings, sz * sizeof(*p) ))) return -1;
+     memset( p + st->maxcount, 0, (sz - st->maxcount) * sizeof(*p) );
++    st->strings = p;
+ 
+     if (!(s = realloc( st->sorted, sz * sizeof(*s) )))
+     {
+         free( p );
+         return -1;
+     }
+-
+-    st->strings = p;
+     st->sorted = s;
+ 
+     st->freeslot = st->maxcount;
+diff --git a/dlls/msi/update.c b/dlls/msi/update.c
+index 865455b..d22ed7c 100644
+--- a/dlls/msi/update.c
++++ b/dlls/msi/update.c
+@@ -76,6 +76,7 @@ static UINT UPDATE_execute( struct tagMSIVIEW *view, MSIRECORD *record )
+             i++;
+ 
+         cols_count = i;
++        if (cols_count > r) return ERROR_FUNCTION_FAILED;
+         where_count = r - i;
+ 
+         if (where_count > 0)
+diff --git a/dlls/msi/upgrade.c b/dlls/msi/upgrade.c
+index c00411b..906dbca 100644
+--- a/dlls/msi/upgrade.c
++++ b/dlls/msi/upgrade.c
+@@ -132,7 +132,11 @@ static UINT ITERATE_FindRelatedProducts(MSIRECORD *rec, LPVOID param)
+     if (rc != ERROR_SUCCESS)
+         return ERROR_SUCCESS;
+ 
+-    uirow = MSI_CreateRecord(1);
++    if (!(uirow = MSI_CreateRecord(1)))
++    {
++        RegCloseKey(hkey);
++        return ERROR_OUTOFMEMORY;
++    }
+     attributes = MSI_RecordGetInteger(rec,5);
+ 
+     while (rc == ERROR_SUCCESS)
+diff --git a/dlls/ncrypt/main.c b/dlls/ncrypt/main.c
+index 3511f8f..f15527f 100644
+--- a/dlls/ncrypt/main.c
++++ b/dlls/ncrypt/main.c
+@@ -393,8 +393,9 @@ SECURITY_STATUS WINAPI NCryptImportKey(NCRYPT_PROV_HANDLE provider, NCRYPT_KEY_H
+         WARN("Invalid flags %#lx\n", flags);
+         return NTE_BAD_FLAGS;
+     }
++    if (!header) return NTE_INVALID_PARAMETER;
+ 
+-    switch(header->Magic)
++    switch (header->Magic)
+     {
+     case BCRYPT_RSAFULLPRIVATE_MAGIC:
+     case BCRYPT_RSAPRIVATE_MAGIC:
+diff --git a/dlls/ole32/stg_prop.c b/dlls/ole32/stg_prop.c
+index 0fe8ecc..bc8c5c0 100644
+--- a/dlls/ole32/stg_prop.c
++++ b/dlls/ole32/stg_prop.c
+@@ -1441,12 +1441,12 @@ static HRESULT propertystorage_read_scalar(PROPVARIANT *prop, const struct read_
+                 if (codepage == CP_UNICODE)
+                 {
+                     hr = buffer_read_len(buffer, *offset, prop->bstrVal, count);
+-                    offset += ALIGNED_LENGTH(count, sizeof(DWORD) - 1);
++                    *offset += ALIGNED_LENGTH(count, sizeof(DWORD) - 1);
+                 }
+                 else
+                 {
+                     MultiByteToWideChar(codepage, 0, (LPCSTR)(buffer->data + *offset), count, prop->bstrVal, wcount);
+-                    offset += ALIGNED_LENGTH(wcount, sizeof(DWORD) - 1);
++                    *offset += ALIGNED_LENGTH(wcount, sizeof(DWORD) - 1);
+                 }
+ 
+                 prop->bstrVal[wcount - 1] = '\0';
+@@ -1637,16 +1637,20 @@ static HRESULT PropertyStorage_ReadProperty(PROPVARIANT *prop, const struct read
+             {
+                 for (; i > 0; --i)
+                 {
++                    if (prop->vt == (VT_VECTOR | VT_VARIANT))
++                        memcpy(&elem, prop->cac.pElems + elemsize * (i - 1), elemsize);
++                    else
++                        memcpy(&elem.lVal, prop->cac.pElems + elemsize * (i - 1), elemsize);
+                     switch(elem.vt)
+                     {
+                     case VT_LPSTR:
+                     case VT_LPWSTR:
+                     case VT_CF:
+                     case VT_CLSID:
+-                        call_IMemoryAllocator_Free(pma, prop->calpwstr.pElems);
++                        call_IMemoryAllocator_Free(pma, elem.pwszVal);
+                         break;
+                     case VT_BSTR:
+-                        SysFreeString(prop->cabstr.pElems[i -1]);
++                        SysFreeString(elem.bstrVal);
+                         break;
+                     }
+                 }
+diff --git a/dlls/ole32/stg_stream.c b/dlls/ole32/stg_stream.c
+index 25ead2c..aae7782 100644
+--- a/dlls/ole32/stg_stream.c
++++ b/dlls/ole32/stg_stream.c
+@@ -420,11 +420,15 @@ static HRESULT WINAPI StgStreamImpl_CopyTo(
+     else
+       copySize = cb.LowPart;
+ 
+-    IStream_Read(iface, tmpBuffer, copySize, &bytesRead);
++    hr = IStream_Read(iface, tmpBuffer, copySize, &bytesRead);
++    if (FAILED(hr))
++        break;
+ 
+     totalBytesRead.QuadPart += bytesRead;
+ 
+-    IStream_Write(pstm, tmpBuffer, bytesRead, &bytesWritten);
++    hr = IStream_Write(pstm, tmpBuffer, bytesRead, &bytesWritten);
++    if (FAILED(hr))
++        break;
+ 
+     totalBytesWritten.QuadPart += bytesWritten;
+ 
+diff --git a/dlls/ole32/storage32.c b/dlls/ole32/storage32.c
+index d3f4760..4b03110 100644
+--- a/dlls/ole32/storage32.c
++++ b/dlls/ole32/storage32.c
+@@ -4381,7 +4381,7 @@ static HRESULT StorageImpl_StreamReadAt(StorageBaseImpl *base, DirRef index,
+   hr = StorageImpl_ReadDirEntry(This, index, &data);
+   if (FAILED(hr)) return hr;
+ 
+-  if (data.size.QuadPart == 0)
++  if (data.size.QuadPart == 0 || offset.QuadPart >= data.size.QuadPart)
+   {
+     *bytesRead = 0;
+     return S_OK;
+@@ -8746,11 +8746,13 @@ HRESULT WINAPI StgOpenStorage(
+   if (grfMode & STGM_PRIORITY)
+   {
+     if (grfMode & (STGM_TRANSACTED|STGM_SIMPLE|STGM_NOSCRATCH|STGM_NOSNAPSHOT))
+-      return STG_E_INVALIDFLAG;
+-    if (grfMode & STGM_DELETEONRELEASE)
+-      return STG_E_INVALIDFUNCTION;
+-    if(STGM_ACCESS_MODE(grfMode) != STGM_READ)
+-      return STG_E_INVALIDFLAG;
++      hr = STG_E_INVALIDFLAG;
++    else if (grfMode & STGM_DELETEONRELEASE)
++      hr = STG_E_INVALIDFUNCTION;
++    else if (STGM_ACCESS_MODE(grfMode) != STGM_READ)
++      hr = STG_E_INVALIDFLAG;
++    if (FAILED(hr))
++      goto end;
+     grfMode &= ~0xf0; /* remove the existing sharing mode */
+     grfMode |= STGM_SHARE_DENY_NONE;
+   }
+diff --git a/dlls/oleaut32/varformat.c b/dlls/oleaut32/varformat.c
+index dacdb96..81407b4 100644
+--- a/dlls/oleaut32/varformat.c
++++ b/dlls/oleaut32/varformat.c
+@@ -822,7 +822,7 @@ HRESULT WINAPI VarTokenizeFormatString(LPOLESTR lpszFormat, LPBYTE rgbTok,
+        */
+       header->type = FMT_TYPE_DATE;
+       NEED_SPACE(sizeof(BYTE));
+-      pFormat += ARRAY_SIZE(szAMSlashPM);
++      pFormat++;
+       *pOut++ = FMT_DATE_GENERAL;
+       TRACE("gen date\n");
+     }
+@@ -2383,7 +2383,7 @@ HRESULT WINAPI VarFormatPercent(LPVARIANT pVarIn, INT nDigits, INT nLeading, INT
+       if (SUCCEEDED(hRet))
+       {
+         DWORD dwLen = lstrlenW(*pbstrOut);
+-        BOOL bBracket = (*pbstrOut)[dwLen] == ')';
++        BOOL bBracket = (*pbstrOut)[dwLen - 1] == ')';
+ 
+         dwLen -= bBracket;
+         memcpy(buff, *pbstrOut, dwLen * sizeof(WCHAR));
+diff --git a/dlls/rsaenh/rsaenh.c b/dlls/rsaenh/rsaenh.c
+index fbd500b..28888e3 100644
+--- a/dlls/rsaenh/rsaenh.c
++++ b/dlls/rsaenh/rsaenh.c
+@@ -3879,6 +3879,11 @@ BOOL WINAPI RSAENH_CPSetKeyParam(HCRYPTPROV hProv, HCRYPTKEY hKey, DWORD dwParam
+                 case CALG_RC4:
+                 {
+                     KEYCONTAINER *pKeyContainer = get_key_container(pCryptKey->hProv);
++                    if (!pKeyContainer)
++                    {
++                        SetLastError(NTE_BAD_UID);
++                        return FALSE;
++                    }
+                     if (!pbData)
+                     {
+                         SetLastError(ERROR_INVALID_PARAMETER);
+@@ -3928,7 +3933,11 @@ BOOL WINAPI RSAENH_CPSetKeyParam(HCRYPTPROV hProv, HCRYPTKEY hKey, DWORD dwParam
+                     DWORD keylen, deflen;
+                     BOOL ret = TRUE;
+                     KEYCONTAINER *pKeyContainer = get_key_container(pCryptKey->hProv);
+-
++                    if (!pKeyContainer)
++                    {
++                        SetLastError(NTE_BAD_UID);
++                        return FALSE;
++                    }
+                     if (!pbData)
+                     {
+                         SetLastError(ERROR_INVALID_PARAMETER);
+diff --git a/dlls/sechost/security.c b/dlls/sechost/security.c
+index 90e227b..f156b70 100644
+--- a/dlls/sechost/security.c
++++ b/dlls/sechost/security.c
+@@ -670,6 +670,12 @@ static BOOL parse_sid( const WCHAR *string, const WCHAR **end, SID *pisid, DWORD
+     while (*string == ' ')
+         string++;
+ 
++    if (!string[0] || !string[1])
++    {
++        SetLastError( ERROR_INVALID_SID );
++        return FALSE;
++    }
++
+     *size = get_sid_size( string, end );
+     if (!pisid) /* Simply compute the size */
+         return TRUE;
+diff --git a/dlls/setupapi/install.c b/dlls/setupapi/install.c
+index 8fcfc8b..126e02b 100644
+--- a/dlls/setupapi/install.c
++++ b/dlls/setupapi/install.c
+@@ -1525,7 +1525,7 @@ BOOL WINAPI SetupInstallServicesFromInfSectionW( HINF hinf, PCWSTR section, DWOR
+                 continue;
+             if (!SetupGetIntField( &context, 2, &section_flags )) section_flags = 0;
+             if (!(ret = del_service( scm, hinf, service_name, section_flags | flags ))) goto done;
+-        } while (SetupFindNextMatchLineW( &context, L"AddService", &context ));
++        } while (SetupFindNextMatchLineW( &context, L"DelService", &context ));
+     }
+     if (ret) SetLastError( ERROR_SUCCESS );
+  done:
+diff --git a/dlls/vccorlib140/except.c b/dlls/vccorlib140/except.c
+index 29ffbbe..b923baa 100644
+--- a/dlls/vccorlib140/except.c
++++ b/dlls/vccorlib140/except.c
+@@ -270,7 +270,7 @@ static HRESULT WINAPI Exception_Printable_ToString(IStringable *iface, HSTRING *
+ }
+ 
+ DEFINE_RTTI_DATA(Exception_Printable, offsetof(struct Exception, IPrintable_iface),
+-        "?.AVException@Platform@@",
++        ".?AVException@Platform@@",
+         Exception_Object_rtti_base_descriptor,
+         Exception_IPrintable_rtti_base_descriptor,
+         Exception_IEquatable_rtti_base_descriptor,
+@@ -400,7 +400,7 @@ COM_VTABLE_ENTRY(Exception_GetTrustLevel)
+ COM_VTABLE_RTTI_END;
+ 
+ DEFINE_RTTI_DATA(COMException_Printable, offsetof(struct Exception, IPrintable_iface),
+-        "?.AVException@Platform@@",
++        ".?AVException@Platform@@",
+         Exception_rtti_base_descriptor,
+         Exception_Object_rtti_base_descriptor,
+         Exception_IPrintable_rtti_base_descriptor,
+@@ -489,7 +489,7 @@ struct Exception *__cdecl COMException_hstring_ctor(struct Exception *this, HRES
+     COM_VTABLE_RTTI_END;                                                                        \
+                                                                                                 \
+     DEFINE_RTTI_DATA(name##Exception_Printable, offsetof(struct Exception, IPrintable_iface),   \
+-                     "?.AV" #name "Exception@Platform@@",                                       \
++                     ".?AV" #name "Exception@Platform@@",                                       \
+                      COMException_rtti_base_descriptor,                                         \
+                      Exception_rtti_base_descriptor,                                            \
+                      Exception_Object_rtti_base_descriptor,                                     \
+diff --git a/dlls/vccorlib140/tests/Makefile.in b/dlls/vccorlib140/tests/Makefile.in
+index 79a76cb..863b1fc 100644
+--- a/dlls/vccorlib140/tests/Makefile.in
++++ b/dlls/vccorlib140/tests/Makefile.in
+@@ -1,5 +1,5 @@
+ TESTDLL = vccorlib140.dll
+-IMPORTS = combase ole32 oleaut32 user32 uuid
++IMPORTS = combase ole32 oleaut32 user32 uuid vcruntime140
+ 
+ SOURCES = \
+ 	vccorlib.c
+diff --git a/dlls/vccorlib140/tests/vccorlib.c b/dlls/vccorlib140/tests/vccorlib.c
+index 77838ac..4c9fc6d 100644
+--- a/dlls/vccorlib140/tests/vccorlib.c
++++ b/dlls/vccorlib140/tests/vccorlib.c
+@@ -23,6 +23,8 @@
+ 
+ #include <stdbool.h>
+ #include <stdint.h>
++#include <setjmp.h>
++#include <stdlib.h>
+ 
+ #include "initguid.h"
+ #include "activation.h"
+@@ -112,6 +114,7 @@ DEFINE_EXPECT(PreInitialize);
+ DEFINE_EXPECT(PostInitialize);
+ DEFINE_EXPECT(PreUninitialize);
+ DEFINE_EXPECT(PostUninitialize);
++DEFINE_EXPECT(purecall_handler);
+ 
+ #define WINRT_EXCEPTIONS                                     \
+     WINRT_EXCEPTION(AccessDenied, E_ACCESSDENIED)            \
+@@ -195,6 +198,7 @@ static void (WINAPI *p_EventSourceRemove)(IInspectable **, struct EventLock *, E
+ static IInspectable *(WINAPI *p_EventSourceGetTargetArray)(IInspectable *, struct EventLock *);
+ static IInspectable *(WINAPI *p_EventSourceGetTargetArrayEvent)(IInspectable *, ULONG, const GUID *, EventRegistrationToken *);
+ static ULONG (WINAPI *p_EventSourceGetTargetArraySize)(IInspectable *);
++static IInspectable *(__cdecl *platform_object_ctor)(IInspectable *);
+ 
+ static void *(__cdecl *p__RTtypeid)(const void *);
+ static const char *(__thiscall *p_type_info_name)(void *);
+@@ -296,6 +300,7 @@ static BOOL init(void)
+             "?EventSourceGetTargetArrayEvent@Details@Platform@@YAPAXPAXIPBXPA_J@Z");
+     p_EventSourceGetTargetArraySize = (void *)GetProcAddress(hmod,
+             "?EventSourceGetTargetArraySize@Details@Platform@@YAIPAX@Z");
++    platform_object_ctor = (void *)GetProcAddress(hmod, "??0Object@Platform@@Q$AAA@XZ");
+ 
+     p_type_info_name = (void *)GetProcAddress(msvcrt, "?name@type_info@@QBAPBDXZ");
+     p_type_info_raw_name = (void *)GetProcAddress(msvcrt, "?raw_name@type_info@@QBAPBDXZ");
+@@ -382,6 +387,7 @@ static BOOL init(void)
+                 "?EventSourceGetTargetArrayEvent@Details@Platform@@YAPEAXPEAXIPEBXPEA_J@Z");
+         p_EventSourceGetTargetArraySize = (void *)GetProcAddress(hmod,
+                 "?EventSourceGetTargetArraySize@Details@Platform@@YAIPEAX@Z");
++        platform_object_ctor = (void *)GetProcAddress(hmod, "??0Object@Platform@@QE$AAA@XZ");
+ 
+         p_type_info_name = (void *)GetProcAddress(msvcrt, "?name@type_info@@QEBAPEBDXZ");
+         p_type_info_raw_name = (void *)GetProcAddress(msvcrt, "?raw_name@type_info@@QEBAPEBDXZ");
+@@ -466,6 +472,7 @@ static BOOL init(void)
+                 "?EventSourceGetTargetArrayEvent@Details@Platform@@YGPAXPAXIPBXPA_J@Z");
+         p_EventSourceGetTargetArraySize = (void *)GetProcAddress(hmod,
+                 "?EventSourceGetTargetArraySize@Details@Platform@@YGIPAX@Z");
++        platform_object_ctor = (void *)GetProcAddress(hmod, "??0Object@Platform@@Q$AAA@XZ");
+ 
+         p_type_info_name = (void *)GetProcAddress(msvcrt, "?name@type_info@@QBEPBDXZ");
+         p_type_info_raw_name = (void *)GetProcAddress(msvcrt, "?raw_name@type_info@@QBEPBDXZ");
+@@ -2623,6 +2630,39 @@ static void test_EventSource_marshaling(void)
+     }
+ }
+ 
++static jmp_buf buf;
++
++static void __cdecl purecall_handler(void)
++{
++    CHECK_EXPECT(purecall_handler);
++    /* purecall will abort, so we avoid that by longjmping. */
++    longjmp(buf, 1);
++}
++
++static void test_platform_object_ctor(void)
++{
++    IInspectable obj, *obj2;
++
++    obj.lpVtbl = NULL;
++    obj2 = platform_object_ctor(&obj);
++    ok(obj2 == &obj, "got obj2 %p != %p\n", obj2, &obj);
++    todo_wine ok(!!obj.lpVtbl, "got lpVtbl %p\n", obj.lpVtbl);
++
++    if (obj.lpVtbl)
++    {
++        test_rtti_names(&obj, "class Platform::Object", ".?AVObject@Platform@@");
++
++        if (!setjmp(buf))
++        {
++            _set_purecall_handler(purecall_handler);
++            SET_EXPECT(purecall_handler);
++            IInspectable_AddRef(obj2);
++        }
++        CHECK_CALLED(purecall_handler, 1);
++         _set_purecall_handler(NULL);
++    }
++}
++
+ START_TEST(vccorlib)
+ {
+     if(!init())
+@@ -2643,4 +2683,5 @@ START_TEST(vccorlib)
+     test_Delegate();
+     test_EventSource();
+     test_EventSource_marshaling();
++    test_platform_object_ctor();
+ }
+diff --git a/dlls/vccorlib140/vccorlib.c b/dlls/vccorlib140/vccorlib.c
+index 39b55de..e877a14 100644
+--- a/dlls/vccorlib140/vccorlib.c
++++ b/dlls/vccorlib140/vccorlib.c
+@@ -464,12 +464,61 @@ COM_VTABLE_ENTRY(platform_type_closable_GetTrustLevel)
+ COM_VTABLE_ENTRY(platform_type_closable_Close)
+ COM_VTABLE_RTTI_END;
+ 
++extern void __cdecl DECLSPEC_NORETURN _purecall(void);
++
++static HRESULT WINAPI platform_object_QueryInterface(IInspectable *iface, const GUID *iid, void **out)
++{
++    TRACE("(%p, %p, %p)\n", iface, debugstr_guid(iid), out);
++    _purecall();
++}
++
++static ULONG WINAPI platform_object_AddRef(IInspectable *iface)
++{
++    TRACE("(%p)\n", iface);
++    _purecall();
++}
++
++static ULONG WINAPI platform_object_Release(IInspectable *iface)
++{
++    TRACE("(%p)\n", iface);
++    _purecall();
++}
++
++static HRESULT WINAPI platform_object_GetIids(IInspectable *iface, ULONG *count, GUID **iids)
++{
++    TRACE("(%p, %p, %p)\n", iface, count, iids);
++    _purecall();
++}
++
++static HRESULT WINAPI platform_object_GetRuntimeClassName(IInspectable *iface, HSTRING *name)
++{
++    TRACE("(%p, %p)\n", iface, name);
++    _purecall();
++}
++
++static HRESULT WINAPI platform_object_GetTrustLevel(IInspectable *iface, TrustLevel *level)
++{
++    TRACE("(%p, %p)\n", iface, level);
++    _purecall();
++}
++
++DEFINE_RTTI_DATA(platform_object, 0, ".?AVObject@Platform@@");
++COM_VTABLE_RTTI_START(IInspectable, platform_object)
++COM_VTABLE_ENTRY(platform_object_QueryInterface)
++COM_VTABLE_ENTRY(platform_object_AddRef)
++COM_VTABLE_ENTRY(platform_object_Release)
++COM_VTABLE_ENTRY(platform_object_GetIids)
++COM_VTABLE_ENTRY(platform_object_GetRuntimeClassName)
++COM_VTABLE_ENTRY(platform_object_GetTrustLevel)
++COM_VTABLE_RTTI_END;
++
+ static void init_platform_type(void *base)
+ {
+     INIT_RTTI(type_info, base);
+     INIT_RTTI(platform_type, base);
+     INIT_RTTI(platform_type_printable, base);
+     INIT_RTTI(platform_type_closable, base);
++    INIT_RTTI(platform_object, base);
+ }
+ 
+ static const char *debugstr_abi_type_descriptor(const struct __abi_type_descriptor *desc)
+@@ -911,6 +960,13 @@ HSTRING WINAPI __abi_ObjectToString(IUnknown *obj, bool try_stringable)
+     return val;
+ }
+ 
++IInspectable *__cdecl platform_object_ctor(IInspectable *this)
++{
++    TRACE("(%p)\n", this);
++    this->lpVtbl = &platform_object_vtable.vtable;
++    return this;
++}
++
+ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, void *reserved)
+ {
+     if (reason == DLL_PROCESS_ATTACH)
+diff --git a/dlls/vccorlib140/vccorlib140.spec b/dlls/vccorlib140/vccorlib140.spec
+index 2aab6f6..fc0803b 100644
+--- a/dlls/vccorlib140/vccorlib140.spec
++++ b/dlls/vccorlib140/vccorlib140.spec
+@@ -383,8 +383,8 @@
+ @ cdecl -arch=win64 ??0NullReferenceException@Platform@@QE$AAA@PE$AAVString@1@@Z(ptr ptr) NullReferenceException_hstring_ctor
+ @ cdecl -arch=win32 ??0NullReferenceException@Platform@@Q$AAA@XZ(ptr) NullReferenceException_ctor
+ @ cdecl -arch=win64 ??0NullReferenceException@Platform@@QE$AAA@XZ(ptr) NullReferenceException_ctor
+-@ stub -arch=win32 ??0Object@Platform@@Q$AAA@XZ
+-@ stub -arch=win64 ??0Object@Platform@@QE$AAA@XZ
++@ cdecl -arch=win32 ??0Object@Platform@@Q$AAA@XZ(ptr) platform_object_ctor
++@ cdecl -arch=win64 ??0Object@Platform@@QE$AAA@XZ(ptr) platform_object_ctor
+ @ cdecl -arch=win32 ??0ObjectDisposedException@Platform@@Q$AAA@P$AAVString@1@@Z(ptr ptr) ObjectDisposedException_hstring_ctor
+ @ cdecl -arch=win64 ??0ObjectDisposedException@Platform@@QE$AAA@PE$AAVString@1@@Z(ptr ptr) ObjectDisposedException_hstring_ctor
+ @ cdecl -arch=win32 ??0ObjectDisposedException@Platform@@Q$AAA@XZ(ptr) ObjectDisposedException_ctor
+diff --git a/dlls/windowscodecs/bmpdecode.c b/dlls/windowscodecs/bmpdecode.c
+index ae6feda..67e98ac 100644
+--- a/dlls/windowscodecs/bmpdecode.c
++++ b/dlls/windowscodecs/bmpdecode.c
+@@ -26,6 +26,7 @@
+ #include "winreg.h"
+ #include "wingdi.h"
+ #include "objbase.h"
++#include "intsafe.h"
+ 
+ #include "wincodecs_private.h"
+ 
+@@ -360,7 +361,7 @@ static HRESULT WINAPI BmpFrameDecode_GetThumbnail(IWICBitmapFrameDecode *iface,
+ 
+ static HRESULT BmpFrameDecode_ReadUncompressed(BmpDecoder* This)
+ {
+-    UINT bytesperrow;
++    UINT bitsperrow, bytesperrow;
+     UINT width, height;
+     UINT datasize;
+     int bottomup;
+@@ -383,8 +384,11 @@ static HRESULT BmpFrameDecode_ReadUncompressed(BmpDecoder* This)
+     }
+ 
+     /* row sizes in BMP files must be divisible by 4 bytes */
+-    bytesperrow = (((width * This->bitsperpixel)+31)/32)*4;
+-    datasize = bytesperrow * height;
++    if (UIntMult(width, This->bitsperpixel, &bitsperrow))
++        return E_FAIL;
++    bytesperrow = ((bitsperrow+31)/32)*4;
++    if (!bytesperrow || UIntMult(bytesperrow, height, &datasize))
++        return E_FAIL;
+ 
+     This->imagedata = malloc(datasize);
+     if (!This->imagedata) return E_OUTOFMEMORY;
+@@ -506,8 +510,9 @@ static HRESULT BmpFrameDecode_ReadRLE8(BmpDecoder* This)
+ 
+     width = This->bih.bV5Width;
+     height = abs(This->bih.bV5Height);
+-    bytesperrow = width * 4;
+-    datasize = bytesperrow * height;
++    if (UIntMult(width, 4, &bytesperrow) ||
++        UIntMult(bytesperrow, height, &datasize))
++        return E_FAIL;
+     if (This->bih.bV5ClrUsed && This->bih.bV5ClrUsed < 256)
+         palettesize = 4 * This->bih.bV5ClrUsed;
+     else
+@@ -630,8 +635,9 @@ static HRESULT BmpFrameDecode_ReadRLE4(BmpDecoder* This)
+ 
+     width = This->bih.bV5Width;
+     height = abs(This->bih.bV5Height);
+-    bytesperrow = width * 4;
+-    datasize = bytesperrow * height;
++    if (UIntMult(width, 4, &bytesperrow) ||
++        UIntMult(bytesperrow, height, &datasize))
++        return E_FAIL;
+     if (This->bih.bV5ClrUsed && This->bih.bV5ClrUsed < 16)
+         palettesize = 4 * This->bih.bV5ClrUsed;
+     else
+diff --git a/dlls/winebus.sys/main.c b/dlls/winebus.sys/main.c
+index acdac55..efcb5f4 100644
+--- a/dlls/winebus.sys/main.c
++++ b/dlls/winebus.sys/main.c
+@@ -634,13 +634,43 @@ static BOOL deliver_next_report(struct device_extension *ext, IRP *irp)
+ static void process_hid_report(DEVICE_OBJECT *device, BYTE *report_buf, DWORD report_len)
+ {
+     struct device_extension *ext = (struct device_extension *)device->DeviceExtension;
+-    ULONG size = offsetof(struct hid_report, buffer[report_len]);
+     struct hid_report *report, *last_report;
++    ULONG size;
+     IRP *irp;
+ 
+     TRACE("device %p report_buf %p (%#x), report_len %#lx\n", device, report_buf, *report_buf, report_len);
+ 
+-    if (!(report = RtlAllocateHeap(GetProcessHeap(), 0, size))) return;
++    RtlEnterCriticalSection(&ext->cs);
++
++    if (ext->state != DEVICE_STATE_STARTED)
++    {
++        RtlLeaveCriticalSection(&ext->cs);
++        return;
++    }
++
++    if (!ext->collection_desc.ReportIDs[0].ReportID) last_report = ext->last_reports[0];
++    else last_report = ext->last_reports[report_buf[0]];
++    if (!last_report)
++    {
++        WARN("Ignoring report with unexpected id %#x\n", *report_buf);
++        RtlLeaveCriticalSection(&ext->cs);
++        return;
++    }
++
++    /* Devices may send more data than their report declares, but the cached report
++     * and hidclass.sys buffers are only sized to hold the declared size. */
++    if (report_len > last_report->length)
++    {
++        WARN("overlong report %#x length %lu truncated to declared length %lu\n", *report_buf, report_len, last_report->length);
++        report_len = last_report->length;
++    }
++
++    size = offsetof(struct hid_report, buffer[report_len]);
++    if (!(report = RtlAllocateHeap(GetProcessHeap(), 0, size)))
++    {
++        RtlLeaveCriticalSection(&ext->cs);
++        return;
++    }
+     memcpy(report->buffer, report_buf, report_len);
+     report->length = report_len;
+ 
+@@ -697,23 +727,6 @@ static void process_hid_report(DEVICE_OBJECT *device, BYTE *report_buf, DWORD re
+         }
+     }
+ 
+-    RtlEnterCriticalSection(&ext->cs);
+-
+-    if (ext->state != DEVICE_STATE_STARTED)
+-    {
+-        RtlLeaveCriticalSection(&ext->cs);
+-        return;
+-    }
+-
+-    if (!ext->collection_desc.ReportIDs[0].ReportID) last_report = ext->last_reports[0];
+-    else last_report = ext->last_reports[report_buf[0]];
+-    if (!last_report)
+-    {
+-        WARN("Ignoring report with unexpected id %#x\n", *report_buf);
+-        RtlLeaveCriticalSection(&ext->cs);
+-        return;
+-    }
+-
+     list_add_tail(&ext->reports, &report->entry);
+ 
+     memcpy(last_report->buffer, report_buf, report_len);
+diff --git a/dlls/wined3d/device.c b/dlls/wined3d/device.c
+index efa1632..cf8d071 100644
+--- a/dlls/wined3d/device.c
++++ b/dlls/wined3d/device.c
+@@ -46,8 +46,9 @@ struct lights_settings
+ {
+     struct light_transformed lights[WINED3D_MAX_SOFTWARE_ACTIVE_LIGHTS];
+     struct wined3d_color ambient_light;
+-    struct wined3d_matrix modelview_matrix;
+-    struct wined3d_matrix normal_matrix;
++    struct wined3d_matrix modelview_matrix[4];
++    struct wined3d_matrix normal_matrix[4];
++    struct wined3d_matrix normal_matrix_blended;
+     struct wined3d_vec4 position_transformed;
+ 
+     float fog_start, fog_end, fog_density;
+@@ -62,7 +63,9 @@ struct lights_settings
+     uint32_t localviewer                : 1;
+     uint32_t fog_coord_mode             : 2;
+     uint32_t fog_mode                   : 2;
+-    uint32_t padding                    : 24;
++    uint32_t vertexblends               : 2;
++    uint32_t have_normals               : 1;
++    uint32_t padding                    : 21;
+ };
+ 
+ /* Define the default light parameters as specified by MSDN. */
+@@ -2928,8 +2931,8 @@ static void wined3d_color_rgb_mul_add(struct wined3d_color *dst, const struct wi
+     dst->b += src->b * c;
+ }
+ 
+-static void init_transformed_lights(struct lights_settings *ls,
+-        const struct wined3d_stateblock_state *state, BOOL legacy_lighting, BOOL compute_lighting)
++static void init_transformed_lights(struct lights_settings *ls, const struct wined3d_stateblock_state *state,
++        BOOL legacy_lighting, BOOL compute_lighting, unsigned int vertexblends, BOOL have_normals)
+ {
+     const struct wined3d_light_info *lights[WINED3D_MAX_SOFTWARE_ACTIVE_LIGHTS];
+     const struct wined3d_light_info *light_info;
+@@ -2948,17 +2951,21 @@ static void init_transformed_lights(struct lights_settings *ls,
+     ls->fog_start = int_to_float(state->rs[WINED3D_RS_FOGSTART]);
+     ls->fog_end = int_to_float(state->rs[WINED3D_RS_FOGEND]);
+     ls->fog_density = int_to_float(state->rs[WINED3D_RS_FOGDENSITY]);
++    ls->vertexblends = vertexblends;
++    ls->have_normals = !!have_normals;
+ 
+     if (ls->fog_mode == WINED3D_FOG_NONE && !compute_lighting)
+         return;
+ 
+-    multiply_matrix(&ls->modelview_matrix, &state->transforms[WINED3D_TS_VIEW],
+-            &state->transforms[WINED3D_TS_WORLD_MATRIX(0)]);
++    for (i = 0; i < vertexblends + 1; ++i)
++        multiply_matrix(&ls->modelview_matrix[i], &state->transforms[WINED3D_TS_VIEW],
++                &state->transforms[WINED3D_TS_WORLD_MATRIX(i)]);
+ 
+     if (!compute_lighting)
+         return;
+ 
+-    compute_normal_matrix(&ls->normal_matrix, legacy_lighting, &ls->modelview_matrix);
++    for (i = 0; i < vertexblends + 1; ++i)
++        compute_normal_matrix(&ls->normal_matrix[i], legacy_lighting, &ls->modelview_matrix[i]);
+ 
+     wined3d_color_from_d3dcolor(&ls->ambient_light, state->rs[WINED3D_RS_AMBIENT]);
+     ls->legacy_lighting = !!legacy_lighting;
+@@ -3104,14 +3111,42 @@ static void update_light_diffuse_specular(struct wined3d_color *diffuse, struct
+         wined3d_color_rgb_mul_add(specular, &light->specular, att * powf(t, material_shininess));
+ }
+ 
++static void get_blended_matrix(struct wined3d_matrix *m, unsigned int vertexblends, const struct wined3d_matrix *mat,
++        const float *blendweights)
++{
++    unsigned int i, j;
++    const float *s;
++    float *d;
++
++    if (!vertexblends)
++    {
++        *m = mat[0];
++        return;
++    }
++
++    memset(m, 0, sizeof(*m));
++    d = (float *)m;
++    for (i = 0; i < vertexblends + 1; ++i)
++    {
++        s = (const float *)&mat[i];
++        for (j = 0; j < 16; ++j)
++            d[j] += blendweights[i] * s[j];
++    }
++}
++
+ static void light_set_vertex_data(struct lights_settings *ls,
+-        const struct wined3d_vec4 *position)
++        const struct wined3d_vec4 *position, const float blendweights[4])
+ {
++    struct wined3d_matrix m;
++
+     if (ls->fog_mode == WINED3D_FOG_NONE && !ls->lighting)
+         return;
+ 
+-    wined3d_vec4_transform(&ls->position_transformed, position, &ls->modelview_matrix);
++    get_blended_matrix(&m, ls->vertexblends, ls->modelview_matrix, blendweights);
++    wined3d_vec4_transform(&ls->position_transformed, position, &m);
+     wined3d_vec3_scale((struct wined3d_vec3 *)&ls->position_transformed, 1.0f / ls->position_transformed.w);
++    if (ls->lighting && ls->have_normals)
++        get_blended_matrix(&ls->normal_matrix_blended, ls->vertexblends, ls->normal_matrix, blendweights);
+ }
+ 
+ static void compute_light(struct wined3d_color *ambient, struct wined3d_color *diffuse,
+@@ -3130,7 +3165,7 @@ static void compute_light(struct wined3d_color *ambient, struct wined3d_color *d
+ 
+     if (normal)
+     {
+-        wined3d_vec3_transform(&normal_transformed, normal, &ls->normal_matrix);
++        wined3d_vec3_transform(&normal_transformed, normal, &ls->normal_matrix_blended);
+         if (ls->normalise)
+             wined3d_vec3_normalise(&normal_transformed);
+     }
+@@ -3295,20 +3330,21 @@ static HRESULT process_vertices_strided(const struct wined3d_device *device,
+ {
+     enum wined3d_material_color_source diffuse_source, specular_source, ambient_source, emissive_source;
+     const struct wined3d_state *device_state = device->cs->c.state;
+-    const struct wined3d_matrix *proj_mat, *view_mat, *world_mat;
++    const struct wined3d_matrix *proj_mat, *view_mat, *world_mat[4];
+     const struct wined3d_color *material_specular_state_colour;
+     const struct wined3d_format *output_colour_format;
+     static const struct wined3d_color black;
+     struct wined3d_map_desc map_desc;
++    unsigned int vertexblends = 0;
+     struct wined3d_box box = {0};
++    struct wined3d_matrix mat[4];
+     struct wined3d_viewport vp;
+     unsigned int texture_count;
+     struct lights_settings ls;
+-    struct wined3d_matrix mat;
+     unsigned int vertex_size;
+     BOOL do_clip, lighting;
+     float min_z, max_z;
+-    unsigned int i;
++    unsigned int i, j;
+     BYTE *dest_ptr;
+     HRESULT hr;
+ 
+@@ -3349,9 +3385,33 @@ static HRESULT process_vertices_strided(const struct wined3d_device *device,
+     }
+     dest_ptr = map_desc.data;
+ 
++    switch (state->rs[WINED3D_RS_VERTEXBLEND])
++    {
++        case WINED3D_VBF_DISABLE:
++        case WINED3D_VBF_1WEIGHTS:
++        case WINED3D_VBF_2WEIGHTS:
++        case WINED3D_VBF_3WEIGHTS:
++            vertexblends = state->rs[WINED3D_RS_VERTEXBLEND];
++            break;
++        default:
++            FIXME("Unsupported vertex blending: %d\n", state->rs[WINED3D_RS_VERTEXBLEND]);
++            break;
++    }
++    if (vertexblends && stream_info->use_map & (1u << WINED3D_FFP_BLENDINDICES))
++    {
++        FIXME("Indexed vertex blending is not supported.\n");
++        vertexblends = 0;
++    }
++    if (vertexblends && !(stream_info->use_map & (1u << WINED3D_FFP_BLENDWEIGHT)))
++    {
++        ERR("Vertex blend without blend weights.\n");
++        vertexblends = 0;
++    }
++
+     view_mat = &state->transforms[WINED3D_TS_VIEW];
+     proj_mat = &state->transforms[WINED3D_TS_PROJECTION];
+-    world_mat = &state->transforms[WINED3D_TS_WORLD];
++    for (i = 0; i < vertexblends + 1; ++i)
++        world_mat[i] = &state->transforms[WINED3D_TS_WORLD_MATRIX(i)];
+ 
+     TRACE("View mat:\n");
+     TRACE("%.8e %.8e %.8e %.8e\n", view_mat->_11, view_mat->_12, view_mat->_13, view_mat->_14);
+@@ -3365,19 +3425,25 @@ static HRESULT process_vertices_strided(const struct wined3d_device *device,
+     TRACE("%.8e %.8e %.8e %.8e\n", proj_mat->_31, proj_mat->_32, proj_mat->_33, proj_mat->_34);
+     TRACE("%.8e %.8e %.8e %.8e\n", proj_mat->_41, proj_mat->_42, proj_mat->_43, proj_mat->_44);
+ 
+-    TRACE("World mat:\n");
+-    TRACE("%.8e %.8e %.8e %.8e\n", world_mat->_11, world_mat->_12, world_mat->_13, world_mat->_14);
+-    TRACE("%.8e %.8e %.8e %.8e\n", world_mat->_21, world_mat->_22, world_mat->_23, world_mat->_24);
+-    TRACE("%.8e %.8e %.8e %.8e\n", world_mat->_31, world_mat->_32, world_mat->_33, world_mat->_34);
+-    TRACE("%.8e %.8e %.8e %.8e\n", world_mat->_41, world_mat->_42, world_mat->_43, world_mat->_44);
++    for (i = 0; i < vertexblends + 1; ++i)
++    {
++        TRACE("World mat %u:\n", i);
++        TRACE("%.8e %.8e %.8e %.8e\n", world_mat[i]->_11, world_mat[i]->_12, world_mat[i]->_13, world_mat[i]->_14);
++        TRACE("%.8e %.8e %.8e %.8e\n", world_mat[i]->_21, world_mat[i]->_22, world_mat[i]->_23, world_mat[i]->_24);
++        TRACE("%.8e %.8e %.8e %.8e\n", world_mat[i]->_31, world_mat[i]->_32, world_mat[i]->_33, world_mat[i]->_34);
++        TRACE("%.8e %.8e %.8e %.8e\n", world_mat[i]->_41, world_mat[i]->_42, world_mat[i]->_43, world_mat[i]->_44);
++    }
+ 
+     /* Get the viewport */
+     wined3d_device_context_get_viewports(&device->cs->c, NULL, &vp);
+     TRACE("viewport x %.8e, y %.8e, width %.8e, height %.8e, min_z %.8e, max_z %.8e.\n",
+           vp.x, vp.y, vp.width, vp.height, vp.min_z, vp.max_z);
+ 
+-    multiply_matrix(&mat, view_mat, world_mat);
+-    multiply_matrix(&mat, proj_mat, &mat);
++    for (i = 0; i < vertexblends + 1; ++i)
++    {
++        multiply_matrix(&mat[i], view_mat, world_mat[i]);
++        multiply_matrix(&mat[i], proj_mat, &mat[i]);
++    }
+ 
+     texture_count = (dst_fvf & WINED3DFVF_TEXCOUNT_MASK) >> WINED3DFVF_TEXCOUNT_SHIFT;
+ 
+@@ -3389,7 +3455,7 @@ static HRESULT process_vertices_strided(const struct wined3d_device *device,
+     material_specular_state_colour = state->rs[WINED3D_RS_SPECULARENABLE]
+             ? &state->material.specular : &black;
+     init_transformed_lights(&ls, state, device->adapter->d3d_info.wined3d_creation_flags
+-            & WINED3D_LEGACY_FFP_LIGHTING, lighting);
++            & WINED3D_LEGACY_FFP_LIGHTING, lighting, vertexblends, stream_info->use_map & (1u << WINED3D_FFP_NORMAL));
+ 
+     wined3d_viewport_get_z_range(&vp, &min_z, &max_z);
+ 
+@@ -3399,14 +3465,28 @@ static HRESULT process_vertices_strided(const struct wined3d_device *device,
+         const float *p = (const float *)&position_element->data.addr[i * position_element->stride];
+         struct wined3d_color ambient, diffuse, specular;
+         struct wined3d_vec4 position;
++        struct wined3d_matrix m;
+         unsigned int tex_index;
++        float blendweights[4];
++
++        if (vertexblends)
++        {
++            const struct wined3d_stream_info_element *weight_element = &stream_info->elements[WINED3D_FFP_BLENDWEIGHT];
++            const float *w = (const float *)&weight_element->data.addr[i * weight_element->stride];
+ 
++            blendweights[vertexblends] = 1.0f;
++            for (j = 0; j < vertexblends; ++j)
++            {
++                blendweights[j] = w[j];
++                blendweights[vertexblends] -= w[j];
++            }
++        }
+         position.x = p[0];
+         position.y = p[1];
+         position.z = p[2];
+         position.w = 1.0f;
+ 
+-        light_set_vertex_data(&ls, &position);
++        light_set_vertex_data(&ls, &position, blendweights);
+ 
+         if ( ((dst_fvf & WINED3DFVF_POSITION_MASK) == WINED3DFVF_XYZ ) ||
+              ((dst_fvf & WINED3DFVF_POSITION_MASK) == WINED3DFVF_XYZRHW ) ) {
+@@ -3415,10 +3495,11 @@ static HRESULT process_vertices_strided(const struct wined3d_device *device,
+             TRACE("In: ( %06.2f %06.2f %06.2f )\n", p[0], p[1], p[2]);
+ 
+             /* Multiplication with world, view and projection matrix. */
+-            x   = (p[0] * mat._11) + (p[1] * mat._21) + (p[2] * mat._31) + mat._41;
+-            y   = (p[0] * mat._12) + (p[1] * mat._22) + (p[2] * mat._32) + mat._42;
+-            z   = (p[0] * mat._13) + (p[1] * mat._23) + (p[2] * mat._33) + mat._43;
+-            rhw = (p[0] * mat._14) + (p[1] * mat._24) + (p[2] * mat._34) + mat._44;
++            get_blended_matrix(&m, vertexblends, mat, blendweights);
++            x   = (p[0] * m._11) + (p[1] * m._21) + (p[2] * m._31) + m._41;
++            y   = (p[0] * m._12) + (p[1] * m._22) + (p[2] * m._32) + m._42;
++            z   = (p[0] * m._13) + (p[1] * m._23) + (p[2] * m._33) + m._43;
++            rhw = (p[0] * m._14) + (p[1] * m._24) + (p[2] * m._34) + m._44;
+ 
+             TRACE("x=%f y=%f z=%f rhw=%f\n", x, y, z, rhw);
+ 
+diff --git a/dlls/wined3d/shader_spirv.c b/dlls/wined3d/shader_spirv.c
+index d5fa401..0ed8371 100644
+--- a/dlls/wined3d/shader_spirv.c
++++ b/dlls/wined3d/shader_spirv.c
+@@ -276,7 +276,7 @@ static void shader_spirv_init_compile_args(const struct wined3d_vk_info *vk_info
+ 
+         for (i = 0; i < ARRAY_SIZE(args->ps_alpha_swizzle); ++i)
+         {
+-            if (rt_alpha_swizzle && (1u << i))
++            if (rt_alpha_swizzle & (1u << i))
+                 args->ps_alpha_swizzle[i] = VKD3D_SHADER_SWIZZLE(W, X, Y, Z);
+             else
+                 args->ps_alpha_swizzle[i] = VKD3D_SHADER_NO_SWIZZLE;
+diff --git a/dlls/winegstreamer/aac_decoder.c b/dlls/winegstreamer/aac_decoder.c
+index 9e6c5c2..f5409e5 100644
+--- a/dlls/winegstreamer/aac_decoder.c
++++ b/dlls/winegstreamer/aac_decoder.c
+@@ -395,7 +395,7 @@ static HRESULT WINAPI transform_SetOutputType(IMFTransform *iface, DWORD id, IMF
+         if (decoder->output_type)
+         {
+             IMFMediaType_Release(decoder->output_type);
+-            decoder->input_type = NULL;
++            decoder->output_type = NULL;
+         }
+         if (decoder->wg_transform)
+         {
+diff --git a/dlls/winegstreamer/quartz_parser.c b/dlls/winegstreamer/quartz_parser.c
+index f09e8b9..d1d2bc1 100644
+--- a/dlls/winegstreamer/quartz_parser.c
++++ b/dlls/winegstreamer/quartz_parser.c
+@@ -1072,7 +1072,7 @@ static bool amt_to_wg_format_video_indeo(const AM_MEDIA_TYPE *mt, struct wg_form
+         return false;
+     }
+ 
+-    format->major_type = WG_MAJOR_TYPE_VIDEO_CINEPAK;
++    format->major_type = WG_MAJOR_TYPE_VIDEO_INDEO;
+     if (IsEqualGUID(&mt->subtype, &MEDIASUBTYPE_IV50))
+         format->u.video.version = 5;
+     format->u.video.width = video_format->bmiHeader.biWidth;
+diff --git a/dlls/winegstreamer/wg_parser.c b/dlls/winegstreamer/wg_parser.c
+index ea6cc70..0b1f2b7 100644
+--- a/dlls/winegstreamer/wg_parser.c
++++ b/dlls/winegstreamer/wg_parser.c
+@@ -97,7 +97,7 @@ struct wg_parser
+ 
+     struct input_cache_chunk input_cache_chunks[4];
+ };
+-static const unsigned int input_cache_chunk_size = 512 << 10;
++static const unsigned int input_cache_chunk_size = 256 << 10;
+ 
+ struct wg_parser_stream
+ {
+@@ -1251,9 +1251,6 @@ static GstFlowReturn src_getrange_cb(GstPad *pad, GstObject *parent,
+         return GST_FLOW_OK;
+     }
+ 
+-    if (size >= input_cache_chunk_size || sizeof(void*) == 4)
+-        return issue_read_request(parser, offset, size, buffer);
+-
+     if (offset >= parser->file_size)
+         return GST_FLOW_EOS;
+ 
+diff --git a/dlls/winegstreamer/wm_reader.c b/dlls/winegstreamer/wm_reader.c
+index b5065c5..677cc0f 100644
+--- a/dlls/winegstreamer/wm_reader.c
++++ b/dlls/winegstreamer/wm_reader.c
+@@ -1054,7 +1054,7 @@ static HRESULT WINAPI header_info_GetAttributeByName(IWMHeaderInfo3 *iface, WORD
+     {
+         if (*stream_number)
+         {
+-            WARN("Requesting duration for stream %u, returning ASF_E_NOTFOUND.\n", *stream_number);
++            WARN("Requesting seekable attribute for stream %u, returning ASF_E_NOTFOUND.\n", *stream_number);
+             return ASF_E_NOTFOUND;
+         }
+ 
+@@ -1204,7 +1204,7 @@ static HRESULT WINAPI header_info_AddCodecInfo(IWMHeaderInfo3 *iface, const WCHA
+         const WCHAR *desc, WMT_CODEC_INFO_TYPE type, WORD size, BYTE *info)
+ {
+     FIXME("iface %p, name %s, desc %s, type %#x, size %u, info %p, stub!\n",
+-            info, debugstr_w(name), debugstr_w(desc), type, size, info);
++            iface, debugstr_w(name), debugstr_w(desc), type, size, info);
+     return E_NOTIMPL;
+ }
+ 
+diff --git a/dlls/xmllite/writer.c b/dlls/xmllite/writer.c
+index c96b8ee..4c4ce7e 100644
+--- a/dlls/xmllite/writer.c
++++ b/dlls/xmllite/writer.c
+@@ -2041,15 +2041,15 @@ static HRESULT WINAPI xmlwriter_WriteRawChars(IXmlWriter *iface,  const WCHAR *c
+         write_xmldecl(writer, XmlStandalone_Omit, &hr);
+         break;
+     case XmlWriterState_ElemStarted:
+-        writer_close_starttag(writer);
++        hr = writer_close_starttag(writer);
+     default:
+         ;
+     }
+ 
+-    while (length)
++    while (SUCCEEDED(hr) && length)
+     {
+-        if (FAILED(hr = writer_get_next_write_count(characters, length, &count))) return hr;
+-        if (FAILED(hr = write_output_buffer(writer->output, characters, count))) return hr;
++        if (FAILED(hr = writer_get_next_write_count(characters, length, &count))) break;
++        if (FAILED(hr = write_output_buffer(writer->output, characters, count))) break;
+ 
+         characters += count;
+         length -= count;

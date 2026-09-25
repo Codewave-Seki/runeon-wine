@@ -1,0 +1,933 @@
+From: Wine upstream contributors (see commit list)
+Subject: [PATCH] Backport targeted Wine 11.16 fixes.
+
+Squashed backport of 20 WineHQ commits first released in wine-11.16, applied in upstream
+order on top of cx26.3-wine11.0-runeon.11 patches 0001-0106. Test-only hunks are omitted.
+No production-code adaptation was needed; every commit applied without fuzz.
+
+  0586396004 Nikolay Sivov: oleaut32/typelib: Make it possible to Invoke() through COCLASS type.
+  7465fd0aeb Alex Henrie: riched20: Set value to 0 in TextPara_GetAlignment.
+  3ddad62c16 Hans Leidekker: crypt32: Support CertGetCertificateContextProperty(CERT_SIGN_HASH_CNG_ALG_PROP_ID).
+  2974626684 Alistair Leslie-Hughes: wintrust: Add parameter check in WTHelperGetProvCertFromChain.
+  c5f29253cd Tobiasz Laskowski: comctl32/listbox: Fix SetRedraw top item handling.
+  d173753872 Tobiasz Laskowski: user32/listbox: Fix SetRedraw top item handling.
+  f24946d9fa Nikolay Sivov: comctl32/tab: Ignore negative index TCM_SETCURFOCUS for TCS_BUTTONS controls.
+  5c286288d9 Nikolay Sivov: comctl32/tab: Fix switching focus from unset state.
+  77369a5940 Nikolay Sivov: comctl32/tab: Update item pressed state on focus change.
+  4f2a41bdbe Paul Gofman: winhttp: Support WINHTTP_QUERY_FLAG_NUMBER64 with WINHTTP_QUERY_CONTENT_LENGTH.
+  f772f41b72 Henri Verbeet: d3dcompiler_46: Return E_NOINTERFACE from D3DReflect() for unsupported interfaces.
+  9ffdbb1f7a Conor McCarthy: wbemdisp: Handle null output pointer in enumvar_Next().
+  26d58dbe0e Conor McCarthy: wbemdisp: Add ISWbemObjectPath stub implementation.
+  929b2a19cb Conor McCarthy: wbemdisp: Partially implement get ISWbemObjectPath::DisplayName.
+  e1ecc5daab Conor McCarthy: wbemdisp: Implement ISWbemObject::GetTypeInfo().
+  181b6b984e Conor McCarthy: wbemdisp: Return null object on failure of QueryInterface().
+  7bc5e1b9de Tobiasz Laskowski: gdiplus/metafile: Allow drawimage without attributes.
+  01e1aeaa3c Stefan Dösinger: wined3d: Don't delay-clear backbuffers except to black.
+  8fd185f06b Francisco Casas: wined3d: Don't call vulkan functions with 0 attachments on wined3d_context_vk_update_blend_state().
+  d20b224e0b Tobiasz Laskowski: gdiplus/metafile: Fix emf+ image rendering.
+
+diff --git a/dlls/comctl32/tab.c b/dlls/comctl32/tab.c
+index 3a964c4..80b38b6 100644
+--- a/dlls/comctl32/tab.c
++++ b/dlls/comctl32/tab.c
+@@ -276,13 +276,16 @@ static LRESULT TAB_SetCurFocus (TAB_INFO *infoPtr, INT iItem)
+   TRACE("(%p %d)\n", infoPtr, iItem);
+ 
+   if (iItem < 0) {
+-      infoPtr->uFocus = -1;
+-      if (infoPtr->iSelected != -1) {
+-          infoPtr->iSelected = -1;
+-          TAB_SendSimpleNotify(infoPtr, TCN_SELCHANGE);
+-          TAB_InvalidateTabArea(infoPtr);
+-          if (!(infoPtr->dwStyle & TCS_BUTTONS))
+-            NotifyWinEvent(EVENT_OBJECT_SELECTION, infoPtr->hwnd, OBJID_CLIENT, 0);
++      if (!(infoPtr->dwStyle & TCS_BUTTONS))
++      {
++          infoPtr->uFocus = -1;
++          if (infoPtr->iSelected != -1) {
++              infoPtr->iSelected = -1;
++              TAB_SendSimpleNotify(infoPtr, TCN_SELCHANGE);
++              TAB_InvalidateTabArea(infoPtr);
++              if (!(infoPtr->dwStyle & TCS_BUTTONS))
++                NotifyWinEvent(EVENT_OBJECT_SELECTION, infoPtr->hwnd, OBJID_CLIENT, 0);
++          }
+       }
+   }
+   else if (iItem < infoPtr->uNumItem) {
+@@ -305,21 +308,24 @@ static LRESULT TAB_SetCurFocus (TAB_INFO *infoPtr, INT iItem)
+         TAB_SendSimpleNotify(infoPtr, TCN_FOCUSCHANGE);
+         NotifyWinEvent(EVENT_OBJECT_FOCUS, infoPtr->hwnd, OBJID_CLIENT, iItem + 1);
+       }
+-    } else {
+-      INT oldFocus = infoPtr->uFocus;
+-      if (infoPtr->iSelected != iItem || oldFocus == -1 ) {
+-        infoPtr->uFocus = iItem;
+-        if (oldFocus != -1) {
+-          if (!TAB_SendSimpleNotify(infoPtr, TCN_SELCHANGING))  {
+-            infoPtr->iSelected = iItem;
+-            TAB_SendSimpleNotify(infoPtr, TCN_SELCHANGE);
+-          }
+-          else
+-            infoPtr->iSelected = iItem;
+-          TAB_EnsureSelectionVisible(infoPtr);
+-          TAB_InvalidateTabArea(infoPtr);
+-          NotifyWinEvent(EVENT_OBJECT_SELECTION, infoPtr->hwnd, OBJID_CLIENT, iItem + 1);
++    }
++    else
++    {
++      infoPtr->uFocus = iItem;
++      if (infoPtr->iSelected != iItem)
++      {
++        if (infoPtr->iSelected != -1)
++          TAB_GetItem(infoPtr, infoPtr->iSelected)->dwState &= ~TCIS_BUTTONPRESSED;
++        TAB_GetItem(infoPtr, iItem)->dwState |= TCIS_BUTTONPRESSED;
++        if (!TAB_SendSimpleNotify(infoPtr, TCN_SELCHANGING))  {
++          infoPtr->iSelected = iItem;
++          TAB_SendSimpleNotify(infoPtr, TCN_SELCHANGE);
+         }
++        else
++          infoPtr->iSelected = iItem;
++        TAB_EnsureSelectionVisible(infoPtr);
++        TAB_InvalidateTabArea(infoPtr);
++        NotifyWinEvent(EVENT_OBJECT_SELECTION, infoPtr->hwnd, OBJID_CLIENT, iItem + 1);
+       }
+     }
+   }
+diff --git a/dlls/comctl32_v6/listbox.c b/dlls/comctl32_v6/listbox.c
+index 43fe7cd..2165f16 100644
+--- a/dlls/comctl32_v6/listbox.c
++++ b/dlls/comctl32_v6/listbox.c
+@@ -729,10 +729,7 @@ static void LISTBOX_SetRedraw( LB_DESCR *descr, BOOL on )
+         {     /* page was changed while setredraw false, refresh automatically */
+             InvalidateRect(descr->self, NULL, TRUE);
+             if ((descr->top_item + descr->page_size) > descr->nb_items)
+-            {      /* reset top of page if less than number of items/page */
+-                descr->top_item = descr->nb_items - descr->page_size;
+-                if (descr->top_item < 0) descr->top_item = 0;
+-            }
++                descr->top_item = LISTBOX_GetMaxTopIndex(descr);
+             descr->style &= ~LBS_DISPLAYCHANGED;
+         }
+         LISTBOX_UpdateScroll( descr );
+diff --git a/dlls/crypt32/cert.c b/dlls/crypt32/cert.c
+index 7f8f496..21bacf6 100644
+--- a/dlls/crypt32/cert.c
++++ b/dlls/crypt32/cert.c
+@@ -623,6 +623,20 @@ static BOOL CertContext_GetProperty(cert_t *cert, DWORD dwPropId,
+     return ret;
+ }
+ 
++static const WCHAR *get_cng_sign_alg( const char *oid )
++{
++    if (!strcmp( oid, szOID_RSA_SHA1RSA ) || !strcmp( oid, szOID_OIWSEC_sha1RSASign )) return L"RSA/SHA1";
++    if (!strcmp( oid, szOID_RSA_SHA256RSA )) return L"RSA/SHA256";
++    if (!strcmp( oid, szOID_RSA_SHA384RSA )) return L"RSA/SHA384";
++    if (!strcmp( oid, szOID_RSA_SHA512RSA )) return L"RSA/SHA512";
++    if (!strcmp( oid, szOID_ECDSA_SHA256 ))  return L"ECDSA/SHA256";
++    if (!strcmp( oid, szOID_ECDSA_SHA384 ))  return L"ECDSA/SHA384";
++    if (!strcmp( oid, szOID_ECDSA_SHA512 ))  return L"ECDSA/SHA512";
++
++    FIXME( "unhandled oid %s\n", debugstr_a(oid) );
++    return NULL;
++}
++
+ BOOL WINAPI CertGetCertificateContextProperty(PCCERT_CONTEXT pCertContext,
+  DWORD dwPropId, void *pvData, DWORD *pcbData)
+ {
+@@ -660,6 +674,19 @@ BOOL WINAPI CertGetCertificateContextProperty(PCCERT_CONTEXT pCertContext,
+         if (ret && pvData)
+             fix_KeyProvInfoProperty(pvData);
+         break;
++    case CERT_SIGN_HASH_CNG_ALG_PROP_ID:
++    {
++        const WCHAR *alg = get_cng_sign_alg(cert->ctx.pCertInfo->SignatureAlgorithm.pszObjId);
++
++        if (alg)
++            ret = CertContext_CopyParam(pvData, pcbData, alg, (wcslen(alg) + 1) * sizeof(WCHAR));
++        else
++        {
++            SetLastError(CRYPT_E_NOT_FOUND);
++            ret = FALSE;
++        }
++        break;
++    }
+     default:
+         ret = CertContext_GetProperty(cert, dwPropId, pvData,
+          pcbData);
+diff --git a/dlls/d3dcompiler_43/reflection.c b/dlls/d3dcompiler_43/reflection.c
+index 21b367f..c755eb2 100644
+--- a/dlls/d3dcompiler_43/reflection.c
++++ b/dlls/d3dcompiler_43/reflection.c
+@@ -2030,7 +2030,7 @@ HRESULT WINAPI D3DReflect(const void *data, SIZE_T data_size, REFIID riid, void
+             && (D3D_COMPILER_VERSION < 47 || !IsEqualGUID(riid, &IID_ID3D12ShaderReflection)))
+     {
+         WARN("Wrong riid %s, accept only %s!\n", debugstr_guid(riid), debugstr_guid(&IID_ID3D11ShaderReflection));
+-#if D3D_COMPILER_VERSION >= 46
++#if D3D_COMPILER_VERSION >= 47
+         return E_INVALIDARG;
+ #else
+         return E_NOINTERFACE;
+diff --git a/dlls/gdiplus/metafile.c b/dlls/gdiplus/metafile.c
+index a786297..de4d37f 100644
+--- a/dlls/gdiplus/metafile.c
++++ b/dlls/gdiplus/metafile.c
+@@ -3216,6 +3216,7 @@ GpStatus WINGDIPAPI GdipPlayMetafileRecord(GDIPCONST GpMetafile *metafile,
+         {
+             EmfPlusDrawImage *draw = (EmfPlusDrawImage *)header;
+             BYTE image = flags & 0xff;
++            GpImageAttributes *attributes;
+             GpPointF points[3];
+ 
+             if (image >= EmfPlusObjectTableSize || real_metafile->objtable[image].type != ObjectTypeImage)
+@@ -3227,7 +3228,9 @@ GpStatus WINGDIPAPI GdipPlayMetafileRecord(GDIPCONST GpMetafile *metafile,
+ 
+             if (draw->ImageAttributesID >= EmfPlusObjectTableSize ||
+                     real_metafile->objtable[draw->ImageAttributesID].type != ObjectTypeImageAttributes)
+-                return InvalidParameter;
++                attributes = NULL;
++            else
++                attributes = real_metafile->objtable[draw->ImageAttributesID].u.image_attributes;
+ 
+             if (flags & 0x4000) /* C */
+             {
+@@ -3235,8 +3238,8 @@ GpStatus WINGDIPAPI GdipPlayMetafileRecord(GDIPCONST GpMetafile *metafile,
+                 points[0].Y = draw->RectData.rect.Y;
+                 points[1].X = points[0].X + draw->RectData.rect.Width;
+                 points[1].Y = points[0].Y;
+-                points[2].X = points[1].X;
+-                points[2].Y = points[1].Y + draw->RectData.rect.Height;
++                points[2].X = points[0].X;
++                points[2].Y = points[0].Y + draw->RectData.rect.Height;
+             }
+             else
+             {
+@@ -3244,13 +3247,13 @@ GpStatus WINGDIPAPI GdipPlayMetafileRecord(GDIPCONST GpMetafile *metafile,
+                 points[0].Y = draw->RectData.rectF.Y;
+                 points[1].X = points[0].X + draw->RectData.rectF.Width;
+                 points[1].Y = points[0].Y;
+-                points[2].X = points[1].X;
+-                points[2].Y = points[1].Y + draw->RectData.rectF.Height;
++                points[2].X = points[0].X;
++                points[2].Y = points[0].Y + draw->RectData.rectF.Height;
+             }
+ 
+             return GdipDrawImagePointsRect(real_metafile->playback_graphics, real_metafile->objtable[image].u.image,
+                 points, 3, draw->SrcRect.X, draw->SrcRect.Y, draw->SrcRect.Width, draw->SrcRect.Height, draw->SrcUnit,
+-                real_metafile->objtable[draw->ImageAttributesID].u.image_attributes, NULL, NULL);
++                attributes, NULL, NULL);
+         }
+         case EmfPlusRecordTypeDrawImagePoints:
+         {
+@@ -3258,6 +3261,7 @@ GpStatus WINGDIPAPI GdipPlayMetafileRecord(GDIPCONST GpMetafile *metafile,
+             static const UINT fixed_part_size = FIELD_OFFSET(EmfPlusDrawImagePoints, PointData) -
+                 FIELD_OFFSET(EmfPlusDrawImagePoints, ImageAttributesID);
+             BYTE image = flags & 0xff;
++            GpImageAttributes* attributes;
+             GpPointF points[3];
+             unsigned int i;
+             UINT size;
+@@ -3271,7 +3275,9 @@ GpStatus WINGDIPAPI GdipPlayMetafileRecord(GDIPCONST GpMetafile *metafile,
+ 
+             if (draw->ImageAttributesID >= EmfPlusObjectTableSize ||
+                     real_metafile->objtable[draw->ImageAttributesID].type != ObjectTypeImageAttributes)
+-                return InvalidParameter;
++                attributes = NULL;
++            else
++                attributes = real_metafile->objtable[draw->ImageAttributesID].u.image_attributes;
+ 
+             if (draw->count != 3)
+                 return InvalidParameter;
+@@ -3312,7 +3318,7 @@ GpStatus WINGDIPAPI GdipPlayMetafileRecord(GDIPCONST GpMetafile *metafile,
+ 
+             return GdipDrawImagePointsRect(real_metafile->playback_graphics, real_metafile->objtable[image].u.image,
+                 points, 3, draw->SrcRect.X, draw->SrcRect.Y, draw->SrcRect.Width, draw->SrcRect.Height, draw->SrcUnit,
+-                real_metafile->objtable[draw->ImageAttributesID].u.image_attributes, NULL, NULL);
++                attributes, NULL, NULL);
+         }
+         case EmfPlusRecordTypeFillPath:
+         {
+diff --git a/dlls/oleaut32/typelib.c b/dlls/oleaut32/typelib.c
+index c4f00ca..1c481de 100644
+--- a/dlls/oleaut32/typelib.c
++++ b/dlls/oleaut32/typelib.c
+@@ -7646,7 +7646,10 @@ func_fail:
+ 
+     /* not found, look for it in inherited interfaces */
+     ITypeInfo2_GetTypeKind(iface, &type_kind);
+-    if(type_kind == TKIND_INTERFACE || type_kind == TKIND_DISPATCH) {
++    if (type_kind == TKIND_INTERFACE
++            || type_kind == TKIND_DISPATCH
++            || type_kind == TKIND_COCLASS)
++    {
+         if(This->impltypes) {
+             /* recursive search */
+             ITypeInfo *pTInfo;
+diff --git a/dlls/riched20/richole.c b/dlls/riched20/richole.c
+index 51ae41d..856f158 100644
+--- a/dlls/riched20/richole.c
++++ b/dlls/riched20/richole.c
+@@ -3678,6 +3678,7 @@ static HRESULT WINAPI TextPara_GetAlignment(ITextPara *iface, LONG *value)
+ {
+     ITextParaImpl *This = impl_from_ITextPara(iface);
+     FIXME("(%p)->(%p)\n", This, value);
++    if (value) *value = 0;
+     return E_NOTIMPL;
+ }
+ 
+diff --git a/dlls/user32/listbox.c b/dlls/user32/listbox.c
+index a43c3c9..bd7d2c3 100644
+--- a/dlls/user32/listbox.c
++++ b/dlls/user32/listbox.c
+@@ -728,10 +728,7 @@ static void LISTBOX_SetRedraw( LB_DESCR *descr, BOOL on )
+         {     /* page was changed while setredraw false, refresh automatically */
+             NtUserInvalidateRect(descr->self, NULL, TRUE);
+             if ((descr->top_item + descr->page_size) > descr->nb_items)
+-            {      /* reset top of page if less than number of items/page */
+-                descr->top_item = descr->nb_items - descr->page_size;
+-                if (descr->top_item < 0) descr->top_item = 0;
+-            }
++                descr->top_item = LISTBOX_GetMaxTopIndex(descr);
+             descr->style &= ~LBS_DISPLAYCHANGED;
+         }
+         LISTBOX_UpdateScroll( descr );
+diff --git a/dlls/wbemdisp/locator.c b/dlls/wbemdisp/locator.c
+index c3e0c86..c3ad6fa 100644
+--- a/dlls/wbemdisp/locator.c
++++ b/dlls/wbemdisp/locator.c
+@@ -55,6 +55,7 @@ struct services;
+ static HRESULT EnumVARIANT_create( struct services *, IEnumWbemClassObject *, IEnumVARIANT ** );
+ static HRESULT ISWbemSecurity_create( ISWbemSecurity ** );
+ static HRESULT SWbemObject_create( struct services *, IWbemClassObject *, ISWbemObject ** );
++static HRESULT SWbemObjectPath_create( IWbemClassObject *, ISWbemObjectPath ** );
+ 
+ enum type_id
+ {
+@@ -69,6 +70,7 @@ enum type_id
+     ISWbemNamedValue_tid,
+     ISWbemMethodSet_tid,
+     ISWbemMethod_tid,
++    ISWbemObjectPath_tid,
+     last_tid
+ };
+ 
+@@ -88,6 +90,7 @@ static REFIID wbemdisp_tid_id[] =
+     &IID_ISWbemNamedValue,
+     &IID_ISWbemMethodSet,
+     &IID_ISWbemMethod,
++    &IID_ISWbemObjectPath,
+ };
+ 
+ static HRESULT get_typeinfo( enum type_id tid, ITypeInfo **ret )
+@@ -173,6 +176,7 @@ static HRESULT WINAPI property_QueryInterface( ISWbemProperty *iface, REFIID rii
+     else
+     {
+         WARN( "interface %s not implemented\n", debugstr_guid(riid) );
++        *obj = NULL;
+         return E_NOINTERFACE;
+     }
+     ISWbemProperty_AddRef( iface );
+@@ -372,6 +376,7 @@ static HRESULT WINAPI propertyset_QueryInterface( ISWbemPropertySet *iface,
+     else
+     {
+         WARN( "interface %s not implemented\n", debugstr_guid(riid) );
++        *obj = NULL;
+         return E_NOINTERFACE;
+     }
+     ISWbemPropertySet_AddRef( iface );
+@@ -584,6 +589,7 @@ static HRESULT WINAPI method_QueryInterface( ISWbemMethod *iface, REFIID riid, v
+     else
+     {
+         WARN( "interface %s not implemented\n", debugstr_guid(riid) );
++        *ppvObject = NULL;
+         return E_NOINTERFACE;
+     }
+     ISWbemMethod_AddRef( iface );
+@@ -807,6 +813,7 @@ static HRESULT WINAPI methodset_QueryInterface( ISWbemMethodSet *iface, REFIID r
+     else
+     {
+         WARN( "interface %s not implemented\n", debugstr_guid(riid) );
++        *ppvObject = NULL;
+         return E_NOINTERFACE;
+     }
+     ISWbemMethodSet_AddRef( iface );
+@@ -1037,6 +1044,7 @@ static HRESULT WINAPI object_QueryInterface(
+     else
+     {
+         WARN( "interface %s not implemented\n", debugstr_guid(riid) );
++        *ppvObject = NULL;
+         return E_NOINTERFACE;
+     }
+     ISWbemObject_AddRef( iface );
+@@ -1061,8 +1069,8 @@ static HRESULT WINAPI object_GetTypeInfo(
+     ITypeInfo **info )
+ {
+     struct object *object = impl_from_ISWbemObject( iface );
+-    FIXME( "%p, %u, %#lx, %p\n", object, index, lcid, info );
+-    return E_NOTIMPL;
++    TRACE( "%p, %u, %#lx, %p\n", object, index, lcid, info );
++    return get_typeinfo( ISWbemObject_tid, info );
+ }
+ 
+ static BOOL object_reserve_member( struct object *object, unsigned int count, unsigned int *capacity )
+@@ -1600,8 +1608,8 @@ static HRESULT WINAPI object_get_Path_(
+     ISWbemObject *iface,
+     ISWbemObjectPath **objWbemObjectPath )
+ {
+-    FIXME( "\n" );
+-    return E_NOTIMPL;
++    struct object *object = impl_from_ISWbemObject( iface );
++    return SWbemObjectPath_create( object->object, objWbemObjectPath );
+ }
+ 
+ static HRESULT WINAPI object_get_Security_(
+@@ -1739,6 +1747,7 @@ static HRESULT WINAPI objectset_QueryInterface(
+     else
+     {
+         WARN( "interface %s not implemented\n", debugstr_guid(riid) );
++        *ppvObject = NULL;
+         return E_NOINTERFACE;
+     }
+     ISWbemObjectSet_AddRef( iface );
+@@ -2006,6 +2015,7 @@ static HRESULT WINAPI enumvar_QueryInterface(
+     else
+     {
+         WARN( "interface %s not implemented\n", debugstr_guid(riid) );
++        *ppvObject = NULL;
+         return E_NOINTERFACE;
+     }
+     IEnumVARIANT_AddRef( iface );
+@@ -2020,6 +2030,8 @@ static HRESULT WINAPI enumvar_Next( IEnumVARIANT *iface, ULONG celt, VARIANT *va
+ 
+     TRACE( "%p, %lu, %p, %p\n", iface, celt, var, fetched );
+ 
++    if (!var) return S_FALSE;
++
+     if (celt) IEnumWbemClassObject_Next( enumvar->objectenum, WBEM_INFINITE, 1, &obj, &count );
+     if (count)
+     {
+@@ -2135,6 +2147,7 @@ static HRESULT WINAPI services_QueryInterface(
+     else
+     {
+         WARN( "interface %s not implemented\n", debugstr_guid(riid) );
++        *ppvObject = NULL;
+         return E_NOINTERFACE;
+     }
+     ISWbemServices_AddRef( iface );
+@@ -2640,6 +2653,7 @@ static HRESULT WINAPI locator_QueryInterface(
+     else
+     {
+         WARN( "interface %s not implemented\n", debugstr_guid(riid) );
++        *ppvObject = NULL;
+         return E_NOINTERFACE;
+     }
+     ISWbemLocator_AddRef( iface );
+@@ -2879,6 +2893,7 @@ static HRESULT WINAPI security_QueryInterface(
+     else
+     {
+         WARN( "interface %s not implemented\n", debugstr_guid(riid) );
++        *ppvObject = NULL;
+         return E_NOINTERFACE;
+     }
+     ISWbemSecurity_AddRef( iface );
+@@ -3091,6 +3106,7 @@ static HRESULT WINAPI namedvalue_QueryInterface(
+     else
+     {
+         WARN( "interface %s not implemented\n", debugstr_guid(riid) );
++        *ppvObject = NULL;
+         return E_NOINTERFACE;
+     }
+     ISWbemNamedValue_AddRef( iface );
+@@ -3267,6 +3283,7 @@ static HRESULT WINAPI namedvalueset_QueryInterface(
+     else
+     {
+         WARN( "interface %s not implemented\n", debugstr_guid(riid) );
++        *ppvObject = NULL;
+         return E_NOINTERFACE;
+     }
+     ISWbemNamedValueSet_AddRef( iface );
+@@ -3517,3 +3534,338 @@ HRESULT SWbemNamedValueSet_create( void **obj )
+     TRACE( "returning iface %p\n", *obj );
+     return hr;
+ }
++
++struct objectpath
++{
++    ISWbemObjectPath ISWbemObjectPath_iface;
++    LONG refs;
++    IWbemPath *path;
++};
++
++static struct objectpath *impl_from_ISWbemObjectPath( ISWbemObjectPath *iface )
++{
++    return CONTAINING_RECORD( iface, struct objectpath, ISWbemObjectPath_iface );
++}
++
++static HRESULT WINAPI objectpath_QueryInterface( ISWbemObjectPath *iface, REFIID riid, void **ppvObject )
++{
++    struct objectpath *objectpath = impl_from_ISWbemObjectPath( iface );
++
++    TRACE( "%p %s %p\n", objectpath, debugstr_guid( riid ), ppvObject );
++
++    if (IsEqualGUID( riid, &IID_ISWbemObjectPath ) ||
++        IsEqualGUID( riid, &IID_IDispatch ) ||
++        IsEqualGUID( riid, &IID_IUnknown ))
++    {
++        *ppvObject = iface;
++    }
++    else
++    {
++        WARN( "interface %s not implemented\n", debugstr_guid( riid ) );
++        *ppvObject = NULL;
++        return E_NOINTERFACE;
++    }
++
++    ISWbemObjectPath_AddRef( iface );
++    return S_OK;
++}
++
++static ULONG WINAPI objectpath_AddRef( ISWbemObjectPath *iface )
++{
++    struct objectpath *objectpath = impl_from_ISWbemObjectPath( iface );
++    return InterlockedIncrement( &objectpath->refs );
++}
++
++static ULONG WINAPI objectpath_Release( ISWbemObjectPath *iface )
++{
++    struct objectpath *objectpath = impl_from_ISWbemObjectPath( iface );
++    LONG refs = InterlockedDecrement( &objectpath->refs );
++
++    if (!refs)
++    {
++        TRACE( "destroying %p\n", objectpath );
++        IWbemPath_Release( objectpath->path );
++        free( objectpath );
++    }
++
++    return refs;
++}
++
++static HRESULT WINAPI objectpath_GetTypeInfoCount( ISWbemObjectPath *iface, UINT *count )
++{
++    struct objectpath *objectpath = impl_from_ISWbemObjectPath( iface );
++
++    TRACE( "%p, %p\n", objectpath, count );
++
++    *count = 1;
++    return S_OK;
++}
++
++static HRESULT WINAPI objectpath_GetTypeInfo( ISWbemObjectPath *iface, UINT index, LCID lcid, ITypeInfo **info )
++{
++    struct objectpath *objectpath = impl_from_ISWbemObjectPath( iface );
++
++    TRACE( "%p, %u, %#lx, %p\n", objectpath, index, lcid, info );
++
++    return get_typeinfo( ISWbemObjectPath_tid, info );
++}
++
++static HRESULT WINAPI objectpath_GetIDsOfNames( ISWbemObjectPath *iface, REFIID riid,
++        LPOLESTR *names, UINT count, LCID lcid, DISPID *dispid )
++{
++    struct objectpath *objectpath = impl_from_ISWbemObjectPath( iface );
++    ITypeInfo *typeinfo;
++    HRESULT hr;
++
++    TRACE( "%p, %s, %p, %u, %#lx, %p\n", objectpath, debugstr_guid( riid ), names, count, lcid, dispid );
++
++    if (!names || !count || !dispid) return E_INVALIDARG;
++
++    hr = get_typeinfo( ISWbemObjectPath_tid, &typeinfo );
++    if (SUCCEEDED(hr))
++    {
++        hr = ITypeInfo_GetIDsOfNames( typeinfo, names, count, dispid );
++        ITypeInfo_Release( typeinfo );
++    }
++    return hr;
++}
++
++static HRESULT WINAPI objectpath_Invoke( ISWbemObjectPath *iface, DISPID member, REFIID riid, LCID lcid,
++        WORD flags, DISPPARAMS *params, VARIANT *result, EXCEPINFO *excep_info, UINT *arg_err )
++{
++    struct objectpath *objectpath = impl_from_ISWbemObjectPath( iface );
++    ITypeInfo *typeinfo;
++    HRESULT hr;
++
++    TRACE( "%p, %ld, %s, %#lx, %#x, %p, %p, %p, %p\n", objectpath, member, debugstr_guid( riid ),
++            lcid, flags, params, result, excep_info, arg_err );
++
++    hr = get_typeinfo( ISWbemObjectPath_tid, &typeinfo );
++    if (SUCCEEDED(hr))
++    {
++        hr = ITypeInfo_Invoke( typeinfo, &objectpath->ISWbemObjectPath_iface, member, flags,
++                params, result, excep_info, arg_err );
++        ITypeInfo_Release( typeinfo );
++    }
++    return hr;
++}
++
++static HRESULT WINAPI objectpath_get_Path( ISWbemObjectPath *iface, BSTR *strPath )
++{
++    FIXME( "\n" );
++    return E_NOTIMPL;
++}
++
++static HRESULT WINAPI objectpath_put_Path( ISWbemObjectPath *iface, BSTR strPath )
++{
++    FIXME( "\n" );
++    return E_NOTIMPL;
++}
++
++static HRESULT WINAPI objectpath_get_RelPath( ISWbemObjectPath *iface, BSTR *strRelPath )
++{
++    FIXME( "\n" );
++    return E_NOTIMPL;
++}
++
++static HRESULT WINAPI objectpath_put_RelPath( ISWbemObjectPath *iface, BSTR strRelPath )
++{
++    FIXME( "\n" );
++    return E_NOTIMPL;
++}
++
++static HRESULT WINAPI objectpath_get_Server( ISWbemObjectPath *iface, BSTR *strServer )
++{
++    FIXME( "\n" );
++    return E_NOTIMPL;
++}
++
++static HRESULT WINAPI objectpath_put_Server( ISWbemObjectPath *iface, BSTR strServer )
++{
++    FIXME( "\n" );
++    return E_NOTIMPL;
++}
++
++static HRESULT WINAPI objectpath_get_Namespace( ISWbemObjectPath *iface, BSTR *strNamespace )
++{
++    FIXME( "\n" );
++    return E_NOTIMPL;
++}
++
++static HRESULT WINAPI objectpath_put_Namespace( ISWbemObjectPath *iface, BSTR strNamespace )
++{
++    FIXME( "\n" );
++    return E_NOTIMPL;
++}
++
++static HRESULT WINAPI objectpath_get_ParentNamespace( ISWbemObjectPath *iface, BSTR *strParentNamespace )
++{
++    FIXME( "\n" );
++    return E_NOTIMPL;
++}
++
++static HRESULT WINAPI objectpath_get_DisplayName( ISWbemObjectPath *iface, BSTR *strDisplayName )
++{
++    struct objectpath *objectpath = impl_from_ISWbemObjectPath( iface );
++    ULONG len = 0;
++    WCHAR *buf;
++    HRESULT hr;
++
++    FIXME( "%p, %p semi-stub\n", objectpath, strDisplayName );
++
++    if (FAILED( hr = IWbemPath_GetText( objectpath->path, WBEMPATH_GET_SERVER_TOO, &len, NULL ) )) return hr;
++    if (!(buf = SysAllocStringLen( L"winmgmts:", len + ARRAY_SIZE( L"winmgmts:" ) - 2 ) )) return E_OUTOFMEMORY;
++    /* TODO: add 'authenticationLevel' and 'impersonationLevel' from the security object. Native also
++     * includes 'Name', 'SoftwareElementID', 'SoftwareElementState' and 'TargetOperatingSystem' values.
++     * The last three are currently missing from the properties. */
++    if (FAILED( hr = IWbemPath_GetText( objectpath->path, WBEMPATH_GET_SERVER_TOO, &len, buf + wcslen( buf ) ) ))
++    {
++        SysFreeString( buf );
++        buf = NULL;
++    }
++
++    *strDisplayName = buf;
++    return hr;
++}
++
++static HRESULT WINAPI objectpath_put_DisplayName( ISWbemObjectPath *iface, BSTR strDisplayName )
++{
++    FIXME( "\n" );
++    return E_NOTIMPL;
++}
++
++static HRESULT WINAPI objectpath_get_Class( ISWbemObjectPath *iface, BSTR *strClass )
++{
++    FIXME( "\n" );
++    return E_NOTIMPL;
++}
++
++static HRESULT WINAPI objectpath_put_Class( ISWbemObjectPath *iface, BSTR strClass )
++{
++    FIXME( "\n" );
++    return E_NOTIMPL;
++}
++
++static HRESULT WINAPI objectpath_get_IsClass( ISWbemObjectPath *iface, VARIANT_BOOL *bIsClass )
++{
++    FIXME( "\n" );
++    return E_NOTIMPL;
++}
++
++static HRESULT WINAPI objectpath_SetAsClass( ISWbemObjectPath *iface )
++{
++    FIXME( "\n" );
++    return E_NOTIMPL;
++}
++
++static HRESULT WINAPI objectpath_get_IsSingleton( ISWbemObjectPath *iface, VARIANT_BOOL *bIsSingleton )
++{
++    FIXME( "\n" );
++    return E_NOTIMPL;
++}
++
++static HRESULT WINAPI objectpath_SetAsSingleton( ISWbemObjectPath *iface )
++{
++    FIXME( "\n" );
++    return E_NOTIMPL;
++}
++
++static HRESULT WINAPI objectpath_get_Keys( ISWbemObjectPath *iface, ISWbemNamedValueSet **objWbemNamedValueSet )
++{
++    FIXME( "\n" );
++    return E_NOTIMPL;
++}
++
++static HRESULT WINAPI objectpath_get_Security_( ISWbemObjectPath *iface, ISWbemSecurity **objWbemSecurity )
++{
++    FIXME( "\n" );
++    return E_NOTIMPL;
++}
++
++static HRESULT WINAPI objectpath_get_Locale( ISWbemObjectPath *iface, BSTR *strLocale )
++{
++    FIXME( "\n" );
++    return E_NOTIMPL;
++}
++
++static HRESULT WINAPI objectpath_put_Locale( ISWbemObjectPath *iface, BSTR strLocale )
++{
++    FIXME( "\n" );
++    return E_NOTIMPL;
++}
++
++static HRESULT WINAPI objectpath_get_Authority( ISWbemObjectPath *iface, BSTR *strAuthority )
++{
++    FIXME( "\n" );
++    return E_NOTIMPL;
++}
++
++static HRESULT WINAPI objectpath_put_Authority( ISWbemObjectPath *iface, BSTR strAuthority )
++{
++    FIXME( "\n" );
++    return E_NOTIMPL;
++}
++
++static const ISWbemObjectPathVtbl objectpath_vtbl =
++{
++    objectpath_QueryInterface,
++    objectpath_AddRef,
++    objectpath_Release,
++    objectpath_GetTypeInfoCount,
++    objectpath_GetTypeInfo,
++    objectpath_GetIDsOfNames,
++    objectpath_Invoke,
++    objectpath_get_Path,
++    objectpath_put_Path,
++    objectpath_get_RelPath,
++    objectpath_put_RelPath,
++    objectpath_get_Server,
++    objectpath_put_Server,
++    objectpath_get_Namespace,
++    objectpath_put_Namespace,
++    objectpath_get_ParentNamespace,
++    objectpath_get_DisplayName,
++    objectpath_put_DisplayName,
++    objectpath_get_Class,
++    objectpath_put_Class,
++    objectpath_get_IsClass,
++    objectpath_SetAsClass,
++    objectpath_get_IsSingleton,
++    objectpath_SetAsSingleton,
++    objectpath_get_Keys,
++    objectpath_get_Security_,
++    objectpath_get_Locale,
++    objectpath_put_Locale,
++    objectpath_get_Authority,
++    objectpath_put_Authority,
++};
++
++static HRESULT SWbemObjectPath_create( IWbemClassObject *object, ISWbemObjectPath **obj )
++{
++    struct objectpath *objectpath;
++    VARIANT var;
++    HRESULT hr;
++
++    TRACE( "%p\n", obj );
++
++    if (!(objectpath = calloc( 1, sizeof(*objectpath) ))) return E_OUTOFMEMORY;
++    objectpath->ISWbemObjectPath_iface.lpVtbl = &objectpath_vtbl;
++    objectpath->refs = 1;
++
++    if (FAILED( hr = CoCreateInstance( &CLSID_WbemDefPath, NULL, CLSCTX_INPROC_SERVER, &IID_IWbemPath,
++            (void **)&objectpath->path ) )) goto error;
++    VariantInit( &var );
++    if (FAILED( hr = IWbemClassObject_Get( object, L"__PATH", 0, &var, NULL, NULL ) )) goto error;
++    if (FAILED( hr = IWbemPath_SetText( objectpath->path, WBEMPATH_CREATE_ACCEPT_ALL, V_BSTR( &var ) ))) goto error;
++    VariantClear( &var );
++
++    *obj = &objectpath->ISWbemObjectPath_iface;
++    TRACE( "returning iface %p\n", *obj );
++    return S_OK;
++
++error:
++    VariantClear( &var );
++    if (objectpath->path) IWbemPath_Release( objectpath->path );
++    free( objectpath );
++    return hr;
++}
+diff --git a/dlls/wbemdisp/main.c b/dlls/wbemdisp/main.c
+index b71efdb..5bc3900 100644
+--- a/dlls/wbemdisp/main.c
++++ b/dlls/wbemdisp/main.c
+@@ -209,6 +209,7 @@ static HRESULT WINAPI factory_QueryInterface( IClassFactory *iface, REFIID riid,
+         return S_OK;
+     }
+     WARN( "interface %s not implemented\n", debugstr_guid(riid) );
++    *obj = NULL;
+     return E_NOINTERFACE;
+ }
+ 
+diff --git a/dlls/wined3d/context_vk.c b/dlls/wined3d/context_vk.c
+index 540a88a..e502af3 100644
+--- a/dlls/wined3d/context_vk.c
++++ b/dlls/wined3d/context_vk.c
+@@ -2646,8 +2646,11 @@ static void wined3d_context_vk_set_dynamic_blend_state(const struct wined3d_cont
+         static const VkColorComponentFlags default_write_mask[WINED3D_MAX_RENDER_TARGETS] = {X, X, X, X, X, X, X, X};
+ #undef X
+ 
+-        VK_CALL(vkCmdSetColorBlendEnableEXT(vk_command_buffer, 0, rt_count, default_enable));
+-        VK_CALL(vkCmdSetColorWriteMaskEXT(vk_command_buffer, 0, rt_count, default_write_mask));
++        if (rt_count)
++        {
++            VK_CALL(vkCmdSetColorBlendEnableEXT(vk_command_buffer, 0, rt_count, default_enable));
++            VK_CALL(vkCmdSetColorWriteMaskEXT(vk_command_buffer, 0, rt_count, default_write_mask));
++        }
+         return;
+     }
+ 
+@@ -2665,9 +2668,12 @@ static void wined3d_context_vk_set_dynamic_blend_state(const struct wined3d_cont
+         blend_equation_from_wined3d(context_vk, &equations[i], rt, state->fb.render_targets[i]);
+     }
+ 
+-    VK_CALL(vkCmdSetColorBlendEnableEXT(vk_command_buffer, 0, rt_count, enable));
+-    VK_CALL(vkCmdSetColorWriteMaskEXT(vk_command_buffer, 0, rt_count, write_mask));
+-    VK_CALL(vkCmdSetColorBlendEquationEXT(vk_command_buffer, 0, rt_count, equations));
++    if (rt_count)
++    {
++        VK_CALL(vkCmdSetColorBlendEnableEXT(vk_command_buffer, 0, rt_count, enable));
++        VK_CALL(vkCmdSetColorWriteMaskEXT(vk_command_buffer, 0, rt_count, write_mask));
++        VK_CALL(vkCmdSetColorBlendEquationEXT(vk_command_buffer, 0, rt_count, equations));
++    }
+ }
+ 
+ static VkFormat vk_format_from_component_type(enum wined3d_component_type component_type)
+diff --git a/dlls/wined3d/texture_vk.c b/dlls/wined3d/texture_vk.c
+index 3148a5c..34db226 100644
+--- a/dlls/wined3d/texture_vk.c
++++ b/dlls/wined3d/texture_vk.c
+@@ -1205,21 +1205,26 @@ static void vk_blitter_clear_rendertargets(struct wined3d_context_vk *context_vk
+ 
+     for (i = 0, attachment_count = 0, layer_count = 1; i < rt_count; ++i)
+     {
++        struct wined3d_texture *texture;
++        bool view_dependent;
++
+         if (!(view = fb->render_targets[i]))
+             continue;
++        texture = texture_from_resource(view->resource);
+ 
+         /* Don't delay typeless clears because the data written into the resource depends on the
+-         * view format. Except all-zero clears, those should result in zeros in either case.
++         * view format. Except all-zero clears, those should result in zeros in either case. The
++         * same applies to swapchain backbuffers as they may have views with an RGB/sRGB mismatch.
+          *
+          * We could store the clear format along with the clear value, but then we'd have to
+          * create a matching RTV at draw time, which would need its own render pass, thus mooting
+          * the point of the delayed clear. (Unless we are lucky enough that the application
+          * draws with the same RTV as it clears.) */
++        view_dependent = wined3d_format_is_typeless(texture->resource.format) || texture->swapchain;
++
+         if (wined3d_rendertarget_view_is_full_clear(view, draw_rect, clear_rects)
+-                && (!wined3d_format_is_typeless(view->resource->format) || (!colour->r && !colour->g
+-                && !colour->b && !colour->a)))
++                && (!view_dependent || (!colour->r && !colour->g && !colour->b && !colour->a)))
+         {
+-            struct wined3d_texture *texture = texture_from_resource(view->resource);
+             wined3d_rendertarget_view_validate_location(view, WINED3D_LOCATION_CLEARED);
+             wined3d_rendertarget_view_invalidate_location(view, ~WINED3D_LOCATION_CLEARED);
+             texture->sub_resources[view->sub_resource_idx].clear_value.colour = *colour;
+diff --git a/dlls/winhttp/request.c b/dlls/winhttp/request.c
+index 9dbfc01..dbd0de4 100644
+--- a/dlls/winhttp/request.c
++++ b/dlls/winhttp/request.c
+@@ -615,7 +615,8 @@ static WCHAR *build_request_string( struct request *request )
+     return ret;
+ }
+ 
+-#define QUERY_MODIFIER_MASK (WINHTTP_QUERY_FLAG_REQUEST_HEADERS | WINHTTP_QUERY_FLAG_SYSTEMTIME | WINHTTP_QUERY_FLAG_NUMBER)
++#define QUERY_MODIFIER_MASK (WINHTTP_QUERY_FLAG_REQUEST_HEADERS | WINHTTP_QUERY_FLAG_SYSTEMTIME | WINHTTP_QUERY_FLAG_NUMBER \
++                             | WINHTTP_QUERY_FLAG_NUMBER64)
+ 
+ static DWORD query_headers( struct request *request, DWORD level, const WCHAR *name, void *buffer, DWORD *buflen,
+                             DWORD *index )
+@@ -771,6 +772,23 @@ static DWORD query_headers( struct request *request, DWORD level, const WCHAR *n
+         }
+         *buflen = sizeof(DWORD);
+     }
++    else if (level & WINHTTP_QUERY_FLAG_NUMBER64)
++    {
++        if (attr != WINHTTP_QUERY_CONTENT_LENGTH)
++        {
++            WARN( "WINHTTP_QUERY_FLAG_NUMBER64 with attr %lu.\n", attr );
++            return ERROR_WINHTTP_INVALID_QUERY_REQUEST;
++        }
++        if (!buffer || sizeof(ULONG64) > *buflen) ret = ERROR_INSUFFICIENT_BUFFER;
++        else
++        {
++            ULONG64 *number = buffer;
++            *number = wcstoull( header->value, NULL, 10 );
++            TRACE( "returning number: %I64u\n", *number );
++            ret = ERROR_SUCCESS;
++        }
++        *buflen = sizeof(ULONG64);
++    }
+     else if (level & WINHTTP_QUERY_FLAG_SYSTEMTIME)
+     {
+         SYSTEMTIME *st = buffer;
+diff --git a/dlls/wintrust/wintrust_main.c b/dlls/wintrust/wintrust_main.c
+index 2292100..a9b1587 100644
+--- a/dlls/wintrust/wintrust_main.c
++++ b/dlls/wintrust/wintrust_main.c
+@@ -759,7 +759,7 @@ CRYPT_PROVIDER_CERT * WINAPI WTHelperGetProvCertFromChain(
+ 
+     TRACE("(%p %ld)\n", pSgnr, idxCert);
+ 
+-    if (idxCert >= pSgnr->csCertChain || !pSgnr->pasCertChain)
++    if (!pSgnr || idxCert >= pSgnr->csCertChain || !pSgnr->pasCertChain)
+         return NULL;
+     cert = &pSgnr->pasCertChain[idxCert];
+     TRACE("returning %p\n", cert);
+diff --git a/include/wincrypt.h b/include/wincrypt.h
+index e3a7ad0..42ee467 100644
+--- a/include/wincrypt.h
++++ b/include/wincrypt.h
+@@ -2594,7 +2594,9 @@ static const WCHAR CERT_PHYSICAL_STORE_AUTH_ROOT_NAME[] =
+ #define CERT_ROOT_PROGRAM_CERT_POLICIES_PROP_ID    83
+ #define CERT_ROOT_PROGRAM_NAME_CONSTRAINTS_PROP_ID 84
+ 
+-#define CERT_FIRST_RESERVED_PROP_ID                85
++#define CERT_SIGN_HASH_CNG_ALG_PROP_ID             89
++
++#define CERT_FIRST_RESERVED_PROP_ID                130
+ #define CERT_LAST_RESERVED_PROP_ID                 0x00007fff
+ #define CERT_FIRST_USER_PROP_ID                    0x00008000
+ #define CERT_LAST_USER_PROP_ID                     0x0000ffff

@@ -1,0 +1,21 @@
+From: Wine upstream contributors
+Subject: [PATCH] imm32: Fix malformed WM_IME_KEYDOWN lParam in ImeToAsciiEx().
+
+Adapted from WineHQ commit a6b3099042 (wine-11.18, Wine-Bug 59737). The
+CrossOver 26.3 base has only the unconsumed-key WM_IME_KEYDOWN branch; the
+later STATUS_NOT_IMPLEMENTED branch does not exist, so only this line changes.
+The scan code belongs in the high word and the repeat count in the low word.
+
+diff --git a/dlls/imm32/ime.c b/dlls/imm32/ime.c
+index 65f46f2..c6e5dfe 100644
+--- a/dlls/imm32/ime.c
++++ b/dlls/imm32/ime.c
+@@ -591,7 +591,7 @@ UINT WINAPI ImeToAsciiEx( UINT vkey, UINT vsc, BYTE *state, TRANSMSGLIST *msgs,
+ 
+         if (!key_consumed)
+         {
+-            TRANSMSG msg = {.message = WM_IME_KEYDOWN, .wParam = vkey, .lParam = vsc};
++            TRANSMSG msg = {.message = WM_IME_KEYDOWN, .wParam = vkey, .lParam = MAKELPARAM( 1, vsc )};
+             msgs->TransMsg[count++] = msg;
+         }
+     }

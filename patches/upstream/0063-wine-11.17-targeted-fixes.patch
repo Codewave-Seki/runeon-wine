@@ -1,0 +1,3750 @@
+From: Wine upstream contributors (see commit list)
+Subject: [PATCH] Backport targeted Wine 11.17 fixes.
+
+Squashed backport of 107 WineHQ commits first released in wine-11.17, applied in upstream
+order on top of cx26.3-wine11.0-runeon.11 patches 0001-0106. Test-only hunks are omitted.
+No production-code adaptation was needed; every commit applied without fuzz.
+
+  d1a2c2e554 Bernhard Übelacker: wbemdisp: Avoid out-of-bounds read in objectpath_get_DisplayName.
+  073eef9c59 Gijs Vermeulen: msi: Pass deformated target to HANDLE_CustomType7 in ACTION_CustomAction.
+  d3305623e1 Nikolay Sivov: comdlg32: Use ReleaseStgMedium() from ole32.
+  4e924da4d5 Nikolay Sivov: msxml3: Implement stylesheet property getter.
+  ddb7e3abd5 Ziia Shi: pdh: Avoid access violation in PdhCloseQuery on bad handle.
+  65d26d9bd4 Hans Leidekker: msi: Propagate ERROR_NO_MORE_ITEMS return from custom actions.
+  c64f5444b0 Hans Leidekker: msi: Handle NULL params in build_msiexec_args().
+  409cab614d Conor McCarthy: wbemdisp: Rename propertyset object to class_object.
+  35d8d95564 Conor McCarthy: wbemdisp: Implement ISWbemPropertySet::NewEnum().
+  c2cc41ca10 Conor McCarthy: wbemdisp: Initialise the variants in enumvar_Next().
+  e4a38dda6c Conor McCarthy: wbemdisp: Implement ISWbemMethodSet::NewEnum().
+  689ba1d5b4 Conor McCarthy: wbemdisp: Implement get ISWbemProperty::Name.
+  994699e2f4 Conor McCarthy: wbemdisp: Add ISWbemQualifierSet stub implementation.
+  f1882083da Conor McCarthy: wbemdisp: Add ISWbemQualifierSet enumerator stub implementation.
+  5c281ca2b2 Ziia Shi: powrprof: Stub PowerReadACValueIndex.
+  fa8c0154c7 Hans Leidekker: wbemdisp: Implement property_get_CIMType().
+  5031aee7c0 Matteo Bruni: d3dx9: Move D3DXSHProjectCubeMap() implementation to texture.c.
+  8997fc06b9 Matteo Bruni: d3dx9: Move some exports from mesh.c to math.c.
+  aa34ad2935 Nikolay Sivov: msxml3: Unconditionally release bind context instance.
+  14ce5342a4 Nikolay Sivov: mfplat: Fix a typo in the async write stream callback.
+  6f61b27db1 Nikolay Sivov: mfplat: Remove duplicated checks from the wrapper stream methods.
+  e6e9d7627c Huoju Cheng: gdiplus: Fix font family lookup after font substitution.
+  519460ea45 Hans Leidekker: winhttp: Use %lu to format unsigned integer in send_request().
+  0aabb19436 Hans Leidekker: winhttp: Fix return length for ICU_ESCAPE with null-terminated string in get_comp_length().
+  89c01c4fa9 Hans Leidekker: winhttp: Validate day of week and month in WinHttpTimeFromSystemTime().
+  a1cc1b9c98 Hans Leidekker: winhttp: Check for allocation failure in add_domain().
+  fd3a5e52b7 Nello De Gregoris: evr: Implement IMFVideoDisplayControl::SetRenderingPrefs().
+  af16996e29 Connor McAdams: setupapi: Validate enumerator string passed into SetupDiGetClassDevs().
+  2e0b74514b Nikolay Sivov: dwrite: Remove duplicated weight pattern check.
+  941f8a14bf Nikolay Sivov: dwrite/format: Use consistent way to check for format property changes.
+  48ab4f271b Nikolay Sivov: dwrite: Fix a leak on error path in the resource stream.
+  5092d7f1ea Nikolay Sivov: evr: Return failure for unsupported interfaces on MR_VIDEO_RENDER_SERVICE.
+  8bedef8810 Nikolay Sivov: evr/mixer: Fix a copy-paste type in aperture values handling.
+  0212e3f42d Nikolay Sivov: scrrun/stream: Remove wrong object release on file read failure.
+  913d367991 Nikolay Sivov: oleaut32/olepicture: Consistently use CRT allocation functions.
+  cb47d15fc2 Nikolay Sivov: oleaut32: Fix allocation failure check in SafeArrayGetElement().
+  777485c3f5 Nikolay Sivov: oleaut32: Use correct types for UI8/I8 -> UI2 conversion.
+  3e48860db4 Nikolay Sivov: oleaut32: Use correct fields in VarSub() between UI1 values.
+  2110c64d89 Nikolay Sivov: winedmo: Use correct parameter structure in wow64_demuxer_destroy().
+  1456cc0e6f Nikolay Sivov: winedmo: Do not access freed context on cleanup.
+  c7bbeab323 Hans Leidekker: msi: Fix memory leak on error in append_productcode().
+  542fcc55f0 Hans Leidekker: msi: Fix handle leak on error in get_fusion_filename().
+  b393e597b0 Hans Leidekker: msi: Fix row index in DELETE_execute().
+  f961136f51 Hans Leidekker: msi: Handle tables without primary key columns in add_table_to_db().
+  e6eac2d113 Hans Leidekker: msi: Handle empty string properties in read_properties_from_data().
+  3eae4b7900 Hans Leidekker: msi: Fix buffer size calculation in TransformView_add_column().
+  242c261cde Hans Leidekker: msi: Handle NULL return from msi_dup_record_field() in get_signature().
+  80c7a42796 Hans Leidekker: msi: Handle missing manifest file in msi_install_assembly().
+  a96596222e Hans Leidekker: msi: Consistently check dialog_add_control() failure.
+  2d9a31a573 Hans Leidekker: msi: Handle NULL text in dialog_hyperlink().
+  e973a83ea3 Hans Leidekker: msi: Remove unused field from struct drop_view.
+  689e35cbac Hans Leidekker: msi: Fix error message in apply_substorage_transform().
+  a2084d2331 Alvin Philips: winebus: Clarify that the Disable Hidraw toggle also affects the IOHID backend in trace message.
+  425454e511 Nikolay Sivov: dxgi: Fix cleanup path on CreateSurface() failure.
+  b0ce8bc2e5 Nikolay Sivov: dxgi: Correctly initialize output pointer on GetResource() failure.
+  71efe3b60c Nikolay Sivov: dxgi: Use correct flags value in the trace message.
+  fba078c81a Akihiro Sagawa: winegstreamer: Fix GstCaps reference leak in wg_parser_stream.
+  b9a6fa8ec4 Hans Leidekker: wbemprox: Add SecurityCenter2 namespace.
+  5257a3362c Jacek Caban: winegstreamer: Silence -Wunused-but-set-global warning.
+  acce3b0c5f Hans Leidekker: msi: MsiSetMode() returns UINT.
+  7dd800b328 Hans Leidekker: msi: Handle CreateNamedPipeW() failure.
+  1f02a18eb2 Hans Leidekker: msi: Fix return values in cabinet_copy_file().
+  2bb2c9aa62 Hans Leidekker: msi: Validate buffer parameters in MsiGetPatchInfoA/W().
+  9ca5703444 Hans Leidekker: msi: Handle NULL folder->ResolvedTarget in set_target_path().
+  73a0a80692 Hans Leidekker: msi: Handle NULL guids in msi_check_patch_applicable().
+  c66be98489 Hans Leidekker: msi: Fix out-of-bounds read in decode_base85_guid().
+  21a62a1088 Hans Leidekker: msi: Don't free caller owned buffer on error in TransformView_delete_row().
+  abde1dbc50 Hans Leidekker: msi: Handle empty file in read_text_archive().
+  04d87dccd9 Hans Leidekker: msi: Fix potential heap buffer overflow in DISTINCT_execute().
+  4e576414a7 Hans Leidekker: msi: Avoid out-of-bounds read in read_properties_from_data().
+  947af4dba8 Hans Leidekker: msi: Avoid out-of-bounds read in sqliteGetToken().
+  e68f9d135e Nikolay Sivov: atl: Fix typelib instance leak in AtlGetObjectSourceInterface().
+  976f2f6169 Nikolay Sivov: atl: Do not use interface pointer after it's been released in AtlAxCreateControlLicEx().
+  00032141f9 Nikolay Sivov: d3d11: Do not reference adapter on failure path of the device creation.
+  6b0ef2898a Ivo Ivanov: winebus.sys: Return an error on IOCTL_HID_GET_STRING when no serial number is available.
+  44b66e9154 Hans Leidekker: wbemprox: Zero-initialize columns in create_signature_columns_and_data().
+  1344b51ea4 Hans Leidekker: wbemprox: Add NULL check in class_object_GetMethod().
+  70ebfa9873 Hans Leidekker: wbemprox: Avoid using uninitialized pointer in wbem_context_Clone().
+  4f38c9b01d Hans Leidekker: wbemprox: Use appropriate value for pointer return.
+  c8a2b3d62b Hans Leidekker: wbemprox: Pass correct buffer size to swprintf() in fill_cache_memory() and fill_processor().
+  ae72d17ae5 Hans Leidekker: wbemprox: Fix memory leak on error in get_owner().
+  e2561a1c18 Hans Leidekker: wbemprox: Fix off-by-one in enum_class_object_Skip().
+  f2b6cb85ca Hans Leidekker: wbemprox: Set query namespace in wbem_services_ExecNotificationQueryAsync().
+  524b27a732 Hans Leidekker: wbemprox: Fix cleanup of associations.
+  772b29cd67 Hans Leidekker: wbemprox: Fix memory leak on error in get_pnp_entities() and get_display_adapters().
+  52e31b942b Hans Leidekker: wbemprox: Fix memory leak on error in class_object_SpawnInstance().
+  8f12badcec Hans Leidekker: wbemprox: Fix memory leak on error in create_signature_columns_and_data().
+  999d003176 Daniel Lehman: ntdll: Open directory handle with FILE_SHARE_DELETE in FindFirstFileW.
+  6526f2eb90 Dmitry Timoshkov: crypt32: CryptMsgGetParam(CMSG_SIGNER_UNAUTH_ATTR_PARAM) should set returned size to 0 if there's no attributes.
+  19ae54f3f2 Dmitry Timoshkov: crypt32: CryptMsgGetParam(CMSG_SIGNER_AUTH_ATTR_PARAM) should set returned size to 0 if there's no attributes.
+  86dd3eed9a Esme Povirk: gdiplus: Fix GdipMeasureDriverString with length == 0.
+  dec10790fc Esme Povirk: gdiplus: Touch all points in GdipClearPathMarkers.
+  d4ec67a6f2 Esme Povirk: gdiplus: Add validation to GdipSetImageAttributesNoOp.
+  456f454324 Esme Povirk: gdiplus: Fix incorrect pointer cast writing pens to emf+.
+  779bdcb9b8 Esme Povirk: gdiplus: Pass through status code in metafile_deserialize_path.
+  48740ec274 Rémi Bernon: user32: Fix some length overflows in init_class_name(_ansi).
+  8885576e4e Nikolay Sivov: propsys: Remove duplicated property info entry.
+  2161d43c5e Nikolay Sivov: propsys: Do not check for null string pointers in InitPropVariantFromStringVector().
+  f6eb40f2f4 Nikolay Sivov: propsys: Use coerced value for VT_CLSID case in PropVariantCompareEx().
+  35f37b9708 Nikolay Sivov: propsys: Use coerced value for VT_UI1 vectors case in PropVariantCompareEx().
+  c47cfa3c4e Hans Leidekker: secur32: Remove an outdated comment.
+  df5c23cc34 Hans Leidekker: secur32: Fix misplaced parentheses in schan_set_application_protocols().
+  703ae78590 Hans Leidekker: secur32: Fix memory leak on error in ensure_remote_cert().
+  c034186e97 Hans Leidekker: secur32: Fix a memory leak on error in get_key_container_path().
+  b7171644fc Hans Leidekker: secur32: Free GnuTLS credentials on error in acquire_credentials_handle().
+  e240785fcb Hans Leidekker: secur32: Pass correct comment length in _copyPackageInfoFlatWToA().
+  1b1ef35b0a Hans Leidekker: secur32: Use the right deallocator in thunk_ContextAttributesAToW().
+
+diff --git a/dlls/atl/atl.c b/dlls/atl/atl.c
+index 32e0c72..1999e41 100644
+--- a/dlls/atl/atl.c
++++ b/dlls/atl/atl.c
+@@ -931,6 +931,7 @@ HRESULT WINAPI AtlGetObjectSourceInterface(IUnknown *unk, GUID *libid, IID *iid,
+             hres = get_default_source(typelib, &clsid, iid);
+         IPersist_Release(persist);
+     }
++    ITypeLib_Release(typelib);
+ 
+     return hres;
+ }
+diff --git a/dlls/atl/atl_ax.c b/dlls/atl/atl_ax.c
+index 4ff0a79..18da3f5 100644
+--- a/dlls/atl/atl_ax.c
++++ b/dlls/atl/atl_ax.c
+@@ -1095,7 +1095,7 @@ HRESULT WINAPI AtlAxCreateControlLicEx(LPCOLESTR lpszName, HWND hWnd,
+     {
+         IWebBrowser2 *browser;
+ 
+-        hRes = IOleObject_QueryInterface( pControl, &IID_IWebBrowser2, (void**) &browser );
++        hRes = IUnknown_QueryInterface( pUnkControl, &IID_IWebBrowser2, (void**) &browser );
+         if ( !browser )
+             WARN( "Cannot query IWebBrowser2 interface: %08lx\n", hRes );
+         else {
+diff --git a/dlls/comdlg32/filedlg.c b/dlls/comdlg32/filedlg.c
+index 9d57375..c189ad8 100644
+--- a/dlls/comdlg32/filedlg.c
++++ b/dlls/comdlg32/filedlg.c
+@@ -198,7 +198,6 @@ LPITEMIDLIST  GetParentPidl(LPITEMIDLIST pidl);
+ static LPITEMIDLIST GetPidlFromName(IShellFolder *psf,LPWSTR lpcstrFileName);
+ static BOOL IsPidlFolder (LPSHELLFOLDER psf, LPCITEMIDLIST pidl);
+ static UINT GetNumSelected( IDataObject *doSelected );
+-static void COMCTL32_ReleaseStgMedium(STGMEDIUM medium);
+ 
+ static INT_PTR CALLBACK FileOpenDlgProc95(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
+ static INT_PTR FILEDLG95_HandleCustomDialogMessages(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
+@@ -3831,7 +3830,7 @@ void FILEDLG95_FILENAME_FillFromSelection (HWND hwnd)
+ 
+ ret:
+     free(lpstrAllFiles);
+-    COMCTL32_ReleaseStgMedium(medium);
++    ReleaseStgMedium(&medium);
+ }
+ 
+ /***********************************************************************
+@@ -3864,24 +3863,6 @@ static int FILEDLG95_FILENAME_GetFileNames (HWND hwnd, LPWSTR * lpstrFileList, U
+  * DATAOBJECT Helper functions
+  */
+ 
+-/***********************************************************************
+- * COMCTL32_ReleaseStgMedium
+- *
+- * like ReleaseStgMedium from ole32
+- */
+-static void COMCTL32_ReleaseStgMedium (STGMEDIUM medium)
+-{
+-      if(medium.pUnkForRelease)
+-      {
+-        IUnknown_Release(medium.pUnkForRelease);
+-      }
+-      else
+-      {
+-        GlobalUnlock(medium.hGlobal);
+-        GlobalFree(medium.hGlobal);
+-      }
+-}
+-
+ /***********************************************************************
+  *          GetPidlFromDataObject
+  *
+@@ -3909,7 +3890,7 @@ LPITEMIDLIST GetPidlFromDataObject ( IDataObject *doSelected, UINT nPidlIndex)
+       {
+         pidl = ILClone((LPITEMIDLIST)(&((LPBYTE)cida)[cida->aoffset[nPidlIndex]]));
+       }
+-      COMCTL32_ReleaseStgMedium(medium);
++      ReleaseStgMedium(&medium);
+     }
+     return pidl;
+ }
+@@ -3935,7 +3916,7 @@ static UINT GetNumSelected( IDataObject *doSelected )
+     {
+       LPIDA cida = GlobalLock(medium.hGlobal);
+       retVal = cida->cidl;
+-      COMCTL32_ReleaseStgMedium(medium);
++      ReleaseStgMedium(&medium);
+       return retVal;
+     }
+     return 0;
+diff --git a/dlls/crypt32/msg.c b/dlls/crypt32/msg.c
+index fafa404..fcd01e0 100644
+--- a/dlls/crypt32/msg.c
++++ b/dlls/crypt32/msg.c
+@@ -3252,7 +3252,10 @@ static BOOL CDecodeSignedMsg_GetParam(CDecodeMsg *msg, DWORD dwParamType,
+             if (dwIndex >= msg->u.signed_data.info->cSignerInfo)
+                 SetLastError(CRYPT_E_INVALID_INDEX);
+             else if (!msg->u.signed_data.info->rgSignerInfo[dwIndex].AuthAttrs.cAttr)
++            {
++                *pcbData = 0;
+                 SetLastError(CRYPT_E_ATTRIBUTES_MISSING);
++            }
+             else
+                 ret = CRYPT_CopyAttr(pvData, pcbData,
+                  &msg->u.signed_data.info->rgSignerInfo[dwIndex].AuthAttrs);
+@@ -3266,7 +3269,10 @@ static BOOL CDecodeSignedMsg_GetParam(CDecodeMsg *msg, DWORD dwParamType,
+             if (dwIndex >= msg->u.signed_data.info->cSignerInfo)
+                 SetLastError(CRYPT_E_INVALID_INDEX);
+             else if (!msg->u.signed_data.info->rgSignerInfo[dwIndex].UnauthAttrs.cAttr)
++            {
++                *pcbData = 0;
+                 SetLastError(CRYPT_E_ATTRIBUTES_MISSING);
++            }
+             else
+                 ret = CRYPT_CopyAttr(pvData, pcbData,
+                  &msg->u.signed_data.info->rgSignerInfo[dwIndex].UnauthAttrs);
+diff --git a/dlls/d3d11/d3d11_main.c b/dlls/d3d11/d3d11_main.c
+index 7598631..b8ad424 100644
+--- a/dlls/d3d11/d3d11_main.c
++++ b/dlls/d3d11/d3d11_main.c
+@@ -173,13 +173,13 @@ static HRESULT d3d11_create_device(IDXGIAdapter *adapter, D3D_DRIVER_TYPE driver
+ 
+     if (adapter)
+     {
+-        IDXGIAdapter_AddRef(adapter);
+         hr = IDXGIAdapter_GetParent(adapter, &IID_IDXGIFactory, (void **)&factory);
+         if (FAILED(hr))
+         {
+             WARN("Failed to get dxgi factory, returning %#lx.\n", hr);
+             return hr;
+         }
++        IDXGIAdapter_AddRef(adapter);
+     }
+     else
+     {
+diff --git a/dlls/d3dx9_36/math.c b/dlls/d3dx9_36/math.c
+index ac38421..f92523d 100644
+--- a/dlls/d3dx9_36/math.c
++++ b/dlls/d3dx9_36/math.c
+@@ -2868,153 +2868,6 @@ static void rotate_X(FLOAT *out, UINT order, FLOAT a, FLOAT *in)
+     out[35] = 0.9057110548f * in[31] - 0.4192627370f * in[33] + 0.0624999329f * in[35];
+ }
+ 
+-static void set_vec3(D3DXVECTOR3 *v, float x, float y, float z)
+-{
+-    v->x = x;
+-    v->y = y;
+-    v->z = z;
+-}
+-
+-/*
+- * The following implementation of D3DXSHProjectCubeMap is based on the
+- * SHProjectCubeMap() implementation from Microsoft's DirectXMath library,
+- * covered under the following copyright:
+- *
+- * Copyright (c) Microsoft Corporation.
+- * Licensed under the MIT License.
+- */
+-HRESULT WINAPI D3DXSHProjectCubeMap(unsigned int order, IDirect3DCubeTexture9 *texture, float *red, float *green, float *blue)
+-{
+-    const unsigned int order_square = order * order;
+-    const struct pixel_format_desc *format;
+-    unsigned int x, y, i, face;
+-    float B, S, proj_normal;
+-    D3DSURFACE_DESC desc;
+-    float Wt = 0.0f;
+-    float *temp;
+-    HRESULT hr;
+-
+-    TRACE("order %u, texture %p, red %p, green %p, blue %p.\n", order, texture, red, green, blue);
+-
+-    if (!texture || !red || order < D3DXSH_MINORDER || order > D3DXSH_MAXORDER)
+-        return D3DERR_INVALIDCALL;
+-
+-    memset(red, 0, order_square * sizeof(float));
+-    if (green)
+-        memset(green, 0, order_square * sizeof(float));
+-    if (blue)
+-        memset(blue, 0, order_square * sizeof(float));
+-
+-    if (FAILED(hr = IDirect3DCubeTexture9_GetLevelDesc(texture, 0, &desc)))
+-    {
+-        ERR("Failed to get level desc, hr %#lx.\n", hr);
+-        return hr;
+-    }
+-
+-    format = get_format_info(desc.Format);
+-    if (is_unknown_format(format) || is_index_format(format) || is_compressed_format(format))
+-    {
+-        FIXME("Unsupported texture format %#x.\n", desc.Format);
+-        return D3DERR_INVALIDCALL;
+-    }
+-
+-    if (!(temp = malloc(order_square * sizeof(*temp))))
+-        return E_OUTOFMEMORY;
+-
+-    B = -1.0f + 1.0f / desc.Width;
+-    if (desc.Width > 1)
+-        S = 2.0f * (1.0f - 1.0f / desc.Width) / (desc.Width - 1.0f);
+-    else
+-        S = 0.0f;
+-
+-    for (face = 0; face < 6; ++face)
+-    {
+-        D3DLOCKED_RECT map_desc;
+-
+-        if (FAILED(hr = IDirect3DCubeTexture9_LockRect(texture, face, 0, &map_desc, NULL, D3DLOCK_READONLY)))
+-        {
+-            ERR("Failed to map texture, hr %#lx.\n", hr);
+-            free(temp);
+-            return hr;
+-        }
+-
+-        for (y = 0; y < desc.Height; ++y)
+-        {
+-            const BYTE *row = (const BYTE *)map_desc.pBits + y * map_desc.Pitch;
+-
+-            for (x = 0; x < desc.Width; ++x)
+-            {
+-                float diff_solid, x_3d, y_3d;
+-                const float u = x * S + B;
+-                const float v = y * S + B;
+-                struct d3dx_color colour;
+-                D3DXVECTOR3 dir;
+-
+-                x_3d = (x * 2.0f + 1.0f) / desc.Width - 1.0f;
+-                y_3d = (y * 2.0f + 1.0f) / desc.Width - 1.0f;
+-
+-                switch (face)
+-                {
+-                    case D3DCUBEMAP_FACE_POSITIVE_X:
+-                        set_vec3(&dir, 1.0f, -y_3d, -x_3d);
+-                        break;
+-
+-                    case D3DCUBEMAP_FACE_NEGATIVE_X:
+-                        set_vec3(&dir, -1.0f, -y_3d, x_3d);
+-                        break;
+-
+-                    case D3DCUBEMAP_FACE_POSITIVE_Y:
+-                        set_vec3(&dir, x_3d, 1.0f, y_3d);
+-                        break;
+-
+-                    case D3DCUBEMAP_FACE_NEGATIVE_Y:
+-                        set_vec3(&dir, x_3d, -1.0f, -y_3d);
+-                        break;
+-
+-                    case D3DCUBEMAP_FACE_POSITIVE_Z:
+-                        set_vec3(&dir, x_3d, -y_3d, 1.0f);
+-                        break;
+-
+-                    case D3DCUBEMAP_FACE_NEGATIVE_Z:
+-                        set_vec3(&dir, -x_3d, -y_3d, -1.0f);
+-                        break;
+-                }
+-
+-                /* This is more complex than powf(..., 1.5f), but also happens
+-                 * to be slightly more accurate, and slightly faster as well. */
+-                diff_solid = 4.0f / ((1.0f + u * u + v * v) * sqrtf(1.0f + u * u + v * v));
+-                Wt += diff_solid;
+-
+-                D3DXVec3Normalize(&dir, &dir);
+-                D3DXSHEvalDirection(temp, order, &dir);
+-
+-                format_to_d3dx_color(format, &row[x * format->block_byte_count], NULL, &colour);
+-
+-                for (i = 0; i < order_square; ++i)
+-                {
+-                    red[i] += temp[i] * colour.value.x * diff_solid;
+-                    if (green)
+-                        green[i] += temp[i] * colour.value.y * diff_solid;
+-                    if (blue)
+-                        blue[i] += temp[i] * colour.value.z * diff_solid;
+-                }
+-            }
+-        }
+-
+-        IDirect3DCubeTexture9_UnlockRect(texture, face, 0);
+-    }
+-
+-    proj_normal = (4.0f * M_PI) / Wt;
+-    D3DXSHScale(red, order, red, proj_normal);
+-    if (green)
+-        D3DXSHScale(green, order, green, proj_normal);
+-    if (blue)
+-        D3DXSHScale(blue, order, blue, proj_normal);
+-
+-    free(temp);
+-    return D3D_OK;
+-}
+-
+ FLOAT* WINAPI D3DXSHRotate(FLOAT *out, UINT order, const D3DXMATRIX *matrix, const FLOAT *in)
+ {
+     FLOAT alpha, beta, gamma, sinb, temp[36], temp1[36];
+@@ -3159,3 +3012,189 @@ FLOAT* WINAPI D3DXSHScale(FLOAT *out, UINT order, const FLOAT *a, const FLOAT sc
+ 
+     return out;
+ }
++
++BOOL WINAPI D3DXIntersectTri(const D3DXVECTOR3 *p0, const D3DXVECTOR3 *p1, const D3DXVECTOR3 *p2,
++        const D3DXVECTOR3 *praypos, const D3DXVECTOR3 *praydir, float *pu, float *pv, float *pdist)
++{
++    D3DXMATRIX m;
++    D3DXVECTOR4 vec;
++
++    TRACE("p0 %p, p1 %p, p2 %p, praypos %p, praydir %p, pu %p, pv %p, pdist %p.\n",
++            p0, p1, p2, praypos, praydir, pu, pv, pdist);
++
++    m.m[0][0] = p1->x - p0->x;
++    m.m[1][0] = p2->x - p0->x;
++    m.m[2][0] = -praydir->x;
++    m.m[3][0] = 0.0f;
++    m.m[0][1] = p1->y - p0->y;
++    m.m[1][1] = p2->y - p0->y;
++    m.m[2][1] = -praydir->y;
++    m.m[3][1] = 0.0f;
++    m.m[0][2] = p1->z - p0->z;
++    m.m[1][2] = p2->z - p0->z;
++    m.m[2][2] = -praydir->z;
++    m.m[3][2] = 0.0f;
++    m.m[0][3] = 0.0f;
++    m.m[1][3] = 0.0f;
++    m.m[2][3] = 0.0f;
++    m.m[3][3] = 1.0f;
++
++    vec.x = praypos->x - p0->x;
++    vec.y = praypos->y - p0->y;
++    vec.z = praypos->z - p0->z;
++    vec.w = 0.0f;
++
++    if ( D3DXMatrixInverse(&m, NULL, &m) )
++    {
++        D3DXVec4Transform(&vec, &vec, &m);
++        if ( (vec.x >= 0.0f) && (vec.y >= 0.0f) && (vec.x + vec.y <= 1.0f) && (vec.z >= 0.0f) )
++        {
++            if (pu) *pu = vec.x;
++            if (pv) *pv = vec.y;
++            if (pdist) *pdist = fabsf( vec.z );
++            return TRUE;
++        }
++    }
++
++    return FALSE;
++}
++
++BOOL WINAPI D3DXSphereBoundProbe(const D3DXVECTOR3 *center, float radius,
++        const D3DXVECTOR3 *ray_position, const D3DXVECTOR3 *ray_direction)
++{
++    D3DXVECTOR3 difference = {0};
++    float a, b, c, d;
++
++    D3DXVec3Subtract(&difference, ray_position, center);
++    c = D3DXVec3LengthSq(&difference) - radius * radius;
++    if (c < 0.0f)
++        return TRUE;
++    a = D3DXVec3LengthSq(ray_direction);
++    b = D3DXVec3Dot(&difference, ray_direction);
++    d = b * b - a * c;
++
++    return d >= 0.0f && (b <= 0.0f || d > b * b);
++}
++
++/* Algorithm taken from the article: An Efficient and Robust Ray-Box Intersection Algorithm
++Amy Williams             University of Utah
++Steve Barrus             University of Utah
++R. Keith Morley          University of Utah
++Peter Shirley            University of Utah
++
++International Conference on Computer Graphics and Interactive Techniques  archive
++ACM SIGGRAPH 2005 Courses
++Los Angeles, California
++
++This algorithm is free of patents or of copyrights, as confirmed by Peter Shirley himself.
++
++Algorithm: Consider the box as the intersection of three slabs. Clip the ray
++against each slab, if there's anything left of the ray after we're
++done we've got an intersection of the ray with the box. */
++BOOL WINAPI D3DXBoxBoundProbe(const D3DXVECTOR3 *pmin, const D3DXVECTOR3 *pmax,
++        const D3DXVECTOR3 *prayposition, const D3DXVECTOR3 *praydirection)
++{
++    FLOAT div, tmin, tmax, tymin, tymax, tzmin, tzmax;
++
++    div = 1.0f / praydirection->x;
++    if ( div >= 0.0f )
++    {
++        tmin = ( pmin->x - prayposition->x ) * div;
++        tmax = ( pmax->x - prayposition->x ) * div;
++    }
++    else
++    {
++        tmin = ( pmax->x - prayposition->x ) * div;
++        tmax = ( pmin->x - prayposition->x ) * div;
++    }
++
++    if ( tmax < 0.0f ) return FALSE;
++
++    div = 1.0f / praydirection->y;
++    if ( div >= 0.0f )
++    {
++        tymin = ( pmin->y - prayposition->y ) * div;
++        tymax = ( pmax->y - prayposition->y ) * div;
++    }
++    else
++    {
++        tymin = ( pmax->y - prayposition->y ) * div;
++        tymax = ( pmin->y - prayposition->y ) * div;
++    }
++
++    if ( ( tymax < 0.0f ) || ( tmin > tymax ) || ( tymin > tmax ) ) return FALSE;
++
++    if ( tymin > tmin ) tmin = tymin;
++    if ( tymax < tmax ) tmax = tymax;
++
++    div = 1.0f / praydirection->z;
++    if ( div >= 0.0f )
++    {
++        tzmin = ( pmin->z - prayposition->z ) * div;
++        tzmax = ( pmax->z - prayposition->z ) * div;
++    }
++    else
++    {
++        tzmin = ( pmax->z - prayposition->z ) * div;
++        tzmax = ( pmin->z - prayposition->z ) * div;
++    }
++
++    if ( (tzmax < 0.0f ) || ( tmin > tzmax ) || ( tzmin > tmax ) ) return FALSE;
++
++    return TRUE;
++}
++
++HRESULT WINAPI D3DXComputeBoundingBox(const D3DXVECTOR3 *pfirstposition,
++        DWORD numvertices, DWORD dwstride, D3DXVECTOR3 *pmin, D3DXVECTOR3 *pmax)
++{
++    D3DXVECTOR3 vec;
++    unsigned int i;
++
++    if( !pfirstposition || !pmin || !pmax ) return D3DERR_INVALIDCALL;
++
++    *pmin = *pfirstposition;
++    *pmax = *pmin;
++
++    for(i=0; i<numvertices; i++)
++    {
++        vec = *( (const D3DXVECTOR3*)((const char*)pfirstposition + dwstride * i) );
++
++        if ( vec.x < pmin->x ) pmin->x = vec.x;
++        if ( vec.x > pmax->x ) pmax->x = vec.x;
++
++        if ( vec.y < pmin->y ) pmin->y = vec.y;
++        if ( vec.y > pmax->y ) pmax->y = vec.y;
++
++        if ( vec.z < pmin->z ) pmin->z = vec.z;
++        if ( vec.z > pmax->z ) pmax->z = vec.z;
++    }
++
++    return D3D_OK;
++}
++
++HRESULT WINAPI D3DXComputeBoundingSphere(const D3DXVECTOR3 *pfirstposition,
++        DWORD numvertices, DWORD dwstride, D3DXVECTOR3 *pcenter, float *pradius)
++{
++    D3DXVECTOR3 temp;
++    FLOAT d;
++    unsigned int i;
++
++    if( !pfirstposition || !pcenter || !pradius ) return D3DERR_INVALIDCALL;
++
++    temp.x = 0.0f;
++    temp.y = 0.0f;
++    temp.z = 0.0f;
++    *pradius = 0.0f;
++
++    for(i=0; i<numvertices; i++)
++        D3DXVec3Add(&temp, &temp, (const D3DXVECTOR3*)((const char*)pfirstposition + dwstride * i));
++
++    D3DXVec3Scale(pcenter, &temp, 1.0f / numvertices);
++
++    for(i=0; i<numvertices; i++)
++    {
++        d = D3DXVec3Length(D3DXVec3Subtract(&temp, (const D3DXVECTOR3*)((const char*)pfirstposition + dwstride * i), pcenter));
++        if ( d > *pradius ) *pradius = d;
++    }
++    return D3D_OK;
++}
+diff --git a/dlls/d3dx9_36/mesh.c b/dlls/d3dx9_36/mesh.c
+index e425ef4..c858960 100644
+--- a/dlls/d3dx9_36/mesh.c
++++ b/dlls/d3dx9_36/mesh.c
+@@ -1890,130 +1890,6 @@ static const struct ID3DXMeshVtbl D3DXMesh_Vtbl =
+     d3dx9_mesh_SetAttributeTable,
+ };
+ 
+-
+-/* Algorithm taken from the article: An Efficient and Robust Ray-Box Intersection Algorithm
+-Amy Williams             University of Utah
+-Steve Barrus             University of Utah
+-R. Keith Morley          University of Utah
+-Peter Shirley            University of Utah
+-
+-International Conference on Computer Graphics and Interactive Techniques  archive
+-ACM SIGGRAPH 2005 Courses
+-Los Angeles, California
+-
+-This algorithm is free of patents or of copyrights, as confirmed by Peter Shirley himself.
+-
+-Algorithm: Consider the box as the intersection of three slabs. Clip the ray
+-against each slab, if there's anything left of the ray after we're
+-done we've got an intersection of the ray with the box. */
+-BOOL WINAPI D3DXBoxBoundProbe(const D3DXVECTOR3 *pmin, const D3DXVECTOR3 *pmax,
+-        const D3DXVECTOR3 *prayposition, const D3DXVECTOR3 *praydirection)
+-{
+-    FLOAT div, tmin, tmax, tymin, tymax, tzmin, tzmax;
+-
+-    div = 1.0f / praydirection->x;
+-    if ( div >= 0.0f )
+-    {
+-        tmin = ( pmin->x - prayposition->x ) * div;
+-        tmax = ( pmax->x - prayposition->x ) * div;
+-    }
+-    else
+-    {
+-        tmin = ( pmax->x - prayposition->x ) * div;
+-        tmax = ( pmin->x - prayposition->x ) * div;
+-    }
+-
+-    if ( tmax < 0.0f ) return FALSE;
+-
+-    div = 1.0f / praydirection->y;
+-    if ( div >= 0.0f )
+-    {
+-        tymin = ( pmin->y - prayposition->y ) * div;
+-        tymax = ( pmax->y - prayposition->y ) * div;
+-    }
+-    else
+-    {
+-        tymin = ( pmax->y - prayposition->y ) * div;
+-        tymax = ( pmin->y - prayposition->y ) * div;
+-    }
+-
+-    if ( ( tymax < 0.0f ) || ( tmin > tymax ) || ( tymin > tmax ) ) return FALSE;
+-
+-    if ( tymin > tmin ) tmin = tymin;
+-    if ( tymax < tmax ) tmax = tymax;
+-
+-    div = 1.0f / praydirection->z;
+-    if ( div >= 0.0f )
+-    {
+-        tzmin = ( pmin->z - prayposition->z ) * div;
+-        tzmax = ( pmax->z - prayposition->z ) * div;
+-    }
+-    else
+-    {
+-        tzmin = ( pmax->z - prayposition->z ) * div;
+-        tzmax = ( pmin->z - prayposition->z ) * div;
+-    }
+-
+-    if ( (tzmax < 0.0f ) || ( tmin > tzmax ) || ( tzmin > tmax ) ) return FALSE;
+-
+-    return TRUE;
+-}
+-
+-HRESULT WINAPI D3DXComputeBoundingBox(const D3DXVECTOR3 *pfirstposition,
+-        DWORD numvertices, DWORD dwstride, D3DXVECTOR3 *pmin, D3DXVECTOR3 *pmax)
+-{
+-    D3DXVECTOR3 vec;
+-    unsigned int i;
+-
+-    if( !pfirstposition || !pmin || !pmax ) return D3DERR_INVALIDCALL;
+-
+-    *pmin = *pfirstposition;
+-    *pmax = *pmin;
+-
+-    for(i=0; i<numvertices; i++)
+-    {
+-        vec = *( (const D3DXVECTOR3*)((const char*)pfirstposition + dwstride * i) );
+-
+-        if ( vec.x < pmin->x ) pmin->x = vec.x;
+-        if ( vec.x > pmax->x ) pmax->x = vec.x;
+-
+-        if ( vec.y < pmin->y ) pmin->y = vec.y;
+-        if ( vec.y > pmax->y ) pmax->y = vec.y;
+-
+-        if ( vec.z < pmin->z ) pmin->z = vec.z;
+-        if ( vec.z > pmax->z ) pmax->z = vec.z;
+-    }
+-
+-    return D3D_OK;
+-}
+-
+-HRESULT WINAPI D3DXComputeBoundingSphere(const D3DXVECTOR3 *pfirstposition,
+-        DWORD numvertices, DWORD dwstride, D3DXVECTOR3 *pcenter, float *pradius)
+-{
+-    D3DXVECTOR3 temp;
+-    FLOAT d;
+-    unsigned int i;
+-
+-    if( !pfirstposition || !pcenter || !pradius ) return D3DERR_INVALIDCALL;
+-
+-    temp.x = 0.0f;
+-    temp.y = 0.0f;
+-    temp.z = 0.0f;
+-    *pradius = 0.0f;
+-
+-    for(i=0; i<numvertices; i++)
+-        D3DXVec3Add(&temp, &temp, (const D3DXVECTOR3*)((const char*)pfirstposition + dwstride * i));
+-
+-    D3DXVec3Scale(pcenter, &temp, 1.0f / numvertices);
+-
+-    for(i=0; i<numvertices; i++)
+-    {
+-        d = D3DXVec3Length(D3DXVec3Subtract(&temp, (const D3DXVECTOR3*)((const char*)pfirstposition + dwstride * i), pcenter));
+-        if ( d > *pradius ) *pradius = d;
+-    }
+-    return D3D_OK;
+-}
+-
+ static void append_decl_element(D3DVERTEXELEMENT9 *declaration, UINT *idx, UINT *offset,
+         D3DDECLTYPE type, D3DDECLUSAGE usage, UINT usage_idx)
+ {
+@@ -2362,69 +2238,6 @@ UINT WINAPI D3DXGetDeclLength(const D3DVERTEXELEMENT9 *decl)
+     return element - decl;
+ }
+ 
+-BOOL WINAPI D3DXIntersectTri(const D3DXVECTOR3 *p0, const D3DXVECTOR3 *p1, const D3DXVECTOR3 *p2,
+-        const D3DXVECTOR3 *praypos, const D3DXVECTOR3 *praydir, float *pu, float *pv, float *pdist)
+-{
+-    D3DXMATRIX m;
+-    D3DXVECTOR4 vec;
+-
+-    TRACE("p0 %p, p1 %p, p2 %p, praypos %p, praydir %p, pu %p, pv %p, pdist %p.\n",
+-            p0, p1, p2, praypos, praydir, pu, pv, pdist);
+-
+-    m.m[0][0] = p1->x - p0->x;
+-    m.m[1][0] = p2->x - p0->x;
+-    m.m[2][0] = -praydir->x;
+-    m.m[3][0] = 0.0f;
+-    m.m[0][1] = p1->y - p0->y;
+-    m.m[1][1] = p2->y - p0->y;
+-    m.m[2][1] = -praydir->y;
+-    m.m[3][1] = 0.0f;
+-    m.m[0][2] = p1->z - p0->z;
+-    m.m[1][2] = p2->z - p0->z;
+-    m.m[2][2] = -praydir->z;
+-    m.m[3][2] = 0.0f;
+-    m.m[0][3] = 0.0f;
+-    m.m[1][3] = 0.0f;
+-    m.m[2][3] = 0.0f;
+-    m.m[3][3] = 1.0f;
+-
+-    vec.x = praypos->x - p0->x;
+-    vec.y = praypos->y - p0->y;
+-    vec.z = praypos->z - p0->z;
+-    vec.w = 0.0f;
+-
+-    if ( D3DXMatrixInverse(&m, NULL, &m) )
+-    {
+-        D3DXVec4Transform(&vec, &vec, &m);
+-        if ( (vec.x >= 0.0f) && (vec.y >= 0.0f) && (vec.x + vec.y <= 1.0f) && (vec.z >= 0.0f) )
+-        {
+-            if (pu) *pu = vec.x;
+-            if (pv) *pv = vec.y;
+-            if (pdist) *pdist = fabsf( vec.z );
+-            return TRUE;
+-        }
+-    }
+-
+-    return FALSE;
+-}
+-
+-BOOL WINAPI D3DXSphereBoundProbe(const D3DXVECTOR3 *center, float radius,
+-        const D3DXVECTOR3 *ray_position, const D3DXVECTOR3 *ray_direction)
+-{
+-    D3DXVECTOR3 difference = {0};
+-    float a, b, c, d;
+-
+-    D3DXVec3Subtract(&difference, ray_position, center);
+-    c = D3DXVec3LengthSq(&difference) - radius * radius;
+-    if (c < 0.0f)
+-        return TRUE;
+-    a = D3DXVec3LengthSq(ray_direction);
+-    b = D3DXVec3Dot(&difference, ray_direction);
+-    d = b * b - a * c;
+-
+-    return d >= 0.0f && (b <= 0.0f || d > b * b);
+-}
+-
+ /*************************************************************************
+  * D3DXCreateMesh
+  */
+diff --git a/dlls/d3dx9_36/texture.c b/dlls/d3dx9_36/texture.c
+index 799ff1e..8064503 100644
+--- a/dlls/d3dx9_36/texture.c
++++ b/dlls/d3dx9_36/texture.c
+@@ -2089,3 +2089,150 @@ HRESULT WINAPI D3DXComputeNormalMap(IDirect3DTexture9 *texture, IDirect3DTexture
+ 
+     return D3D_OK;
+ }
++
++static void set_vec3(D3DXVECTOR3 *v, float x, float y, float z)
++{
++    v->x = x;
++    v->y = y;
++    v->z = z;
++}
++
++/*
++ * The following implementation of D3DXSHProjectCubeMap is based on the
++ * SHProjectCubeMap() implementation from Microsoft's DirectXMath library,
++ * covered under the following copyright:
++ *
++ * Copyright (c) Microsoft Corporation.
++ * Licensed under the MIT License.
++ */
++HRESULT WINAPI D3DXSHProjectCubeMap(unsigned int order, IDirect3DCubeTexture9 *texture, float *red, float *green, float *blue)
++{
++    const unsigned int order_square = order * order;
++    const struct pixel_format_desc *format;
++    unsigned int x, y, i, face;
++    float B, S, proj_normal;
++    D3DSURFACE_DESC desc;
++    float Wt = 0.0f;
++    float *temp;
++    HRESULT hr;
++
++    TRACE("order %u, texture %p, red %p, green %p, blue %p.\n", order, texture, red, green, blue);
++
++    if (!texture || !red || order < D3DXSH_MINORDER || order > D3DXSH_MAXORDER)
++        return D3DERR_INVALIDCALL;
++
++    memset(red, 0, order_square * sizeof(float));
++    if (green)
++        memset(green, 0, order_square * sizeof(float));
++    if (blue)
++        memset(blue, 0, order_square * sizeof(float));
++
++    if (FAILED(hr = IDirect3DCubeTexture9_GetLevelDesc(texture, 0, &desc)))
++    {
++        ERR("Failed to get level desc, hr %#lx.\n", hr);
++        return hr;
++    }
++
++    format = get_d3dx_pixel_format_info(d3dx_pixel_format_id_from_d3dformat(desc.Format));
++    if (is_unknown_format(format) || is_index_format(format) || is_compressed_format(format))
++    {
++        FIXME("Unsupported texture format %#x.\n", desc.Format);
++        return D3DERR_INVALIDCALL;
++    }
++
++    if (!(temp = malloc(order_square * sizeof(*temp))))
++        return E_OUTOFMEMORY;
++
++    B = -1.0f + 1.0f / desc.Width;
++    if (desc.Width > 1)
++        S = 2.0f * (1.0f - 1.0f / desc.Width) / (desc.Width - 1.0f);
++    else
++        S = 0.0f;
++
++    for (face = 0; face < 6; ++face)
++    {
++        D3DLOCKED_RECT map_desc;
++
++        if (FAILED(hr = IDirect3DCubeTexture9_LockRect(texture, face, 0, &map_desc, NULL, D3DLOCK_READONLY)))
++        {
++            ERR("Failed to map texture, hr %#lx.\n", hr);
++            free(temp);
++            return hr;
++        }
++
++        for (y = 0; y < desc.Height; ++y)
++        {
++            const BYTE *row = (const BYTE *)map_desc.pBits + y * map_desc.Pitch;
++
++            for (x = 0; x < desc.Width; ++x)
++            {
++                float diff_solid, x_3d, y_3d;
++                const float u = x * S + B;
++                const float v = y * S + B;
++                struct d3dx_color colour;
++                D3DXVECTOR3 dir;
++
++                x_3d = (x * 2.0f + 1.0f) / desc.Width - 1.0f;
++                y_3d = (y * 2.0f + 1.0f) / desc.Width - 1.0f;
++
++                switch (face)
++                {
++                    case D3DCUBEMAP_FACE_POSITIVE_X:
++                        set_vec3(&dir, 1.0f, -y_3d, -x_3d);
++                        break;
++
++                    case D3DCUBEMAP_FACE_NEGATIVE_X:
++                        set_vec3(&dir, -1.0f, -y_3d, x_3d);
++                        break;
++
++                    case D3DCUBEMAP_FACE_POSITIVE_Y:
++                        set_vec3(&dir, x_3d, 1.0f, y_3d);
++                        break;
++
++                    case D3DCUBEMAP_FACE_NEGATIVE_Y:
++                        set_vec3(&dir, x_3d, -1.0f, -y_3d);
++                        break;
++
++                    case D3DCUBEMAP_FACE_POSITIVE_Z:
++                        set_vec3(&dir, x_3d, -y_3d, 1.0f);
++                        break;
++
++                    case D3DCUBEMAP_FACE_NEGATIVE_Z:
++                        set_vec3(&dir, -x_3d, -y_3d, -1.0f);
++                        break;
++                }
++
++                /* This is more complex than powf(..., 1.5f), but also happens
++                 * to be slightly more accurate, and slightly faster as well. */
++                diff_solid = 4.0f / ((1.0f + u * u + v * v) * sqrtf(1.0f + u * u + v * v));
++                Wt += diff_solid;
++
++                D3DXVec3Normalize(&dir, &dir);
++                D3DXSHEvalDirection(temp, order, &dir);
++
++                format_to_d3dx_color(format, &row[x * format->block_byte_count], NULL, &colour);
++
++                for (i = 0; i < order_square; ++i)
++                {
++                    red[i] += temp[i] * colour.value.x * diff_solid;
++                    if (green)
++                        green[i] += temp[i] * colour.value.y * diff_solid;
++                    if (blue)
++                        blue[i] += temp[i] * colour.value.z * diff_solid;
++                }
++            }
++        }
++
++        IDirect3DCubeTexture9_UnlockRect(texture, face, 0);
++    }
++
++    proj_normal = (4.0f * M_PI) / Wt;
++    D3DXSHScale(red, order, red, proj_normal);
++    if (green)
++        D3DXSHScale(green, order, green, proj_normal);
++    if (blue)
++        D3DXSHScale(blue, order, blue, proj_normal);
++
++    free(temp);
++    return D3D_OK;
++}
+diff --git a/dlls/dwrite/font.c b/dlls/dwrite/font.c
+index ac2e2b8..7956cff 100644
+--- a/dlls/dwrite/font.c
++++ b/dlls/dwrite/font.c
+@@ -4002,9 +4002,6 @@ static DWRITE_FONT_WEIGHT font_extract_weight(struct list *tokens, DWRITE_FONT_W
+     if (match_pattern_list(tokens, black_patterns, match))
+         return DWRITE_FONT_WEIGHT_BLACK;
+ 
+-    if (match_pattern_list(tokens, black_patterns, match))
+-        return DWRITE_FONT_WEIGHT_BLACK;
+-
+     if (match_pattern_list(tokens, demibold2_patterns, match))
+         return DWRITE_FONT_WEIGHT_DEMI_BOLD;
+ 
+diff --git a/dlls/dwrite/format.c b/dlls/dwrite/format.c
+index 01a6dfd..04dcad7 100644
+--- a/dlls/dwrite/format.c
++++ b/dlls/dwrite/format.c
+@@ -132,7 +132,7 @@ HRESULT format_set_linespacing(struct dwrite_textformat_data *format, DWRITE_LIN
+         return E_INVALIDARG;
+ 
+     if (changed)
+-        *changed = memcmp(spacing, &format->spacing, sizeof(*spacing));
++        *changed = !!memcmp(spacing, &format->spacing, sizeof(*spacing));
+ 
+     format->spacing = *spacing;
+     return S_OK;
+diff --git a/dlls/dwrite/gdiinterop.c b/dlls/dwrite/gdiinterop.c
+index 7f4b7f7..7db3bdb 100644
+--- a/dlls/dwrite/gdiinterop.c
++++ b/dlls/dwrite/gdiinterop.c
+@@ -1000,7 +1000,10 @@ static HRESULT WINAPI memresourcestream_ReadFileFragment(IDWriteFontFileStream *
+         return E_OUTOFMEMORY;
+ 
+     if (!GetFontFileData(stream->key, 0, offset, fragment, fragment_size))
++    {
++        free(fragment);
+         return E_FAIL;
++    }
+ 
+     *fragment_start = *fragment_context = fragment;
+     return S_OK;
+diff --git a/dlls/dxgi/device.c b/dlls/dxgi/device.c
+index 46d252f..ca204ed 100644
+--- a/dlls/dxgi/device.c
++++ b/dlls/dxgi/device.c
+@@ -237,7 +237,7 @@ fail:
+     wined3d_mutex_unlock();
+     for (j = 0; j < i; ++j)
+     {
+-        IDXGISurface_Release(surface[i]);
++        IDXGISurface_Release(surface[j]);
+     }
+     IWineDXGIDeviceParent_Release(dxgi_device_parent);
+     return hr;
+diff --git a/dlls/dxgi/resource.c b/dlls/dxgi/resource.c
+index 67921de..5638a8b 100644
+--- a/dlls/dxgi/resource.c
++++ b/dlls/dxgi/resource.c
+@@ -273,7 +273,7 @@ static HRESULT STDMETHODCALLTYPE dxgi_surface_GetResource(IDXGISurface2 *iface,
+     if (SUCCEEDED(hr))
+         *subresource_idx = resource->subresource_idx;
+     else
+-        parent_resource = NULL;
++        *parent_resource = NULL;
+     return hr;
+ }
+ 
+diff --git a/dlls/dxgi/utils.c b/dlls/dxgi/utils.c
+index 35fcc07..4884f48 100644
+--- a/dlls/dxgi/utils.c
++++ b/dlls/dxgi/utils.c
+@@ -541,7 +541,7 @@ unsigned int dxgi_swapchain_flags_from_wined3d(unsigned int wined3d_flags)
+     }
+ 
+     if (wined3d_flags)
+-        FIXME("Unhandled flags %#x.\n", flags);
++        FIXME("Unhandled flags %#x.\n", wined3d_flags);
+ 
+     return flags;
+ }
+diff --git a/dlls/evr/evr.c b/dlls/evr/evr.c
+index 108f13c..11dd639 100644
+--- a/dlls/evr/evr.c
++++ b/dlls/evr/evr.c
+@@ -796,7 +796,9 @@ static HRESULT WINAPI filter_service_lookup_LookupService(IMFTopologyServiceLook
+     EnterCriticalSection(&filter->renderer.filter.filter_cs);
+ 
+     if (!(filter->flags & EVR_INIT_SERVICES))
++    {
+         hr = MF_E_NOTACCEPTING;
++    }
+     else if (IsEqualGUID(service, &MR_VIDEO_RENDER_SERVICE))
+     {
+         if (IsEqualIID(riid, &IID_IMediaEventSink))
+@@ -804,6 +806,11 @@ static HRESULT WINAPI filter_service_lookup_LookupService(IMFTopologyServiceLook
+             *objects = &filter->IMediaEventSink_iface;
+             IUnknown_AddRef((IUnknown *)*objects);
+         }
++        else
++        {
++            WARN("Unsupported interface %s for MR_VIDEO_RENDER_SERVICE.\n", debugstr_guid(riid));
++            hr = E_NOINTERFACE;
++        }
+     }
+     else if (IsEqualGUID(service, &MR_VIDEO_MIXER_SERVICE))
+     {
+diff --git a/dlls/evr/mixer.c b/dlls/evr/mixer.c
+index deedf03..65f5501 100644
+--- a/dlls/evr/mixer.c
++++ b/dlls/evr/mixer.c
+@@ -778,7 +778,7 @@ static HRESULT video_mixer_collect_output_types(struct video_mixer *mixer, const
+                 sizeof(aperture), NULL)))
+         {
+             width = aperture.OffsetX.value + aperture.Area.cx;
+-            height = aperture.OffsetX.value + aperture.Area.cy;
++            height = aperture.OffsetY.value + aperture.Area.cy;
+         }
+         else
+         {
+diff --git a/dlls/evr/presenter.c b/dlls/evr/presenter.c
+index 6383ae0..1b57922 100644
+--- a/dlls/evr/presenter.c
++++ b/dlls/evr/presenter.c
+@@ -1592,9 +1592,18 @@ static HRESULT WINAPI video_presenter_control_GetBorderColor(IMFVideoDisplayCont
+ 
+ static HRESULT WINAPI video_presenter_control_SetRenderingPrefs(IMFVideoDisplayControl *iface, DWORD flags)
+ {
++    struct video_presenter *presenter = impl_from_IMFVideoDisplayControl(iface);
++
+     FIXME("%p, %#lx.\n", iface, flags);
+ 
+-    return E_NOTIMPL;
++    if (flags & ~MFVideoRenderPrefs_Mask)
++        return E_INVALIDARG;
++
++    EnterCriticalSection(&presenter->cs);
++    presenter->rendering_prefs = flags;
++    LeaveCriticalSection(&presenter->cs);
++
++    return S_OK;
+ }
+ 
+ static HRESULT WINAPI video_presenter_control_GetRenderingPrefs(IMFVideoDisplayControl *iface, DWORD *flags)
+diff --git a/dlls/gdiplus/font.c b/dlls/gdiplus/font.c
+index 5daa910..4de5a1e 100644
+--- a/dlls/gdiplus/font.c
++++ b/dlls/gdiplus/font.c
+@@ -610,15 +610,12 @@ GpStatus WINGDIPAPI GdipGetFontHeightGivenDPI(GDIPCONST GpFont *font, REAL dpi,
+ static INT CALLBACK is_font_installed_proc(const LOGFONTW *elf,
+                             const TEXTMETRICW *ntm, DWORD type, LPARAM lParam)
+ {
+-    const ENUMLOGFONTW *elfW = (const ENUMLOGFONTW *)elf;
+     LOGFONTW *lf = (LOGFONTW *)lParam;
+ 
+     if (type & RASTER_FONTTYPE)
+         return 1;
+ 
+     *lf = *elf;
+-    /* replace substituted font name by a real one */
+-    lstrcpynW(lf->lfFaceName, elfW->elfFullName, LF_FACESIZE);
+     return 0;
+ }
+ 
+@@ -678,6 +675,48 @@ static BOOL get_font_metrics(HDC hdc, struct font_metrics *fm)
+     return TRUE;
+ }
+ 
++static GpStatus find_font_family(GpFontCollection *collection, const WCHAR *name,
++                                 GpFontFamily **family)
++{
++    int i;
++    GpStatus status;
++
++    for (i = 0; i < collection->count; i++)
++    {
++        if (!wcsicmp(name, collection->FontFamilies[i]->FamilyName))
++        {
++            status = GdipCloneFontFamily(collection->FontFamilies[i], family);
++            TRACE("<-- %p\n", *family);
++            return status;
++        }
++    }
++    return FontFamilyNotFound;
++}
++
++static BOOL get_font_family_name(HDC hdc, WCHAR *name, INT name_len)
++{
++    OUTLINETEXTMETRICW *otm;
++    UINT size;
++
++    size = GetOutlineTextMetricsW(hdc, 0, NULL);
++    if (!size) return FALSE;
++
++    otm = malloc(size);
++    if (!otm) return FALSE;
++
++    if (GetOutlineTextMetricsW(hdc, size, otm) && otm->otmpFamilyName &&
++        (ULONG_PTR)otm->otmpFamilyName < size)
++    {
++        lstrcpynW(name, (const WCHAR *)((const char *)otm + (ULONG_PTR)otm->otmpFamilyName),
++                  name_len);
++        free(otm);
++        return TRUE;
++    }
++
++    free(otm);
++    return FALSE;
++}
++
+ /*******************************************************************************
+  * GdipCreateFontFamilyFromName [GDIPLUS.@]
+  *
+@@ -705,7 +744,6 @@ GpStatus WINGDIPAPI GdipCreateFontFamilyFromName(GDIPCONST WCHAR *name,
+     HDC hdc;
+     LOGFONTW lf;
+     GpStatus status;
+-    int i;
+ 
+     TRACE("%s, %p %p\n", debugstr_w(name), collection, family);
+ 
+@@ -724,13 +762,29 @@ GpStatus WINGDIPAPI GdipCreateFontFamilyFromName(GDIPCONST WCHAR *name,
+ 
+     if (!EnumFontFamiliesW(hdc, name, is_font_installed_proc, (LPARAM)&lf))
+     {
+-        for (i = 0; i < collection->count; i++)
++        status = find_font_family(collection, lf.lfFaceName, family);
++
++        if (status == FontFamilyNotFound)
+         {
+-            if (!wcsicmp(lf.lfFaceName, collection->FontFamilies[i]->FamilyName))
++            HFONT hfont, old_font;
++            WCHAR facename[LF_FACESIZE];
++
++            hfont = CreateFontIndirectW(&lf);
++            if (hfont)
+             {
+-                status = GdipCloneFontFamily(collection->FontFamilies[i], family);
+-                TRACE("<-- %p\n", *family);
+-                break;
++                old_font = SelectObject(hdc, hfont);
++
++                /* lfFaceName may still be the requested name after font
++                 * substitution; use GetTextFaceW() to get the real face name,
++                 * then OUTLINETEXTMETRIC as a fallback. */
++                GetTextFaceW(hdc, LF_FACESIZE, facename);
++                status = find_font_family(collection, facename, family);
++                if (status == FontFamilyNotFound &&
++                    get_font_family_name(hdc, facename, LF_FACESIZE))
++                    status = find_font_family(collection, facename, family);
++
++                SelectObject(hdc, old_font);
++                DeleteObject(hfont);
+             }
+         }
+     }
+diff --git a/dlls/gdiplus/graphics.c b/dlls/gdiplus/graphics.c
+index bdbf123..4c5ce90 100644
+--- a/dlls/gdiplus/graphics.c
++++ b/dlls/gdiplus/graphics.c
+@@ -7582,7 +7582,10 @@ GpStatus WINGDIPAPI GdipMeasureDriverString(GpGraphics *graphics, GDIPCONST UINT
+         length = lstrlenW(text);
+ 
+     if (length == 0)
++    {
+         set_rect(boundingBox, 0.0f, 0.0f, 0.0f, 0.0f);
++        return Ok;
++    }
+ 
+     if (flags & unsupported_flags)
+         FIXME("Ignoring flags %x\n", flags & unsupported_flags);
+diff --git a/dlls/gdiplus/graphicspath.c b/dlls/gdiplus/graphicspath.c
+index a18f373..e2dd8ca 100644
+--- a/dlls/gdiplus/graphicspath.c
++++ b/dlls/gdiplus/graphicspath.c
+@@ -2897,7 +2897,7 @@ GpStatus WINGDIPAPI GdipClearPathMarkers(GpPath* path)
+ 
+     count = path->pathdata.Count;
+ 
+-    for(i = 0; i < count - 1; i++){
++    for(i = 0; i < count; i++){
+         path->pathdata.Types[i] &= ~PathPointTypePathMarker;
+     }
+ 
+diff --git a/dlls/gdiplus/imageattributes.c b/dlls/gdiplus/imageattributes.c
+index ca603e3..34299df 100644
+--- a/dlls/gdiplus/imageattributes.c
++++ b/dlls/gdiplus/imageattributes.c
+@@ -225,7 +225,7 @@ GpStatus WINGDIPAPI GdipSetImageAttributesNoOp(GpImageAttributes *imageAttr,
+ {
+     TRACE("(%p,%u,%i)\n", imageAttr, type, enableFlag);
+ 
+-    if (!is_valid_ColorAdjustType(type))
++    if (!imageAttr || !is_valid_ColorAdjustType(type))
+         return InvalidParameter;
+ 
+     imageAttr->noop[type] = enableFlag ? IMAGEATTR_NOOP_SET : IMAGEATTR_NOOP_CLEAR;
+diff --git a/dlls/gdiplus/metafile.c b/dlls/gdiplus/metafile.c
+index de4d37f..35e2720 100644
+--- a/dlls/gdiplus/metafile.c
++++ b/dlls/gdiplus/metafile.c
+@@ -2006,6 +2006,7 @@ static GpStatus metafile_deserialize_image(const BYTE *record_data, UINT data_si
+ static GpStatus metafile_deserialize_path(const BYTE *record_data, UINT data_size, GpPath **path)
+ {
+     EmfPlusPath *data = (EmfPlusPath *)record_data;
++    GpStatus status;
+     BYTE *types;
+     UINT size;
+     DWORD i;
+@@ -2048,8 +2049,9 @@ static GpStatus metafile_deserialize_path(const BYTE *record_data, UINT data_siz
+             }
+ 
+             types = (BYTE *)(points + i);
+-            GdipCreatePath2(temp, types, data->PathPointCount, FillModeAlternate, path);
++            status = GdipCreatePath2(temp, types, data->PathPointCount, FillModeAlternate, path);
+             free(temp);
++            return status;
+         }
+         else
+         {
+@@ -2062,8 +2064,6 @@ static GpStatus metafile_deserialize_path(const BYTE *record_data, UINT data_siz
+     {
+         return GdipCreatePath(FillModeAlternate, path);
+     }
+-
+-    return Ok;
+ }
+ 
+ static GpStatus metafile_read_region_node(struct memory_buffer *mbuf, GpRegion *region, region_element *node, UINT *count)
+@@ -5045,7 +5045,7 @@ static GpStatus METAFILE_AddPenObject(GpMetafile *metafile, GpPen *pen, DWORD *i
+     }
+     if (data_flags & PenDataNonCenter)
+     {
+-        *(REAL*)(pen_data->OptionalData + i) = pen->align;
++        *(DWORD*)(pen_data->OptionalData + i) = pen->align;
+         i += sizeof(DWORD);
+     }
+     if (data_flags & PenDataCustomStartCap)
+diff --git a/dlls/kernelbase/file.c b/dlls/kernelbase/file.c
+index 23931fb..f61b279 100644
+--- a/dlls/kernelbase/file.c
++++ b/dlls/kernelbase/file.c
+@@ -1365,7 +1365,7 @@ HANDLE WINAPI DECLSPEC_HOTPATCH FindFirstFileExW( LPCWSTR filename, FINDEX_INFO_
+ 
+     InitializeObjectAttributes( &attr, &nt_name, OBJ_CASE_INSENSITIVE, 0, NULL );
+     status = NtOpenFile( &info->handle, FILE_LIST_DIRECTORY | SYNCHRONIZE, &attr, &io,
+-                         FILE_SHARE_READ | FILE_SHARE_WRITE,
++                         FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                          FILE_DIRECTORY_FILE | FILE_SYNCHRONOUS_IO_NONALERT | FILE_OPEN_FOR_BACKUP_INTENT );
+     if (status != STATUS_SUCCESS)
+     {
+diff --git a/dlls/mfplat/main.c b/dlls/mfplat/main.c
+index 01d9d2d..a612994 100644
+--- a/dlls/mfplat/main.c
++++ b/dlls/mfplat/main.c
+@@ -4437,7 +4437,7 @@ static HRESULT WINAPI bytestream_read_callback_Invoke(IRtwqAsyncCallback *iface,
+ 
+ static HRESULT WINAPI bytestream_write_callback_Invoke(IRtwqAsyncCallback *iface, IRtwqAsyncResult *result)
+ {
+-    struct bytestream *stream = impl_from_read_callback_IRtwqAsyncCallback(iface);
++    struct bytestream *stream = impl_from_write_callback_IRtwqAsyncCallback(iface);
+     struct async_stream_op *op;
+     IUnknown *object;
+     HRESULT hr;
+@@ -4864,9 +4864,6 @@ static HRESULT WINAPI bytestream_wrapper_GetLength(IMFByteStream *iface, QWORD *
+ 
+     TRACE("%p, %p.\n", iface, length);
+ 
+-    if (wrapper->is_closed)
+-        return MF_E_INVALIDREQUEST;
+-
+     return wrapper->is_closed ? MF_E_INVALIDREQUEST :
+             IMFByteStream_GetLength(wrapper->stream, length);
+ }
+@@ -4877,9 +4874,6 @@ static HRESULT WINAPI bytestream_wrapper_SetLength(IMFByteStream *iface, QWORD l
+ 
+     TRACE("%p, %s.\n", iface, wine_dbgstr_longlong(length));
+ 
+-    if (wrapper->is_closed)
+-        return MF_E_INVALIDREQUEST;
+-
+     return wrapper->is_closed ? MF_E_INVALIDREQUEST :
+             IMFByteStream_SetLength(wrapper->stream, length);
+ }
+@@ -4890,9 +4884,6 @@ static HRESULT WINAPI bytestream_wrapper_GetCurrentPosition(IMFByteStream *iface
+ 
+     TRACE("%p, %p.\n", iface, position);
+ 
+-    if (wrapper->is_closed)
+-        return MF_E_INVALIDREQUEST;
+-
+     return wrapper->is_closed ? MF_E_INVALIDREQUEST :
+             IMFByteStream_GetCurrentPosition(wrapper->stream, position);
+ }
+diff --git a/dlls/msi/appsearch.c b/dlls/msi/appsearch.c
+index 092a615..38420b8 100644
+--- a/dlls/msi/appsearch.c
++++ b/dlls/msi/appsearch.c
+@@ -98,7 +98,12 @@ static UINT get_signature( MSIPACKAGE *package, struct signature *sig, const WCH
+     }
+ 
+     /* get properties */
+-    sig->File = msi_dup_record_field(row,2);
++    if (!(sig->File = msi_dup_record_field(row, 2)))
++    {
++        msiobj_release( &row->hdr );
++        return ERROR_SUCCESS;
++    }
++
+     if ((p = wcschr(sig->File, '|')))
+     {
+         p++;
+@@ -143,7 +148,6 @@ static UINT get_signature( MSIPACKAGE *package, struct signature *sig, const WCH
+     TRACE("Languages is %s\n", debugstr_w(sig->Languages));
+ 
+     msiobj_release( &row->hdr );
+-
+     return ERROR_SUCCESS;
+ }
+ 
+diff --git a/dlls/msi/assembly.c b/dlls/msi/assembly.c
+index a751ded..cfd7739 100644
+--- a/dlls/msi/assembly.c
++++ b/dlls/msi/assembly.c
+@@ -378,6 +378,7 @@ UINT msi_install_assembly( MSIPACKAGE *package, MSICOMPONENT *comp )
+     IAssemblyCache *cache;
+     MSIASSEMBLY *assembly = comp->assembly;
+     MSIFEATURE *feature = NULL;
++    MSIFILE *file;
+ 
+     if (!init_assembly_caches()) return ERROR_FUNCTION_FAILED;
+ 
+@@ -391,17 +392,22 @@ UINT msi_install_assembly( MSIPACKAGE *package, MSICOMPONENT *comp )
+     }
+     if (assembly->attributes == msidbAssemblyAttributesWin32)
+     {
+-        if (!assembly->manifest)
++        if (!(file = msi_get_loaded_file( package, assembly->manifest )))
+         {
+-            WARN("no manifest\n");
++            WARN( "no matching file for %s\n", debugstr_w(assembly->manifest) );
+             return ERROR_FUNCTION_FAILED;
+         }
+-        manifest = msi_get_loaded_file( package, assembly->manifest )->TargetPath;
++        manifest = file->TargetPath;
+         cache = cache_sxs;
+     }
+     else
+     {
+-        manifest = msi_get_loaded_file( package, comp->KeyPath )->TargetPath;
++        if (!(file = msi_get_loaded_file( package, comp->KeyPath )))
++        {
++            WARN( "no matching file for %s\n", debugstr_w(comp->KeyPath) );
++            return ERROR_FUNCTION_FAILED;
++        }
++        manifest = file->TargetPath;
+         cache = get_net_cache( get_clr_version(manifest) );
+         if (!cache) return ERROR_SUCCESS;
+     }
+diff --git a/dlls/msi/custom.c b/dlls/msi/custom.c
+index 54e1897..df91542 100644
+--- a/dlls/msi/custom.c
++++ b/dlls/msi/custom.c
+@@ -332,9 +332,8 @@ static UINT custom_get_thread_return( MSIPACKAGE *package, HANDLE thread )
+     case ERROR_SUCCESS:
+     case ERROR_INSTALL_USEREXIT:
+     case ERROR_INSTALL_FAILURE:
+-        return rc;
+     case ERROR_NO_MORE_ITEMS:
+-        return ERROR_SUCCESS;
++        return rc;
+     case ERROR_INSTALL_SUSPEND:
+         ACTION_ForceReboot( package );
+         return ERROR_SUCCESS;
+@@ -604,10 +603,12 @@ static DWORD custom_start_server(MSIPACKAGE *package, DWORD arch)
+ 
+     swprintf(buffer, ARRAY_SIZE(buffer), L"\\\\.\\pipe\\msica_%x_%d",
+              GetCurrentProcessId(), arch == SCS_32BIT_BINARY ? 32 : 64);
+-    pipe = CreateNamedPipeW(buffer, PIPE_ACCESS_DUPLEX, 0, 1, sizeof(DWORD64),
+-        sizeof(GUID), 0, NULL);
++    pipe = CreateNamedPipeW(buffer, PIPE_ACCESS_DUPLEX, 0, 1, sizeof(DWORD64), sizeof(GUID), 0, NULL);
+     if (pipe == INVALID_HANDLE_VALUE)
++    {
+         ERR("failed to create custom action client pipe: %lu\n", GetLastError());
++        return GetLastError();
++    }
+ 
+     if ((sizeof(void *) == 8 || is_wow64) && arch == SCS_32BIT_BINARY)
+         GetSystemWow64DirectoryW(path, MAX_PATH - ARRAY_SIZE(L"\\msiexec.exe"));
+@@ -998,18 +999,23 @@ static UINT HANDLE_CustomType19( MSIPACKAGE *package, const WCHAR *source, const
+ 
+ static WCHAR *build_msiexec_args( const WCHAR *filename, const WCHAR *params )
+ {
+-    UINT len_filename = lstrlenW( filename ), len_params = lstrlenW( params );
++    UINT len_filename = wcslen( filename ), len_params = 0;
+     UINT len = ARRAY_SIZE(L"/qb /i ") - 1;
+     WCHAR *ret;
+ 
++    if (params) len_params = wcslen( params );
+     if (!(ret = malloc( (len + len_filename + len_params + 4) * sizeof(WCHAR) ))) return NULL;
++
+     memcpy( ret, L"/qb /i ", sizeof(L"/qb /i ") );
+     ret[len++] = '"';
+     memcpy( ret + len, filename, len_filename * sizeof(WCHAR) );
+     len += len_filename;
+     ret[len++] = '"';
+-    ret[len++] = ' ';
+-    lstrcpyW( ret + len, params );
++    if (params)
++    {
++        ret[len++] = ' ';
++        wcscpy( ret + len, params );
++    }
+     return ret;
+ }
+ 
+@@ -1516,7 +1522,7 @@ UINT ACTION_CustomAction(MSIPACKAGE *package, const WCHAR *action)
+         break;
+     case 7: /* Concurrent install from substorage */
+         deformat_string( package, target, &deformated );
+-        rc = HANDLE_CustomType7( package, source, target, type, action );
++        rc = HANDLE_CustomType7( package, source, deformated, type, action );
+         free( deformated );
+         break;
+     case 17:
+diff --git a/dlls/msi/database.c b/dlls/msi/database.c
+index a39321a..75b27e5 100644
+--- a/dlls/msi/database.c
++++ b/dlls/msi/database.c
+@@ -363,7 +363,7 @@ static WCHAR *read_text_archive(const WCHAR *path, DWORD *len)
+ 
+     if (!ReadFile( file, data, size, &read, NULL ) || read != size) goto done;
+ 
+-    while (!data[size - 1]) size--;
++    while (size && !data[size - 1]) size--;
+     *len = MultiByteToWideChar( CP_ACP, 0, data, size, NULL, 0 );
+     if ((wdata = malloc( (*len + 1) * sizeof(WCHAR) )))
+     {
+@@ -561,6 +561,8 @@ static WCHAR *build_createsql_postlude(WCHAR **primary_keys, DWORD num_keys)
+     LPWSTR postlude, keys, ptr;
+     DWORD size, i;
+ 
++    if (!num_keys) return NULL;
++
+     for (i = 0, size = 1; i < num_keys; i++)
+         size += lstrlenW(L"`%s`, ") + lstrlenW(primary_keys[i]) - 2;
+ 
+@@ -601,17 +603,15 @@ static UINT add_table_to_db(MSIDATABASE *db, WCHAR **columns, WCHAR **types, WCH
+     columns_sql = build_createsql_columns(columns, types, num_columns);
+     postlude = build_createsql_postlude(labels + 1, num_labels - 1); /* skip over table name */
+ 
+-    if (!prelude || !columns_sql || !postlude)
+-        goto done;
++    if (!prelude || !columns_sql) goto done;
+ 
+-    size = lstrlenW(prelude) + lstrlenW(columns_sql) + lstrlenW(postlude) + 1;
+-    create_sql = malloc(size * sizeof(WCHAR));
+-    if (!create_sql)
+-        goto done;
++    size = wcslen(prelude) + wcslen(columns_sql) + 1;
++    if (postlude) size += wcslen(postlude);
++    if (!(create_sql = malloc(size * sizeof(WCHAR)))) goto done;
+ 
+-    lstrcpyW(create_sql, prelude);
+-    lstrcatW(create_sql, columns_sql);
+-    lstrcatW(create_sql, postlude);
++    wcscpy(create_sql, prelude);
++    wcscat(create_sql, columns_sql);
++    if (postlude) wcscat(create_sql, postlude);
+ 
+     r = MSI_DatabaseOpenViewW( db, create_sql, &view );
+     if (r != ERROR_SUCCESS)
+diff --git a/dlls/msi/delete.c b/dlls/msi/delete.c
+index 1d80dce..fb036eb 100644
+--- a/dlls/msi/delete.c
++++ b/dlls/msi/delete.c
+@@ -35,19 +35,6 @@
+ 
+ WINE_DEFAULT_DEBUG_CHANNEL(msidb);
+ 
+-
+-/*
+- * Code to delete rows from a table.
+- *
+- * We delete rows by blanking them out rather than trying to remove the row.
+- * This appears to be what the native MSI does (or tries to do). For the query:
+- *
+- * delete from Property
+- *
+- * some non-zero entries are left in the table by native MSI.  I'm not sure if
+- * that's a bug in the way I'm running the query, or a just a bug.
+- */
+-
+ struct delete_view
+ {
+     MSIVIEW        view;
+@@ -76,7 +63,7 @@ static UINT DELETE_fetch_stream( struct tagMSIVIEW *view, UINT row, UINT col, IS
+ static UINT DELETE_execute( struct tagMSIVIEW *view, MSIRECORD *record )
+ {
+     struct delete_view *dv = (struct delete_view *)view;
+-    UINT r, i, rows = 0, cols = 0;
++    UINT r, i, rows, cols;
+ 
+     TRACE("%p %p\n", dv, record);
+ 
+@@ -91,11 +78,10 @@ static UINT DELETE_execute( struct tagMSIVIEW *view, MSIRECORD *record )
+     if( r != ERROR_SUCCESS )
+         return r;
+ 
+-    TRACE("deleting %d rows\n", rows);
++    TRACE("deleting %u rows\n", rows);
+ 
+-    /* blank out all the rows that match */
+-    for ( i=0; i<rows; i++ )
+-        dv->table->ops->delete_row( dv->table, i );
++    for (i = 0; i < rows; i++)
++        dv->table->ops->delete_row( dv->table, 0 );
+ 
+     return ERROR_SUCCESS;
+ }
+diff --git a/dlls/msi/dialog.c b/dlls/msi/dialog.c
+index bfe494d..1aff089 100644
+--- a/dlls/msi/dialog.c
++++ b/dlls/msi/dialog.c
+@@ -802,8 +802,7 @@ static UINT dialog_text_control( msi_dialog *dialog, MSIRECORD *rec )
+ 
+     TRACE("%p %p\n", dialog, rec);
+ 
+-    control = dialog_add_control( dialog, rec, L"Static", SS_LEFT | WS_GROUP );
+-    if( !control )
++    if (!(control = dialog_add_control( dialog, rec, L"Static", SS_LEFT | WS_GROUP )))
+         return ERROR_FUNCTION_FAILED;
+ 
+     info = malloc( sizeof *info );
+@@ -1029,10 +1028,7 @@ static UINT dialog_button_control( msi_dialog *dialog, MSIRECORD *rec )
+         }
+     }
+ 
+-    control = dialog_add_control( dialog, rec, L"BUTTON", style );
+-    if (!control)
+-        return ERROR_FUNCTION_FAILED;
+-
++    if (!(control = dialog_add_control( dialog, rec, L"BUTTON", style ))) return ERROR_FUNCTION_FAILED;
+     control->handler = dialog_button_handler;
+ 
+     if (attributes & msidbControlAttributesIcon)
+@@ -1149,9 +1145,11 @@ static UINT dialog_checkbox_control( msi_dialog *dialog, MSIRECORD *rec )
+ 
+     TRACE("%p %p\n", dialog, rec);
+ 
+-    control = dialog_add_control( dialog, rec, L"BUTTON", BS_CHECKBOX | BS_MULTILINE | WS_TABSTOP );
++    if (!(control = dialog_add_control( dialog, rec, L"BUTTON", BS_CHECKBOX | BS_MULTILINE | WS_TABSTOP )))
++        return ERROR_FUNCTION_FAILED;
+     control->handler = dialog_checkbox_handler;
+     control->update = dialog_checkbox_sync_state;
++
+     prop = MSI_RecordGetString( rec, 9 );
+     if (prop)
+     {
+@@ -1165,9 +1163,7 @@ static UINT dialog_checkbox_control( msi_dialog *dialog, MSIRECORD *rec )
+ 
+ static UINT dialog_line_control( msi_dialog *dialog, MSIRECORD *rec )
+ {
+-    if (!dialog_add_control( dialog, rec, L"Static", SS_ETCHEDHORZ | SS_SUNKEN))
+-        return ERROR_FUNCTION_FAILED;
+-
++    if (!dialog_add_control( dialog, rec, L"Static", SS_ETCHEDHORZ | SS_SUNKEN)) return ERROR_FUNCTION_FAILED;
+     return ERROR_SUCCESS;
+ }
+ 
+@@ -1261,10 +1257,9 @@ static UINT dialog_scrolltext_control( msi_dialog *dialog, MSIRECORD *rec )
+ 
+     hRichedit = LoadLibraryA("riched20");
+ 
+-    style = WS_BORDER | ES_MULTILINE | WS_VSCROLL |
+-            ES_READONLY | ES_AUTOVSCROLL | WS_TABSTOP;
+-    control = dialog_add_control( dialog, rec, L"RichEdit20W", style );
+-    if (!control)
++    style = WS_BORDER | ES_MULTILINE | WS_VSCROLL | ES_READONLY | ES_AUTOVSCROLL | WS_TABSTOP;
++
++    if (!(control = dialog_add_control( dialog, rec, L"RichEdit20W", style )))
+     {
+         FreeLibrary( hRichedit );
+         free( info );
+@@ -1306,7 +1301,7 @@ static UINT dialog_bitmap_control( msi_dialog *dialog, MSIRECORD *rec )
+         style |= SS_CENTERIMAGE;
+     }
+ 
+-    control = dialog_add_control( dialog, rec, L"Static", style );
++    if (!(control = dialog_add_control( dialog, rec, L"Static", style ))) return ERROR_FUNCTION_FAILED;
+     cx = MSI_RecordGetInteger( rec, 6 );
+     cy = MSI_RecordGetInteger( rec, 7 );
+     cx = dialog_scale_unit( dialog, cx );
+@@ -1333,7 +1328,8 @@ static UINT dialog_icon_control( msi_dialog *dialog, MSIRECORD *rec )
+ 
+     TRACE("\n");
+ 
+-    control = dialog_add_control( dialog, rec, L"Static", SS_ICON | SS_CENTERIMAGE | WS_GROUP );
++    if (!(control = dialog_add_control( dialog, rec, L"Static", SS_ICON | SS_CENTERIMAGE | WS_GROUP )))
++        return ERROR_FUNCTION_FAILED;
+ 
+     attributes = MSI_RecordGetInteger( rec, 8 );
+     name = get_binary_name( dialog->package, rec );
+@@ -1562,8 +1558,7 @@ static UINT dialog_combo_control( msi_dialog *dialog, MSIRECORD *rec )
+     else
+         style |= CBS_DROPDOWN;
+ 
+-    control = dialog_add_control( dialog, rec, WC_COMBOBOXW, style );
+-    if (!control)
++    if (!(control = dialog_add_control( dialog, rec, WC_COMBOBOXW, style )))
+     {
+         free( info );
+         return ERROR_FUNCTION_FAILED;
+@@ -1619,7 +1614,8 @@ static UINT dialog_edit_control( msi_dialog *dialog, MSIRECORD *rec )
+     WCHAR num[MAX_NUM_DIGITS];
+     DWORD limit;
+ 
+-    control = dialog_add_control( dialog, rec, L"Edit", WS_BORDER | WS_TABSTOP | ES_AUTOHSCROLL );
++    if (!(control = dialog_add_control( dialog, rec, L"Edit", WS_BORDER | WS_TABSTOP | ES_AUTOHSCROLL )))
++        return ERROR_FUNCTION_FAILED;
+     control->handler = dialog_edit_handler;
+ 
+     text = MSI_RecordGetString( rec, 10 );
+@@ -1948,8 +1944,7 @@ static UINT dialog_maskedit_control( msi_dialog *dialog, MSIRECORD *rec )
+ 
+     info->dialog = dialog;
+ 
+-    control = dialog_add_control( dialog, rec, L"Static", SS_OWNERDRAW | WS_GROUP | WS_VISIBLE );
+-    if( !control )
++    if (!(control = dialog_add_control( dialog, rec, L"Static", SS_OWNERDRAW | WS_GROUP | WS_VISIBLE )))
+     {
+         ERR("Failed to create maskedit container\n");
+         ret = ERROR_FUNCTION_FAILED;
+@@ -2000,9 +1995,7 @@ static UINT dialog_progress_bar( msi_dialog *dialog, MSIRECORD *rec )
+     if( !(attributes & msidbControlAttributesProgress95) )
+         style |= PBS_SMOOTH;
+ 
+-    control = dialog_add_control( dialog, rec, PROGRESS_CLASSW, style );
+-    if( !control )
+-        return ERROR_FUNCTION_FAILED;
++    if (!(control = dialog_add_control( dialog, rec, PROGRESS_CLASSW, style ))) return ERROR_FUNCTION_FAILED;
+ 
+     event_subscribe( dialog, L"SetProgress", control->name, L"Progress" );
+     return ERROR_SUCCESS;
+@@ -2123,7 +2116,8 @@ static UINT dialog_pathedit_control( msi_dialog *dialog, MSIRECORD *rec )
+     if (!info)
+         return ERROR_FUNCTION_FAILED;
+ 
+-    control = dialog_add_control( dialog, rec, L"Edit", WS_BORDER | WS_TABSTOP );
++    if (!(control = dialog_add_control( dialog, rec, L"Edit", WS_BORDER | WS_TABSTOP )))
++        return ERROR_FUNCTION_FAILED;
+     control->attributes = MSI_RecordGetInteger( rec, 8 );
+     prop = MSI_RecordGetString( rec, 9 );
+     control->property = dialog_dup_property( dialog, prop, FALSE );
+@@ -2231,9 +2225,7 @@ static UINT dialog_radiogroup_control( msi_dialog *dialog, MSIRECORD *rec )
+         style |= BS_OWNERDRAW;
+ 
+     /* Create parent group box to hold radio buttons */
+-    control = dialog_add_control( dialog, rec, L"BUTTON", style );
+-    if( !control )
+-        return ERROR_FUNCTION_FAILED;
++    if (!(control = dialog_add_control( dialog, rec, L"BUTTON", style ))) return ERROR_FUNCTION_FAILED;
+ 
+     oldproc = (WNDPROC) SetWindowLongPtrW( control->hwnd, GWLP_WNDPROC,
+                                            (LONG_PTR)MSIRadioGroup_WndProc );
+@@ -2569,10 +2561,8 @@ static UINT dialog_selection_tree( msi_dialog *dialog, MSIRECORD *rec )
+         return ERROR_FUNCTION_FAILED;
+ 
+     /* create the treeview control */
+-    style = TVS_HASLINES | TVS_HASBUTTONS | TVS_LINESATROOT;
+-    style |= WS_GROUP | WS_VSCROLL | WS_TABSTOP;
+-    control = dialog_add_control( dialog, rec, WC_TREEVIEWW, style );
+-    if (!control)
++    style = TVS_HASLINES | TVS_HASBUTTONS | TVS_LINESATROOT | WS_GROUP | WS_VSCROLL | WS_TABSTOP;
++    if (!(control = dialog_add_control( dialog, rec, WC_TREEVIEWW, style )))
+     {
+         free(info);
+         return ERROR_FUNCTION_FAILED;
+@@ -2605,13 +2595,9 @@ static UINT dialog_selection_tree( msi_dialog *dialog, MSIRECORD *rec )
+ static UINT dialog_group_box( msi_dialog *dialog, MSIRECORD *rec )
+ {
+     struct control *control;
+-    DWORD style;
+-
+-    style = BS_GROUPBOX | WS_CHILD | WS_GROUP;
+-    control = dialog_add_control( dialog, rec, WC_BUTTONW, style );
+-    if (!control)
+-        return ERROR_FUNCTION_FAILED;
++    DWORD style = BS_GROUPBOX | WS_CHILD | WS_GROUP;
+ 
++    if (!(control = dialog_add_control( dialog, rec, WC_BUTTONW, style ))) return ERROR_FUNCTION_FAILED;
+     return ERROR_SUCCESS;
+ }
+ 
+@@ -2734,8 +2720,7 @@ static UINT dialog_list_box( msi_dialog *dialog, MSIRECORD *rec )
+     if (~attributes & msidbControlAttributesSorted)
+         style |= LBS_SORT;
+ 
+-    control = dialog_add_control( dialog, rec, WC_LISTBOXW, style );
+-    if (!control)
++    if (!(control = dialog_add_control( dialog, rec, WC_LISTBOXW, style )))
+     {
+         free(info);
+         return ERROR_FUNCTION_FAILED;
+@@ -2789,9 +2774,8 @@ static UINT dialog_directory_combo( msi_dialog *dialog, MSIRECORD *rec )
+     /* FIXME: use CBS_OWNERDRAWFIXED and add owner draw code */
+     style = CBS_DROPDOWNLIST | CBS_HASSTRINGS | WS_CHILD |
+             WS_GROUP | WS_TABSTOP | WS_VSCROLL;
+-    control = dialog_add_control( dialog, rec, WC_COMBOBOXW, style );
+-    if (!control)
+-        return ERROR_FUNCTION_FAILED;
++
++    if (!(control = dialog_add_control( dialog, rec, WC_COMBOBOXW, style ))) return ERROR_FUNCTION_FAILED;
+ 
+     control->attributes = MSI_RecordGetInteger( rec, 8 );
+     prop = MSI_RecordGetString( rec, 9 );
+@@ -3007,9 +2991,8 @@ static UINT dialog_directory_list( msi_dialog *dialog, MSIRECORD *rec )
+     style = LVS_LIST | WS_VSCROLL | LVS_SHAREIMAGELISTS | LVS_EDITLABELS |
+             LVS_AUTOARRANGE | LVS_SINGLESEL | WS_BORDER |
+             LVS_SORTASCENDING | WS_CHILD | WS_GROUP | WS_TABSTOP;
+-    control = dialog_add_control( dialog, rec, WC_LISTVIEWW, style );
+-    if (!control)
+-        return ERROR_FUNCTION_FAILED;
++
++    if (!(control = dialog_add_control( dialog, rec, WC_LISTVIEWW, style ))) return ERROR_FUNCTION_FAILED;
+ 
+     control->attributes = MSI_RecordGetInteger( rec, 8 );
+     control->handler = dialog_dirlist_handler;
+@@ -3198,9 +3181,8 @@ static UINT dialog_volumecost_list( msi_dialog *dialog, MSIRECORD *rec )
+     style = LVS_REPORT | WS_VSCROLL | WS_HSCROLL | LVS_SHAREIMAGELISTS |
+             LVS_AUTOARRANGE | LVS_SINGLESEL | WS_BORDER |
+             WS_CHILD | WS_TABSTOP | WS_GROUP;
+-    control = dialog_add_control( dialog, rec, WC_LISTVIEWW, style );
+-    if (!control)
+-        return ERROR_FUNCTION_FAILED;
++
++    if (!(control = dialog_add_control( dialog, rec, WC_LISTVIEWW, style ))) return ERROR_FUNCTION_FAILED;
+ 
+     dialog_vcl_add_columns( dialog, control, rec );
+     dialog_vcl_add_drives( dialog, control );
+@@ -3271,9 +3253,8 @@ static UINT dialog_volumeselect_combo( msi_dialog *dialog, MSIRECORD *rec )
+     style = WS_CHILD | WS_VISIBLE | WS_GROUP | WS_TABSTOP |
+             CBS_DROPDOWNLIST | CBS_SORT | CBS_HASSTRINGS |
+             WS_EX_LEFT | WS_EX_LTRREADING | WS_EX_RIGHTSCROLLBAR;
+-    control = dialog_add_control( dialog, rec, WC_COMBOBOXW, style );
+-    if (!control)
+-        return ERROR_FUNCTION_FAILED;
++
++    if (!(control = dialog_add_control( dialog, rec, WC_COMBOBOXW, style ))) return ERROR_FUNCTION_FAILED;
+ 
+     control->attributes = MSI_RecordGetInteger( rec, 8 );
+     control->handler = dialog_volsel_handler;
+@@ -3335,12 +3316,10 @@ static UINT dialog_hyperlink( msi_dialog *dialog, MSIRECORD *rec )
+     struct control *control;
+     DWORD style = WS_CHILD | WS_TABSTOP | WS_GROUP;
+     const WCHAR *text = MSI_RecordGetString( rec, 10 );
+-    int len = lstrlenW( text );
++    int len = text ? wcslen( text ) : 0;
+     LITEM item;
+ 
+-    control = dialog_add_control( dialog, rec, WC_LINK, style );
+-    if (!control)
+-        return ERROR_FUNCTION_FAILED;
++    if (!(control = dialog_add_control( dialog, rec, WC_LINK, style ))) return ERROR_FUNCTION_FAILED;
+ 
+     control->attributes = MSI_RecordGetInteger( rec, 8 );
+     control->handler    = dialog_hyperlink_handler;
+@@ -3349,7 +3328,7 @@ static UINT dialog_hyperlink( msi_dialog *dialog, MSIRECORD *rec )
+     item.iLink     = 0;
+     item.state     = LIS_ENABLED;
+     item.stateMask = LIS_ENABLED;
+-    if (len < L_MAX_URL_LENGTH) lstrcpyW( item.szUrl, text );
++    if (text && len < L_MAX_URL_LENGTH) wcscpy( item.szUrl, text );
+     else item.szUrl[0] = 0;
+ 
+     SendMessageW( control->hwnd, LM_SETITEM, 0, (LPARAM)&item );
+@@ -3427,9 +3406,8 @@ static UINT dialog_listview( msi_dialog *dialog, MSIRECORD *rec )
+     attributes = MSI_RecordGetInteger( rec, 8 );
+     if ( ~attributes & msidbControlAttributesSorted )
+         style |= LVS_SORTASCENDING;
+-    control = dialog_add_control( dialog, rec, WC_LISTVIEWW, style );
+-    if (!control)
+-        return ERROR_FUNCTION_FAILED;
++
++    if (!(control = dialog_add_control( dialog, rec, WC_LISTVIEWW, style ))) return ERROR_FUNCTION_FAILED;
+ 
+     prop = MSI_RecordGetString( rec, 9 );
+     control->property = dialog_dup_property( dialog, prop, FALSE );
+diff --git a/dlls/msi/distinct.c b/dlls/msi/distinct.c
+index d1b99f9..99a12f5 100644
+--- a/dlls/msi/distinct.c
++++ b/dlls/msi/distinct.c
+@@ -131,6 +131,7 @@ static UINT DISTINCT_execute( struct tagMSIVIEW *view, MSIRECORD *record )
+         return ERROR_FUNCTION_FAILED;
+ 
+     /* build it */
++    dv->row_count = 0;
+     for( i=0; i<r_count; i++ )
+     {
+         struct distinct_set **x = &rowset;
+diff --git a/dlls/msi/drop.c b/dlls/msi/drop.c
+index 9c7fc0c..6a50929 100644
+--- a/dlls/msi/drop.c
++++ b/dlls/msi/drop.c
+@@ -40,7 +40,6 @@ struct drop_view
+     MSIDATABASE *db;
+     MSIVIEW *table;
+     column_info *colinfo;
+-    INT hold;
+ };
+ 
+ static UINT DROP_execute(struct tagMSIVIEW *view, MSIRECORD *record)
+diff --git a/dlls/msi/install.c b/dlls/msi/install.c
+index 286443d..e79c004 100644
+--- a/dlls/msi/install.c
++++ b/dlls/msi/install.c
+@@ -546,7 +546,7 @@ static void set_target_path( MSIPACKAGE *package, MSIFOLDER *folder, const WCHAR
+     WCHAR *target_path;
+ 
+     if (!(target_path = msi_normalize_path( path ))) return;
+-    if (wcscmp( target_path, folder->ResolvedTarget ))
++    if (!folder->ResolvedTarget || wcscmp( target_path, folder->ResolvedTarget ))
+     {
+         free( folder->ResolvedTarget );
+         folder->ResolvedTarget = target_path;
+@@ -773,7 +773,7 @@ UINT WINAPI MsiSetMode(MSIHANDLE hInstall, MSIRUNMODE iRunMode, BOOL fState)
+         MSIHANDLE remote;
+ 
+         if (!(remote = msi_get_remote(hInstall)))
+-            return FALSE;
++            return ERROR_INVALID_HANDLE;
+ 
+         __TRY
+         {
+diff --git a/dlls/msi/media.c b/dlls/msi/media.c
+index ecc51e6..5d61346 100644
+--- a/dlls/msi/media.c
++++ b/dlls/msi/media.c
+@@ -398,8 +398,7 @@ static INT_PTR cabinet_next_cabinet_stream( FDINOTIFICATIONTYPE fdint,
+     return 0;
+ }
+ 
+-static INT_PTR cabinet_copy_file(FDINOTIFICATIONTYPE fdint,
+-                                 PFDINOTIFICATION pfdin)
++static INT_PTR cabinet_copy_file(FDINOTIFICATIONTYPE fdint, FDINOTIFICATION *pfdin)
+ {
+     MSICABDATA *data = pfdin->pv;
+     HANDLE handle = 0;
+@@ -448,13 +447,18 @@ static INT_PTR cabinet_copy_file(FDINOTIFICATIONTYPE fdint,
+ 
+             TRACE("file in use, scheduling rename operation\n");
+ 
+-            if (!(tmppathW = wcsdup(path))) return ERROR_OUTOFMEMORY;
++            if (!(tmppathW = wcsdup(path)))
++            {
++                free( path );
++                return -1;
++            }
+             if ((p = wcsrchr(tmppathW, '\\'))) *p = 0;
+             len = lstrlenW( tmppathW ) + 16;
+             if (!(tmpfileW = malloc(len * sizeof(WCHAR))))
+             {
+                 free( tmppathW );
+-                return ERROR_OUTOFMEMORY;
++                free( path );
++                return -1;
+             }
+             if (!msi_get_temp_file_name( data->package, tmppathW, L"msi", tmpfileW )) tmpfileW[0] = 0;
+             free( tmppathW );
+@@ -479,7 +483,6 @@ static INT_PTR cabinet_copy_file(FDINOTIFICATIONTYPE fdint,
+ 
+ done:
+     free(path);
+-
+     return (INT_PTR)handle;
+ }
+ 
+diff --git a/dlls/msi/msi.c b/dlls/msi/msi.c
+index 6edee9c..f551594 100644
+--- a/dlls/msi/msi.c
++++ b/dlls/msi/msi.c
+@@ -1803,6 +1803,9 @@ UINT WINAPI MsiGetPatchInfoA( LPCSTR patch, LPCSTR attr, LPSTR buffer, LPDWORD b
+     if (!patch || !attr)
+         return ERROR_INVALID_PARAMETER;
+ 
++    if (buffer && !buflen)
++        return ERROR_INVALID_PARAMETER;
++
+     if (!(patchW = strdupAtoW( patch )))
+         goto done;
+ 
+@@ -1851,6 +1854,9 @@ UINT WINAPI MsiGetPatchInfoW( LPCWSTR patch, LPCWSTR attr, LPWSTR buffer, LPDWOR
+     if (!patch || !attr)
+         return ERROR_INVALID_PARAMETER;
+ 
++    if (buffer && !buflen)
++        return ERROR_INVALID_PARAMETER;
++
+     if (wcscmp( INSTALLPROPERTY_LOCALPACKAGEW, attr ))
+         return ERROR_UNKNOWN_PROPERTY;
+ 
+diff --git a/dlls/msi/package.c b/dlls/msi/package.c
+index feb50f2..f772470 100644
+--- a/dlls/msi/package.c
++++ b/dlls/msi/package.c
+@@ -526,7 +526,12 @@ static LPWSTR get_fusion_filename(MSIPACKAGE *package)
+         if (!RegQueryValueExW(hkey, L"InstallPath", NULL, &type, (BYTE *)path, &size))
+         {
+             len = lstrlenW(path) + lstrlenW(L"fusion.dll") + 2;
+-            if (!(filename = malloc(len * sizeof(WCHAR)))) return NULL;
++            if (!(filename = malloc(len * sizeof(WCHAR))))
++            {
++                RegCloseKey(hkey);
++                RegCloseKey(netsetup);
++                return NULL;
++            }
+ 
+             lstrcpyW(filename, path);
+             lstrcatW(filename, L"\\");
+diff --git a/dlls/msi/patch.c b/dlls/msi/patch.c
+index 3b8a4ee..e11c288 100644
+--- a/dlls/msi/patch.c
++++ b/dlls/msi/patch.c
+@@ -264,11 +264,13 @@ static UINT apply_substorage_transform( MSIPACKAGE *package, MSIDATABASE *patch_
+ 
+     TRACE("%p %s\n", package, debugstr_w(name));
+ 
+-    if (*name++ != ':')
++    if (*name != ':')
+     {
+         ERR("expected a colon in %s\n", debugstr_w(name));
+         return ERROR_FUNCTION_FAILED;
+     }
++
++    name++;
+     r = IStorage_OpenStorage( patch_db->storage, name, NULL, STGM_SHARE_EXCLUSIVE, NULL, 0, &stg );
+     if (SUCCEEDED(r))
+     {
+@@ -305,11 +307,14 @@ UINT msi_check_patch_applicable( MSIPACKAGE *package, MSISUMMARYINFO *si )
+     }
+     guid_list = msi_suminfo_dup_string( si, PID_TEMPLATE );
+     guids = msi_split_string( guid_list, ';' );
+-    for (i = 0; guids[i] && ret != ERROR_SUCCESS; i++)
++    if (guids)
+     {
+-        if (!wcscmp( guids[i], product_code )) ret = ERROR_SUCCESS;
++        for (i = 0; guids[i] && ret != ERROR_SUCCESS; i++)
++        {
++            if (!wcscmp( guids[i], product_code )) ret = ERROR_SUCCESS;
++        }
++        free( guids );
+     }
+-    free( guids );
+     free( guid_list );
+     free( product_code );
+     return ret;
+diff --git a/dlls/msi/registry.c b/dlls/msi/registry.c
+index ce35cb3..a16c747 100644
+--- a/dlls/msi/registry.c
++++ b/dlls/msi/registry.c
+@@ -144,11 +144,11 @@ BOOL decode_base85_guid( LPCWSTR str, GUID *guid )
+             val = 0;
+             base = 1;
+         }
+-        val += table_dec85[str[i]] * base;
+         if( str[i] >= 0x80 )
+             return FALSE;
+         if( table_dec85[str[i]] == 0xff )
+             return FALSE;
++        val += table_dec85[str[i]] * base;
+         if( (i%5) == 4 )
+             p[i/5] = val;
+         base *= 85;
+diff --git a/dlls/msi/suminfo.c b/dlls/msi/suminfo.c
+index d5935b6..ba935d6 100644
+--- a/dlls/msi/suminfo.c
++++ b/dlls/msi/suminfo.c
+@@ -202,6 +202,11 @@ static void read_properties_from_data( PROPVARIANT *prop, LPBYTE data, DWORD sz
+         propdata = (struct property_data *)&data[ idofs[i].dwOffset ];
+ 
+         /* check we don't run off the end of the data */
++        if (idofs[i].dwOffset + sizeof(DWORD) > sz)
++        {
++            ERR("not enough data\n");
++            break;
++        }
+         size = sz - idofs[i].dwOffset - sizeof(DWORD);
+         if( sizeof(DWORD) > size ||
+             ( propdata->type == VT_FILETIME && sizeof(FILETIME) > size ) ||
+@@ -214,7 +219,13 @@ static void read_properties_from_data( PROPVARIANT *prop, LPBYTE data, DWORD sz
+         property.vt = propdata->type;
+         if( propdata->type == VT_LPSTR )
+         {
+-            char *str = malloc( propdata->u.str.len );
++            char *str;
++            if (!propdata->u.str.len)
++            {
++                WARN("zero length string\n");
++                break;
++            }
++            str = malloc( propdata->u.str.len );
+             memcpy( str, propdata->u.str.str, propdata->u.str.len );
+             str[ propdata->u.str.len - 1 ] = 0;
+             property.pszVal = str;
+diff --git a/dlls/msi/table.c b/dlls/msi/table.c
+index 6031dd9..f6ded27 100644
+--- a/dlls/msi/table.c
++++ b/dlls/msi/table.c
+@@ -2521,25 +2521,23 @@ static UINT TransformView_add_column( struct table_view *tv, MSIRECORD *rec )
+ {
+     static const WCHAR query_pfx[] =
+         L"INSERT INTO `_TransformView` (`new`, `Table`, `Current`, `Column`, `Data`) VALUES (1, '";
+-
+     WCHAR buf[256], *query = buf;
+-    UINT i, p, r, qlen;
++    UINT i, p, r, query_len;
+     DWORD len;
+     MSIQUERY *q;
+ 
+-    qlen = p = wcslen( query_pfx );
++    query_len = p = wcslen( query_pfx );
+     for (i = 1; i <= 4; i++)
+     {
+         r = MSI_RecordGetStringW( rec, i, NULL, &len );
+         if (r != ERROR_SUCCESS)
+             return r;
+-        qlen += len + 3; /* strlen( "','" ) */
++        query_len += len + 3; /* strlen( "','" ) */
+     }
+ 
+-    if (qlen > ARRAY_SIZE(buf))
++    if (query_len > ARRAY_SIZE(buf))
+     {
+-        query = malloc( len * sizeof(WCHAR) );
+-        qlen = len;
++        query = malloc( query_len * sizeof(WCHAR) );
+         if (!query)
+             return ERROR_OUTOFMEMORY;
+     }
+@@ -2547,7 +2545,7 @@ static UINT TransformView_add_column( struct table_view *tv, MSIRECORD *rec )
+     memcpy( query, query_pfx, p * sizeof(WCHAR) );
+     for (i = 1; i <= 4; i++)
+     {
+-        len = qlen - p;
++        len = query_len - p;
+         MSI_RecordGetStringW( rec, i, query + p, &len );
+         p += len;
+         query[p++] = '\'';
+@@ -2702,7 +2700,6 @@ static UINT TransformView_delete_row( MSIVIEW *view, UINT row )
+         query = malloc( len * sizeof(WCHAR) );
+         if (!query)
+         {
+-            free( tv );
+             free( key );
+             return ERROR_OUTOFMEMORY;
+         }
+diff --git a/dlls/msi/tokenize.c b/dlls/msi/tokenize.c
+index 22a905d..7cd662e 100644
+--- a/dlls/msi/tokenize.c
++++ b/dlls/msi/tokenize.c
+@@ -256,10 +256,8 @@ int sqliteGetToken(const WCHAR *z, int *tokenType, int *skip){
+       *tokenType = TK_ID;
+       return i;
+     default:
+-      if( !isIdChar[*z] ){
+-        break;
+-      }
+-      for(i=1; isIdChar[z[i]]; i++){}
++      if (*z < sizeof(isIdChar) && !isIdChar[*z] ) break;
++      for (i = 1; z[i] < sizeof(isIdChar) && isIdChar[z[i]]; i++) {}
+       *tokenType = sqliteKeywordCode(z, i);
+       if( *tokenType == TK_ID && z[i] == '`' ) *skip = 1;
+       return i;
+diff --git a/dlls/msi/upgrade.c b/dlls/msi/upgrade.c
+index a3b90a2..c00411b 100644
+--- a/dlls/msi/upgrade.c
++++ b/dlls/msi/upgrade.c
+@@ -93,7 +93,11 @@ static void append_productcode( MSIPACKAGE *package, const WCHAR *action_prop, c
+ 
+     if (prop) len += lstrlenW( prop );
+     len += lstrlenW( product ) + 2;
+-    if (!(newprop = malloc( len * sizeof(WCHAR) ))) return;
++    if (!(newprop = malloc( len * sizeof(WCHAR) )))
++    {
++        free( prop );
++        return;
++    }
+     if (prop)
+     {
+         lstrcpyW( newprop, prop );
+diff --git a/dlls/msxml3/bsc.c b/dlls/msxml3/bsc.c
+index 0263f5d..64da409 100644
+--- a/dlls/msxml3/bsc.c
++++ b/dlls/msxml3/bsc.c
+@@ -326,8 +326,8 @@ HRESULT bind_url(IMoniker *mon, HRESULT (*onDataAvailable)(void*,char*,DWORD),
+         hr = IMoniker_BindToStorage(mon, pbc, NULL, &IID_IStream, (LPVOID*)&stream);
+         if(stream)
+             IStream_Release(stream);
+-        IBindCtx_Release(pbc);
+     }
++    IBindCtx_Release(pbc);
+ 
+     if(FAILED(hr))
+     {
+diff --git a/dlls/msxml3/stylesheet.c b/dlls/msxml3/stylesheet.c
+index 8163e9d..69420eb 100644
+--- a/dlls/msxml3/stylesheet.c
++++ b/dlls/msxml3/stylesheet.c
+@@ -214,13 +214,20 @@ static HRESULT WINAPI xsltemplate_putref_stylesheet( IXSLTemplate *iface,
+     return S_OK;
+ }
+ 
+-static HRESULT WINAPI xsltemplate_get_stylesheet( IXSLTemplate *iface,
+-    IXMLDOMNode **node)
++static HRESULT WINAPI xsltemplate_get_stylesheet(IXSLTemplate *iface, IXMLDOMNode **node)
+ {
+-    xsltemplate *This = impl_from_IXSLTemplate( iface );
++    xsltemplate *template = impl_from_IXSLTemplate(iface);
+ 
+-    FIXME("(%p)->(%p): stub\n", This, node);
+-    return E_NOTIMPL;
++    TRACE("%p, %p.\n", iface, node);
++
++    if (!node)
++        return E_INVALIDARG;
++
++    *node = template->node;
++    if (*node)
++        IXMLDOMNode_AddRef(*node);
++
++    return S_OK;
+ }
+ 
+ static HRESULT WINAPI xsltemplate_createProcessor( IXSLTemplate *iface,
+diff --git a/dlls/oleaut32/olepicture.c b/dlls/oleaut32/olepicture.c
+index c455976..b2d6092 100644
+--- a/dlls/oleaut32/olepicture.c
++++ b/dlls/oleaut32/olepicture.c
+@@ -1848,12 +1848,12 @@ static HRESULT serializeEMF(HENHMETAFILE hemf, void **buf, unsigned *size)
+     if (!(*size = GetEnhMetaFileBits(hemf, 0, NULL)))
+         return E_FAIL;
+ 
+-    if (!(*buf = HeapAlloc(GetProcessHeap(), 0, *size)))
++    if (!(*buf = malloc(*size)))
+         return E_OUTOFMEMORY;
+ 
+     if (!GetEnhMetaFileBits(hemf, *size, *buf))
+     {
+-        HeapFree(GetProcessHeap(), 0, *buf);
++        free(*buf);
+         return E_FAIL;
+     }
+     return S_OK;
+@@ -1938,7 +1938,7 @@ static HRESULT WINAPI OLEPictureImpl_Save(
+             if (hResult != S_OK)
+                 break;
+ 
+-            HeapFree(GetProcessHeap(), 0, This->data);
++            free(This->data);
+             This->data = pIconData;
+             This->datalen = iDataSize;
+         }
+@@ -2042,7 +2042,7 @@ static HRESULT WINAPI OLEPictureImpl_SaveAsFile(IPicture *iface,
+         {
+             if (!serializeIcon(This->desc.icon.hicon, &data, &data_size))
+                 return E_FAIL;
+-            HeapFree(GetProcessHeap(), 0, This->data);
++            free(This->data);
+             This->data = data;
+             This->datalen = data_size;
+         }
+@@ -2075,7 +2075,7 @@ static HRESULT WINAPI OLEPictureImpl_SaveAsFile(IPicture *iface,
+                 return E_NOTIMPL;
+             }
+ 
+-            HeapFree(GetProcessHeap(), 0, This->data);
++            free(This->data);
+             This->data = data;
+             This->datalen = data_size;
+         }
+@@ -2094,7 +2094,7 @@ static HRESULT WINAPI OLEPictureImpl_SaveAsFile(IPicture *iface,
+         {
+             hr = serializeEMF(This->desc.emf.hemf, &data, &data_size);
+             if (hr != S_OK) return hr;
+-            HeapFree(GetProcessHeap(), 0, This->data);
++            free(This->data);
+             This->data = data;
+             This->datalen = data_size;
+         }
+diff --git a/dlls/oleaut32/safearray.c b/dlls/oleaut32/safearray.c
+index 92a73c7..b5999af 100644
+--- a/dlls/oleaut32/safearray.c
++++ b/dlls/oleaut32/safearray.c
+@@ -981,7 +981,7 @@ HRESULT WINAPI SafeArrayGetElement(SAFEARRAY *psa, LONG *rgIndices, void *pvData
+         if (*lpBstr)
+         {
+           *lpDest = SysAllocStringByteLen((char*)*lpBstr, SysStringByteLen(*lpBstr));
+-          if (!*lpBstr)
++          if (!*lpDest)
+             hRet = E_OUTOFMEMORY;
+         }
+         else
+diff --git a/dlls/oleaut32/variant.c b/dlls/oleaut32/variant.c
+index 48851ba..98be016 100644
+--- a/dlls/oleaut32/variant.c
++++ b/dlls/oleaut32/variant.c
+@@ -204,8 +204,8 @@ static inline HRESULT VARIANT_Coerce(VARIANTARG* pd, LCID lcid, USHORT wFlags,
+     case VT_I4:       return VarUI2FromI4(V_I4(ps), &V_UI2(pd));
+     case VT_UI1:      return VarUI2FromUI1(V_UI1(ps), &V_UI2(pd));
+     case VT_UI4:      return VarUI2FromUI4(V_UI4(ps), &V_UI2(pd));
+-    case VT_I8:       return VarUI4FromI8(V_I8(ps), &V_UI4(pd));
+-    case VT_UI8:      return VarUI4FromUI8(V_UI8(ps), &V_UI4(pd));
++    case VT_I8:       return VarUI2FromI8(V_I8(ps), &V_UI2(pd));
++    case VT_UI8:      return VarUI2FromUI8(V_UI8(ps), &V_UI2(pd));
+     case VT_R4:       return VarUI2FromR4(V_R4(ps), &V_UI2(pd));
+     case VT_R8:       return VarUI2FromR8(V_R8(ps), &V_UI2(pd));
+     case VT_DATE:     return VarUI2FromDate(V_DATE(ps), &V_UI2(pd));
+@@ -3975,7 +3975,7 @@ HRESULT WINAPI VarSub(LPVARIANT left, LPVARIANT right, LPVARIANT result)
+     V_I2(result) = V_I2(&lv) - V_I2(&rv);
+     break;
+     case VT_UI1:
+-    V_UI1(result) = V_UI2(&lv) - V_UI1(&rv);
++    V_UI1(result) = V_UI1(&lv) - V_UI1(&rv);
+     break;
+     case VT_R8:
+     V_R8(result) = V_R8(&lv) - V_R8(&rv);
+diff --git a/dlls/pdh/pdh_main.c b/dlls/pdh/pdh_main.c
+index 2cd7afe..ec81140 100644
+--- a/dlls/pdh/pdh_main.c
++++ b/dlls/pdh/pdh_main.c
+@@ -363,7 +363,7 @@ PDH_STATUS WINAPI PdhCloseQuery( PDH_HQUERY handle )
+     TRACE("%p\n", handle);
+ 
+     EnterCriticalSection( &pdh_handle_cs );
+-    if (!query || query->magic != PDH_MAGIC_QUERY)
++    if (IsBadReadPtr( query, sizeof(*query) ) || query->magic != PDH_MAGIC_QUERY)
+     {
+         LeaveCriticalSection( &pdh_handle_cs );
+         return PDH_INVALID_HANDLE;
+diff --git a/dlls/powrprof/powrprof.c b/dlls/powrprof/powrprof.c
+index c1b71b5..e8edb89 100644
+--- a/dlls/powrprof/powrprof.c
++++ b/dlls/powrprof/powrprof.c
+@@ -357,6 +357,12 @@ DWORD WINAPI PowerSettingUnregisterNotification(HPOWERNOTIFY handle)
+     return ERROR_SUCCESS;
+ }
+ 
++DWORD WINAPI PowerReadACValueIndex(HKEY key, const GUID *scheme, const GUID *subgroup, const GUID *setting, DWORD *index)
++{
++   FIXME("(%p,%s,%s,%s,%p) stub!\n", key, debugstr_guid(scheme), debugstr_guid(subgroup), debugstr_guid(setting), index);
++   return ERROR_SUCCESS;
++}
++
+ DWORD WINAPI PowerWriteACValueIndex(HKEY key, const GUID *scheme, const GUID *subgroup, const GUID *setting, DWORD index)
+ {
+    FIXME("(%p,%s,%s,%s,0x%08lx) stub!\n", key, debugstr_guid(scheme), debugstr_guid(subgroup), debugstr_guid(setting), index);
+diff --git a/dlls/powrprof/powrprof.spec b/dlls/powrprof/powrprof.spec
+index 29874b0..24c6d1d 100644
+--- a/dlls/powrprof/powrprof.spec
++++ b/dlls/powrprof/powrprof.spec
+@@ -22,6 +22,7 @@
+ @ stdcall PowerUnregisterSuspendResumeNotification(ptr)
+ @ stdcall PowerSettingRegisterNotification(ptr long ptr ptr)
+ @ stdcall PowerSettingUnregisterNotification(ptr)
++@ stdcall PowerReadACValueIndex(ptr ptr ptr ptr ptr)
+ @ stdcall PowerWriteACValueIndex(ptr ptr ptr ptr long)
+ @ stdcall ReadGlobalPwrPolicy (ptr)
+ @ stdcall ReadProcessorPwrScheme (long ptr)
+diff --git a/dlls/propsys/propsys_main.c b/dlls/propsys/propsys_main.c
+index 011c05e..6a523c9 100644
+--- a/dlls/propsys/propsys_main.c
++++ b/dlls/propsys/propsys_main.c
+@@ -850,7 +850,6 @@ static struct system_property_description system_properties[] =
+     {L"System.Devices.Aep.ProtocolId", &PKEY_Devices_Aep_ProtocolId, VT_CLSID},
+     {L"System.Devices.Aep.IsPaired", &PKEY_Devices_Aep_IsPaired, VT_BOOL},
+     {L"System.Devices.Aep.IsConnected", &PKEY_Devices_Aep_IsConnected, VT_BOOL},
+-    {L"System.Devices.Aep.IsConnected", &PKEY_Devices_Aep_IsConnected, VT_BOOL},
+     {L"System.Devices.Aep.Bluetooth.Le.AddressType", &PKEY_Devices_Aep_Bluetooth_Le_AddressType, VT_UI1},
+     {L"System.Devices.Aep.DeviceAddress", &PKEY_Devices_Aep_DeviceAddress, VT_LPWSTR},
+     {L"System.Devices.AepContainer.IsPaired", &PKEY_Devices_AepContainer_IsPaired, VT_BOOL},
+diff --git a/dlls/propsys/propvar.c b/dlls/propsys/propvar.c
+index e564e1a..24fcc5b 100644
+--- a/dlls/propsys/propvar.c
++++ b/dlls/propsys/propvar.c
+@@ -858,13 +858,10 @@ HRESULT WINAPI InitPropVariantFromStringVector(PCWSTR *strs, ULONG count, PROPVA
+ 
+     for (i = 0; i < count; ++i)
+     {
+-        if (strs[i])
++        if (!(ppropvar->calpwstr.pElems[i] = CoTaskMemAlloc((wcslen(strs[i]) + 1)*sizeof(**strs))))
+         {
+-            if (!(ppropvar->calpwstr.pElems[i] = CoTaskMemAlloc((wcslen(strs[i]) + 1)*sizeof(**strs))))
+-            {
+-                PropVariantClear(ppropvar);
+-                return E_OUTOFMEMORY;
+-            }
++            PropVariantClear(ppropvar);
++            return E_OUTOFMEMORY;
+         }
+         wcscpy(ppropvar->calpwstr.pElems[i], strs[i]);
+         ppropvar->calpwstr.cElems++;
+@@ -1142,15 +1139,15 @@ INT WINAPI PropVariantCompareEx(REFPROPVARIANT propvar1, REFPROPVARIANT propvar2
+             res = lstrcmpA(propvar1->pszVal, propvar2_converted->pszVal);
+         break;
+     case VT_CLSID:
+-        res = memcmp(propvar1->puuid, propvar2->puuid, sizeof(*propvar1->puuid));
++        res = memcmp(propvar1->puuid, propvar2_converted->puuid, sizeof(*propvar1->puuid));
+         if (res) res = res > 0 ? 1 : -1;
+         break;
+     case VT_VECTOR | VT_UI1:
+-        count = min(propvar1->caub.cElems, propvar2->caub.cElems);
+-        res = count ? memcmp(propvar1->caub.pElems, propvar2->caub.pElems, sizeof(*propvar1->caub.pElems) * count) : 0;
++        count = min(propvar1->caub.cElems, propvar2_converted->caub.cElems);
++        res = count ? memcmp(propvar1->caub.pElems, propvar2_converted->caub.pElems, sizeof(*propvar1->caub.pElems) * count) : 0;
+         if (res) res = res > 0 ? 1 : -1;
+-        if (!res && propvar1->caub.cElems != propvar2->caub.cElems)
+-            res = propvar1->caub.cElems > propvar2->caub.cElems ? 1 : -1;
++        if (!res && propvar1->caub.cElems != propvar2_converted->caub.cElems)
++            res = propvar1->caub.cElems > propvar2_converted->caub.cElems ? 1 : -1;
+         break;
+     default:
+         FIXME("vartype %#x not handled\n", propvar1->vt);
+diff --git a/dlls/scrrun/filesystem.c b/dlls/scrrun/filesystem.c
+index 6af73ac..71f9584 100644
+--- a/dlls/scrrun/filesystem.c
++++ b/dlls/scrrun/filesystem.c
+@@ -485,10 +485,7 @@ static HRESULT read_more_data(struct textstream *stream)
+     if (stream->eof) return S_OK;
+ 
+     if (!ReadFile(stream->file, buf, sizeof(buf), &read, NULL))
+-    {
+-        ITextStream_Release(&stream->ITextStream_iface);
+         return create_error(GetLastError());
+-    }
+ 
+     stream->eof = read != sizeof(buf);
+     return append_read_data(stream, buf, read);
+diff --git a/dlls/secur32/schannel.c b/dlls/secur32/schannel.c
+index 945cfbb..fd9c1ed 100644
+--- a/dlls/secur32/schannel.c
++++ b/dlls/secur32/schannel.c
+@@ -472,7 +472,11 @@ static WCHAR *get_key_container_path(const CERT_CONTEXT *ctx)
+         char *str;
+         if (!CryptGetProvParam(keyctx.hCryptProv, PP_CONTAINER, NULL, &size, 0)) return NULL;
+         if (!(str = malloc(size))) return NULL;
+-        if (!CryptGetProvParam(keyctx.hCryptProv, PP_CONTAINER, (BYTE *)str, &size, 0)) return NULL;
++        if (!CryptGetProvParam(keyctx.hCryptProv, PP_CONTAINER, (BYTE *)str, &size, 0))
++        {
++            free(str);
++            return NULL;
++        }
+ 
+         len = MultiByteToWideChar(CP_ACP, 0, str, -1, NULL, 0);
+         if (!(ret = malloc(sizeof(L"Software\\Wine\\Crypto\\RSA\\") + len * sizeof(WCHAR))))
+@@ -628,8 +632,12 @@ static SECURITY_STATUS acquire_credentials_handle(ULONG fCredentialUse,
+     free(key_blob);
+     if (status) goto fail;
+ 
+-    handle = schan_alloc_handle(creds, SCHAN_HANDLE_CRED);
+-    if (handle == SCHAN_INVALID_HANDLE) goto fail;
++    if ((handle = schan_alloc_handle(creds, SCHAN_HANDLE_CRED)) == SCHAN_INVALID_HANDLE)
++    {
++        struct free_certificate_credentials_params free_params = { creds };
++        GNUTLS_CALL( free_certificate_credentials, &free_params );
++        goto fail;
++    }
+ 
+     phCredential->dwLower = handle;
+     phCredential->dwUpper = 0;
+@@ -1154,8 +1162,11 @@ static SECURITY_STATUS ensure_remote_cert(struct schan_context *ctx)
+             if (!CertAddEncodedCertificateToStore(store, X509_ASN_ENCODING, blob, sizes[i],
+                     CERT_STORE_ADD_REPLACE_EXISTING, i ? NULL : &cert))
+             {
++                status = GetLastError();
+                 if (i) CertFreeCertificateContext(cert);
+-                return GetLastError();
++                free(params.buffer);
++                CertCloseStore(store, 0);
++                return status;
+             }
+             blob += sizes[i];
+         }
+diff --git a/dlls/secur32/schannel_gnutls.c b/dlls/secur32/schannel_gnutls.c
+index c8bc4ef..415acb5 100644
+--- a/dlls/secur32/schannel_gnutls.c
++++ b/dlls/secur32/schannel_gnutls.c
+@@ -1252,7 +1252,7 @@ static NTSTATUS schan_set_application_protocols( void *args )
+     if (!count || !(protocols = malloc(count * sizeof(*protocols)))) return STATUS_NO_MEMORY;
+ 
+     parse_alpn_protocol_list(&params->buffer[offset], list_len, protocols);
+-    if ((ret = pgnutls_alpn_set_protocols(s, protocols, count, GNUTLS_ALPN_SERVER_PRECEDENCE) < 0))
++    if ((ret = pgnutls_alpn_set_protocols(s, protocols, count, GNUTLS_ALPN_SERVER_PRECEDENCE)) < 0)
+     {
+         pgnutls_perror(ret);
+     }
+diff --git a/dlls/secur32/secur32.c b/dlls/secur32/secur32.c
+index f757ea6..9ee78ad 100644
+--- a/dlls/secur32/secur32.c
++++ b/dlls/secur32/secur32.c
+@@ -641,10 +641,6 @@ static void SECUR32_freeProviders(void)
+ 
+ /***********************************************************************
+  *		FreeContextBuffer (SECUR32.@)
+- *
+- * Doh--if pv was allocated by a crypto package, this may not be correct.
+- * The sample ssp seems to use LocalAlloc/LocalFee, but there doesn't seem to
+- * be any guarantee, nor is there an alloc function in secur32.
+  */
+ SECURITY_STATUS WINAPI FreeContextBuffer( void *pv )
+ {
+diff --git a/dlls/secur32/thunks.c b/dlls/secur32/thunks.c
+index de0fb0a..71d0426 100644
+--- a/dlls/secur32/thunks.c
++++ b/dlls/secur32/thunks.c
+@@ -404,7 +404,7 @@ static PSecPkgInfoA _copyPackageInfoFlatWToA(const SecPkgInfoW *infoW)
+             if (infoW->Comment)
+             {
+                 ret->Comment = nextString;
+-                WideCharToMultiByte(CP_ACP, 0, infoW->Comment, -1, nextString, nameLen, NULL, NULL);
++                WideCharToMultiByte(CP_ACP, 0, infoW->Comment, -1, nextString, commentLen, NULL, NULL);
+             }
+             else
+                 ret->Comment = NULL;
+@@ -636,7 +636,7 @@ static SECURITY_STATUS thunk_ContextAttributesAToW(SecurePackage *package,
+                 if (oldUser)
+                 {
+                     names->sUserName = (char *)strdupAW(oldUser);
+-                    package->provider->fnTableW.FreeContextBuffer(oldUser);
++                    package->provider->fnTableA.FreeContextBuffer(oldUser);
+                 }
+                 break;
+             }
+@@ -648,7 +648,7 @@ static SECURITY_STATUS thunk_ContextAttributesAToW(SecurePackage *package,
+                 if (oldAuth)
+                 {
+                     names->sAuthorityName = (char *)strdupAW(oldAuth);
+-                    package->provider->fnTableW.FreeContextBuffer(oldAuth);
++                    package->provider->fnTableA.FreeContextBuffer(oldAuth);
+                 }
+                 break;
+             }
+@@ -661,12 +661,12 @@ static SECURITY_STATUS thunk_ContextAttributesAToW(SecurePackage *package,
+                 if (oldSigAlgName)
+                 {
+                     info->sSignatureAlgorithmName = (char *)strdupAW(oldSigAlgName);
+-                    package->provider->fnTableW.FreeContextBuffer(oldSigAlgName);
++                    package->provider->fnTableA.FreeContextBuffer(oldSigAlgName);
+                 }
+                 if (oldEncAlgName)
+                 {
+                     info->sEncryptAlgorithmName = (char *)strdupAW(oldEncAlgName);
+-                    package->provider->fnTableW.FreeContextBuffer(oldEncAlgName);
++                    package->provider->fnTableA.FreeContextBuffer(oldEncAlgName);
+                 }
+                 break;
+             }
+@@ -679,7 +679,7 @@ static SECURITY_STATUS thunk_ContextAttributesAToW(SecurePackage *package,
+                 {
+                     info->PackageInfo = (PSecPkgInfoA)
+                      _copyPackageInfoFlatAToW(oldPkgInfo);
+-                    package->provider->fnTableW.FreeContextBuffer(oldPkgInfo);
++                    package->provider->fnTableA.FreeContextBuffer(oldPkgInfo);
+                 }
+                 break;
+             }
+@@ -692,7 +692,7 @@ static SECURITY_STATUS thunk_ContextAttributesAToW(SecurePackage *package,
+                 {
+                     info->PackageInfo = (PSecPkgInfoA)
+                      _copyPackageInfoFlatAToW(oldPkgInfo);
+-                    package->provider->fnTableW.FreeContextBuffer(oldPkgInfo);
++                    package->provider->fnTableA.FreeContextBuffer(oldPkgInfo);
+                 }
+                 break;
+             }
+@@ -710,7 +710,7 @@ static SECURITY_STATUS thunk_ContextAttributesAToW(SecurePackage *package,
+                 if (oldServer)
+                 {
+                     names->sServerName = (char *)strdupAW(oldServer);
+-                    package->provider->fnTableW.FreeContextBuffer(oldServer);
++                    package->provider->fnTableA.FreeContextBuffer(oldServer);
+                 }
+                 break;
+             }
+@@ -722,7 +722,7 @@ static SECURITY_STATUS thunk_ContextAttributesAToW(SecurePackage *package,
+                 if (oldCred)
+                 {
+                     name->sCredentialName = (char *)strdupAW(oldCred);
+-                    package->provider->fnTableW.FreeContextBuffer(oldCred);
++                    package->provider->fnTableA.FreeContextBuffer(oldCred);
+                 }
+                 break;
+             }
+diff --git a/dlls/setupapi/devinst.c b/dlls/setupapi/devinst.c
+index 8d832d1..4daaf2a 100644
+--- a/dlls/setupapi/devinst.c
++++ b/dlls/setupapi/devinst.c
+@@ -2618,6 +2618,24 @@ HDEVINFO WINAPI SetupDiGetClassDevsW(const GUID *class, LPCWSTR enumstr, HWND pa
+             NULL);
+ }
+ 
++static BOOL is_valid_enumerator(const WCHAR *enumerator)
++{
++    WCHAR *tmp;
++
++    if (!enumerator[0])
++        return FALSE;
++    if (!(tmp = wcschr(enumerator, '\\')))
++        return TRUE;
++    /* Cannot have more than one '\'. */
++    if (!!wcschr(tmp + 1, '\\'))
++        return FALSE;
++    /* Enumerator can't end with '\'. */
++    if (tmp[1] == '\0')
++        return FALSE;
++
++    return TRUE;
++}
++
+ /***********************************************************************
+  *              SetupDiGetClassDevsExW (SETUPAPI.@)
+  */
+@@ -2636,6 +2654,11 @@ HDEVINFO WINAPI SetupDiGetClassDevsExW(const GUID *class, PCWSTR enumstr, HWND p
+         SetLastError(ERROR_INVALID_PARAMETER);
+         return INVALID_HANDLE_VALUE;
+     }
++    if (!(flags & DIGCF_DEVICEINTERFACE) && enumstr && !is_valid_enumerator(enumstr))
++    {
++        SetLastError(ERROR_INVALID_DATA);
++        return INVALID_HANDLE_VALUE;
++    }
+     if (flags & DIGCF_ALLCLASSES)
+         class = NULL;
+ 
+diff --git a/dlls/user32/class.c b/dlls/user32/class.c
+index a754720..881fddb 100644
+--- a/dlls/user32/class.c
++++ b/dlls/user32/class.c
+@@ -107,7 +107,8 @@ void init_class_name_ansi( UNICODE_STRING *str, const char *name )
+     else
+     {
+         UINT len = MultiByteToWideChar( CP_ACP, 0, name, -1, str->Buffer, str->MaximumLength / sizeof(WCHAR) );
+-        str->Length = (len - 1) * sizeof(WCHAR);
++        if (len && !str->Buffer[len - 1]) len--;
++        str->Length = len * sizeof(WCHAR);
+     }
+ }
+ 
+@@ -121,7 +122,7 @@ void init_class_name( UNICODE_STRING *str, const WCHAR *name )
+     else
+     {
+         str->Length = min( str->MaximumLength, wcslen( name ) * sizeof(WCHAR) );
+-        memcpy( str->Buffer, name, str->Length + sizeof(WCHAR) );
++        memcpy( str->Buffer, name, min( str->MaximumLength, str->Length + sizeof(WCHAR) ) );
+     }
+ }
+ 
+diff --git a/dlls/wbemdisp/locator.c b/dlls/wbemdisp/locator.c
+index c3ad6fa..8cb9634 100644
+--- a/dlls/wbemdisp/locator.c
++++ b/dlls/wbemdisp/locator.c
+@@ -50,12 +50,21 @@ static IWbemContext * unsafe_get_context_from_namedvalueset( IDispatch *disp )
+     return valueset ? valueset->context : NULL;
+ }
+ 
++enum enum_variant_type
++{
++    ENUM_OBJECTS,
++    ENUM_PROPERTIES,
++    ENUM_METHODS,
++    ENUM_QUALIFIERS,
++};
++
+ struct services;
+ 
+-static HRESULT EnumVARIANT_create( struct services *, IEnumWbemClassObject *, IEnumVARIANT ** );
++static HRESULT EnumVARIANT_create( enum enum_variant_type, struct services *, void *, IEnumVARIANT ** );
+ static HRESULT ISWbemSecurity_create( ISWbemSecurity ** );
+ static HRESULT SWbemObject_create( struct services *, IWbemClassObject *, ISWbemObject ** );
+ static HRESULT SWbemObjectPath_create( IWbemClassObject *, ISWbemObjectPath ** );
++static HRESULT SWbemQualifierSet_create( ISWbemQualifierSet ** );
+ 
+ enum type_id
+ {
+@@ -71,6 +80,7 @@ enum type_id
+     ISWbemMethodSet_tid,
+     ISWbemMethod_tid,
+     ISWbemObjectPath_tid,
++    ISWbemQualifierSet_tid,
+     last_tid
+ };
+ 
+@@ -91,6 +101,7 @@ static REFIID wbemdisp_tid_id[] =
+     &IID_ISWbemMethodSet,
+     &IID_ISWbemMethod,
+     &IID_ISWbemObjectPath,
++    &IID_ISWbemQualifierSet,
+ };
+ 
+ static HRESULT get_typeinfo( enum type_id tid, ITypeInfo **ret )
+@@ -258,8 +269,16 @@ static HRESULT WINAPI property_put_Value( ISWbemProperty *iface, VARIANT *varVal
+ 
+ static HRESULT WINAPI property_get_Name( ISWbemProperty *iface, BSTR *strName )
+ {
+-    FIXME( "\n" );
+-    return E_NOTIMPL;
++    struct property *property = impl_from_ISWbemProperty( iface );
++    WCHAR *name;
++
++    TRACE( "%p %p\n", property, strName );
++
++    if (!(name = SysAllocString( property->name )))
++        return E_OUTOFMEMORY;
++
++    *strName = name;
++    return S_OK;
+ }
+ 
+ static HRESULT WINAPI property_get_IsLocal( ISWbemProperty *iface, VARIANT_BOOL *bIsLocal )
+@@ -274,10 +293,51 @@ static HRESULT WINAPI property_get_Origin( ISWbemProperty *iface, BSTR *strOrigi
+     return E_NOTIMPL;
+ }
+ 
+-static HRESULT WINAPI property_get_CIMType( ISWbemProperty *iface, WbemCimtypeEnum *iCimType )
++static HRESULT map_cim_type( CIMTYPE type, WbemCimtypeEnum *ret_type )
+ {
+-    FIXME( "\n" );
+-    return E_NOTIMPL;
++    switch (type)
++    {
++    case CIM_SINT16:    *ret_type = wbemCimtypeSint16;    break;
++    case CIM_SINT32:    *ret_type = wbemCimtypeSint32;    break;
++    case CIM_REAL32:    *ret_type = wbemCimtypeReal32;    break;
++    case CIM_REAL64:    *ret_type = wbemCimtypeReal64;    break;
++    case CIM_STRING:    *ret_type = wbemCimtypeString;    break;
++    case CIM_BOOLEAN:   *ret_type = wbemCimtypeBoolean;   break;
++    case CIM_OBJECT:    *ret_type = wbemCimtypeObject;    break;
++    case CIM_SINT8:     *ret_type = wbemCimtypeSint8;     break;
++    case CIM_UINT8:     *ret_type = wbemCimtypeUint8;     break;
++    case CIM_UINT16:    *ret_type = wbemCimtypeUint16;    break;
++    case CIM_UINT32:    *ret_type = wbemCimtypeUint32;    break;
++    case CIM_SINT64:    *ret_type = wbemCimtypeSint64;    break;
++    case CIM_UINT64:    *ret_type = wbemCimtypeUint64;    break;
++    case CIM_DATETIME:  *ret_type = wbemCimtypeDatetime;  break;
++    case CIM_REFERENCE: *ret_type = wbemCimtypeReference; break;
++    case CIM_CHAR16:    *ret_type = wbemCimtypeChar16;    break;
++    default:
++        FIXME( "unhandled type %lu\n", type );
++        return E_NOTIMPL;
++    }
++    return S_OK;
++}
++
++static HRESULT WINAPI property_get_CIMType( ISWbemProperty *iface, WbemCimtypeEnum *ret_type )
++{
++    struct property *property = impl_from_ISWbemProperty( iface );
++    VARIANT dummy;
++    WbemCimtypeEnum cim_type;
++    CIMTYPE type;
++    HRESULT hr;
++
++    TRACE( "%p, %p\n", iface, ret_type );
++
++    hr = IWbemClassObject_Get( property->object, property->name, 0, &dummy, &type, NULL );
++    if (SUCCEEDED( hr ))
++    {
++        hr = map_cim_type( type, &cim_type );
++        if (SUCCEEDED( hr )) *ret_type = cim_type;
++        VariantClear( &dummy );
++    }
++    return hr;
+ }
+ 
+ static HRESULT WINAPI property_get_Qualifiers_( ISWbemProperty *iface, ISWbemQualifierSet **objWbemQualifierSet )
+@@ -332,7 +392,8 @@ struct propertyset
+ {
+     ISWbemPropertySet ISWbemPropertySet_iface;
+     LONG refs;
+-    IWbemClassObject *object;
++    IWbemClassObject *class_object;
++    ISWbemObject *object;
+ };
+ 
+ static inline struct propertyset *impl_from_ISWbemPropertySet(
+@@ -354,7 +415,8 @@ static ULONG WINAPI propertyset_Release( ISWbemPropertySet *iface )
+     if (!refs)
+     {
+         TRACE( "destroying %p\n", propertyset );
+-        IWbemClassObject_Release( propertyset->object );
++        IWbemClassObject_Release( propertyset->class_object );
++        ISWbemObject_Release( propertyset->object );
+         free( propertyset );
+     }
+     return refs;
+@@ -443,8 +505,11 @@ static HRESULT WINAPI propertyset_Invoke( ISWbemPropertySet *iface, DISPID membe
+ 
+ static HRESULT WINAPI propertyset_get__NewEnum( ISWbemPropertySet *iface, IUnknown **unk )
+ {
+-    FIXME( "\n" );
+-    return E_NOTIMPL;
++    struct propertyset *propertyset = impl_from_ISWbemPropertySet( iface );
++
++    TRACE( "%p, %p\n", iface, unk );
++
++    return EnumVARIANT_create( ENUM_PROPERTIES, NULL, propertyset->object, (IEnumVARIANT **)unk );
+ }
+ 
+ static HRESULT WINAPI propertyset_Item( ISWbemPropertySet *iface, BSTR name,
+@@ -456,10 +521,10 @@ static HRESULT WINAPI propertyset_Item( ISWbemPropertySet *iface, BSTR name,
+ 
+     TRACE( "%p, %s, %#lx, %p\n", propertyset, debugstr_w(name), flags, prop );
+ 
+-    hr = IWbemClassObject_Get( propertyset->object, name, 0, &var, NULL, NULL );
++    hr = IWbemClassObject_Get( propertyset->class_object, name, 0, &var, NULL, NULL );
+     if (SUCCEEDED(hr))
+     {
+-        hr = SWbemProperty_create( propertyset->object, name, prop );
++        hr = SWbemProperty_create( propertyset->class_object, name, prop );
+         VariantClear( &var );
+     }
+     return hr;
+@@ -473,7 +538,7 @@ static HRESULT WINAPI propertyset_get_Count( ISWbemPropertySet *iface, LONG *cou
+ 
+     TRACE( "%p, %p\n", propertyset, count );
+ 
+-    hr = IWbemClassObject_Get( propertyset->object, L"__PROPERTY_COUNT", 0, &val, NULL, NULL );
++    hr = IWbemClassObject_Get( propertyset->class_object, L"__PROPERTY_COUNT", 0, &val, NULL, NULL );
+     if (SUCCEEDED(hr))
+     {
+         *count = V_I4( &val );
+@@ -510,17 +575,19 @@ static const ISWbemPropertySetVtbl propertyset_vtbl =
+     propertyset_Remove
+ };
+ 
+-static HRESULT SWbemPropertySet_create( IWbemClassObject *wbem_object, ISWbemPropertySet **obj )
++static HRESULT SWbemPropertySet_create( IWbemClassObject *wbem_object, ISWbemObject *object, ISWbemPropertySet **obj )
+ {
+     struct propertyset *propertyset;
+ 
+     TRACE( "%p, %p\n", obj, wbem_object );
+ 
+-    if (!(propertyset = malloc( sizeof(*propertyset) ))) return E_OUTOFMEMORY;
++    if (!(propertyset = calloc( 1, sizeof(*propertyset) ))) return E_OUTOFMEMORY;
+     propertyset->ISWbemPropertySet_iface.lpVtbl = &propertyset_vtbl;
+     propertyset->refs = 1;
+-    propertyset->object = wbem_object;
+-    IWbemClassObject_AddRef( propertyset->object );
++    propertyset->class_object = wbem_object;
++    IWbemClassObject_AddRef( propertyset->class_object );
++    propertyset->object = object;
++    ISWbemObject_AddRef( propertyset->object );
+     *obj = &propertyset->ISWbemPropertySet_iface;
+ 
+     TRACE( "returning iface %p\n", *obj );
+@@ -537,6 +604,7 @@ struct services
+ struct member
+ {
+     BSTR name;
++    BOOL is_system;
+     BOOL is_method;
+     DISPID dispid;
+     CIMTYPE type;
+@@ -919,9 +987,11 @@ static HRESULT WINAPI methodset_get__NewEnum(
+     ISWbemMethodSet *iface,
+     IUnknown **unk )
+ {
+-    FIXME("\n");
++    struct methodset *set = impl_from_ISWbemMethodSet( iface );
+ 
+-    return E_NOTIMPL;
++    TRACE( "%p, %p\n", iface, unk );
++
++    return EnumVARIANT_create( ENUM_METHODS, NULL, &set->object->ISWbemObject_iface, (IEnumVARIANT **)unk );
+ }
+ 
+ static HRESULT WINAPI methodset_Item(
+@@ -1105,6 +1175,7 @@ static HRESULT init_members( struct object *object )
+     IWbemClassObject *sig_in, *sig_out;
+     unsigned int i, capacity = 0, count = 0;
+     CIMTYPE type;
++    LONG flavor;
+     HRESULT hr;
+     BSTR name;
+ 
+@@ -1113,10 +1184,11 @@ static HRESULT init_members( struct object *object )
+     hr = IWbemClassObject_BeginEnumeration( object->object, 0 );
+     if (SUCCEEDED( hr ))
+     {
+-        while (IWbemClassObject_Next( object->object, 0, &name, NULL, &type, NULL ) == S_OK)
++        while (IWbemClassObject_Next( object->object, 0, &name, NULL, &type, &flavor ) == S_OK)
+         {
+             if (!object_reserve_member( object, count + 1, &capacity )) goto error;
+             object->members[count].name      = name;
++            object->members[count].is_system = !!(flavor & WBEM_FLAVOR_ORIGIN_SYSTEM);
+             object->members[count].is_method = FALSE;
+             object->members[count].dispid    = 0;
+             object->members[count].type      = type;
+@@ -1133,6 +1205,7 @@ static HRESULT init_members( struct object *object )
+         {
+             if (!object_reserve_member( object, count + 1, &capacity )) goto error;
+             object->members[count].name      = name;
++            object->members[count].is_system = FALSE;
+             object->members[count].is_method = TRUE;
+             object->members[count].dispid    = 0;
+             count++;
+@@ -1574,16 +1647,20 @@ static HRESULT WINAPI object_get_Qualifiers_(
+     ISWbemObject *iface,
+     ISWbemQualifierSet **objWbemQualifierSet )
+ {
+-    FIXME( "\n" );
+-    return E_NOTIMPL;
++    return SWbemQualifierSet_create( objWbemQualifierSet );
+ }
+ 
+ static HRESULT WINAPI object_get_Properties_( ISWbemObject *iface, ISWbemPropertySet **prop_set )
+ {
+     struct object *object = impl_from_ISWbemObject( iface );
++    HRESULT hr;
+ 
+     TRACE( "%p, %p\n", object, prop_set );
+-    return SWbemPropertySet_create( object->object, prop_set );
++
++    hr = init_members( object );
++    if (FAILED( hr )) return hr;
++
++    return SWbemPropertySet_create( object->object, iface, prop_set );
+ }
+ 
+ static HRESULT WINAPI object_get_Methods_(
+@@ -1842,7 +1919,7 @@ static HRESULT WINAPI objectset_get__NewEnum(
+     hr = IEnumWbemClassObject_Clone( objectset->objectenum, &objectenum );
+     if (FAILED( hr )) return hr;
+ 
+-    hr = EnumVARIANT_create( objectset->services, objectenum, (IEnumVARIANT **)pUnk );
++    hr = EnumVARIANT_create( ENUM_OBJECTS, objectset->services, objectenum, (IEnumVARIANT **)pUnk );
+     IEnumWbemClassObject_Release( objectenum );
+     return hr;
+ }
+@@ -1966,8 +2043,17 @@ struct enumvar
+ {
+     IEnumVARIANT IEnumVARIANT_iface;
+     LONG refs;
+-    IEnumWbemClassObject *objectenum;
++    union
++    {
++        struct
++        {
++            ISWbemObject *object;
++            ULONG cursor;
++        } members;
++        IEnumWbemClassObject *objectenum;
++    } u;
+     struct services *services;
++    enum enum_variant_type enum_type;
+ };
+ 
+ static inline struct enumvar *impl_from_IEnumVARIANT(
+@@ -1991,8 +2077,11 @@ static ULONG WINAPI enumvar_Release(
+     if (!refs)
+     {
+         TRACE( "destroying %p\n", enumvar );
+-        IEnumWbemClassObject_Release( enumvar->objectenum );
+-        ISWbemServices_Release( &enumvar->services->ISWbemServices_iface );
++        if (enumvar->enum_type == ENUM_OBJECTS)
++            IEnumWbemClassObject_Release( enumvar->u.objectenum );
++        else if (enumvar->enum_type == ENUM_PROPERTIES || enumvar->enum_type == ENUM_METHODS)
++            ISWbemObject_Release( enumvar->u.members.object );
++        if (enumvar->services) ISWbemServices_Release( &enumvar->services->ISWbemServices_iface );
+         free( enumvar );
+     }
+     return refs;
+@@ -2032,19 +2121,55 @@ static HRESULT WINAPI enumvar_Next( IEnumVARIANT *iface, ULONG celt, VARIANT *va
+ 
+     if (!var) return S_FALSE;
+ 
+-    if (celt) IEnumWbemClassObject_Next( enumvar->objectenum, WBEM_INFINITE, 1, &obj, &count );
+-    if (count)
++    for (count = 0; count < celt; ++count) VariantInit( var + count );
++
++    if (enumvar->enum_type == ENUM_OBJECTS)
+     {
+-        ISWbemObject *sobj;
+-        HRESULT hr;
++        if (celt) IEnumWbemClassObject_Next( enumvar->u.objectenum, WBEM_INFINITE, 1, &obj, &count );
++        if (count)
++        {
++            ISWbemObject *sobj;
++            HRESULT hr;
+ 
+-        hr = SWbemObject_create( enumvar->services, obj, &sobj );
+-        IWbemClassObject_Release( obj );
+-        if (FAILED( hr )) return hr;
++            hr = SWbemObject_create( enumvar->services, obj, &sobj );
++            IWbemClassObject_Release( obj );
++            if (FAILED( hr )) return hr;
+ 
+-        V_VT( var ) = VT_DISPATCH;
+-        V_DISPATCH( var ) = (IDispatch *)sobj;
++            V_VT( var ) = VT_DISPATCH;
++            V_DISPATCH( var ) = (IDispatch *)sobj;
++        }
++    }
++    else if (enumvar->enum_type == ENUM_QUALIFIERS)
++    {
++        count = 0;
+     }
++    else
++    {
++        struct object *object = impl_from_ISWbemObject( enumvar->u.members.object );
++        ULONG cursor = enumvar->u.members.cursor;
++
++        for (count = 0; count < celt && cursor < object->nb_members; ++cursor)
++        {
++            ISWbemProperty *prop;
++            HRESULT hr;
++
++            if (object->members[cursor].is_system) continue;
++            if (object->members[cursor].is_method != (enumvar->enum_type == ENUM_METHODS)) continue;
++
++            hr = SWbemProperty_create( object->object, object->members[cursor].name, &prop );
++            if (FAILED( hr ))
++            {
++                WARN( "Failed to create property, hr %#lx\n", hr );
++                break;
++            }
++
++            V_VT( var + count ) = VT_DISPATCH;
++            V_DISPATCH( var + count ) = (IDispatch *)prop;
++            ++count;
++        }
++        enumvar->u.members.cursor = cursor;
++    }
++
+     if (fetched) *fetched = count;
+     return (count < celt) ? S_FALSE : S_OK;
+ }
+@@ -2055,16 +2180,38 @@ static HRESULT WINAPI enumvar_Skip( IEnumVARIANT *iface, ULONG celt )
+ 
+     TRACE( "%p, %lu\n", iface, celt );
+ 
+-    return IEnumWbemClassObject_Skip( enumvar->objectenum, WBEM_INFINITE, celt );
++    if (enumvar->enum_type == ENUM_OBJECTS)
++        return IEnumWbemClassObject_Skip( enumvar->u.objectenum, WBEM_INFINITE, celt );
++    else if (enumvar->enum_type == ENUM_QUALIFIERS)
++        return S_FALSE;
++    else
++    {
++        struct object *object = impl_from_ISWbemObject( enumvar->u.members.object );
++
++        if (enumvar->u.members.cursor + celt < celt || enumvar->u.members.cursor + celt > object->nb_members)
++        {
++            enumvar->u.members.cursor = object->nb_members;
++            return S_FALSE;
++        }
++
++        enumvar->u.members.cursor += celt;
++        return S_OK;
++    }
+ }
+ 
+ static HRESULT WINAPI enumvar_Reset( IEnumVARIANT *iface )
+ {
+     struct enumvar *enumvar = impl_from_IEnumVARIANT( iface );
++    HRESULT hr = S_OK;
+ 
+     TRACE( "%p\n", iface );
+ 
+-    return IEnumWbemClassObject_Reset( enumvar->objectenum );
++    if (enumvar->enum_type == ENUM_OBJECTS)
++        hr = IEnumWbemClassObject_Reset( enumvar->u.objectenum );
++    else if (enumvar->enum_type == ENUM_PROPERTIES || enumvar->enum_type == ENUM_METHODS)
++        enumvar->u.members.cursor = 0;
++
++    return hr;
+ }
+ 
+ static HRESULT WINAPI enumvar_Clone( IEnumVARIANT *iface, IEnumVARIANT **penum )
+@@ -2084,18 +2231,27 @@ static const struct IEnumVARIANTVtbl enumvar_vtbl =
+     enumvar_Clone
+ };
+ 
+-static HRESULT EnumVARIANT_create( struct services *services, IEnumWbemClassObject *objectenum,
++static HRESULT EnumVARIANT_create( enum enum_variant_type enum_type, struct services *services, void *object,
+         IEnumVARIANT **obj )
+ {
+     struct enumvar *enumvar;
+ 
+-    if (!(enumvar = malloc( sizeof(*enumvar) ))) return E_OUTOFMEMORY;
++    if (!(enumvar = calloc( 1, sizeof(*enumvar) ))) return E_OUTOFMEMORY;
+     enumvar->IEnumVARIANT_iface.lpVtbl = &enumvar_vtbl;
+     enumvar->refs = 1;
+-    enumvar->objectenum = objectenum;
+-    IEnumWbemClassObject_AddRef( enumvar->objectenum );
++    enumvar->enum_type = enum_type;
++    if (enum_type == ENUM_OBJECTS)
++    {
++        enumvar->u.objectenum = object;
++        IEnumWbemClassObject_AddRef( enumvar->u.objectenum );
++    }
++    else if (enumvar->enum_type == ENUM_PROPERTIES || enumvar->enum_type == ENUM_METHODS)
++    {
++        enumvar->u.members.object = object;
++        ISWbemObject_AddRef( enumvar->u.members.object );
++    }
+     enumvar->services = services;
+-    ISWbemServices_AddRef( &services->ISWbemServices_iface );
++    if (services) ISWbemServices_AddRef( &services->ISWbemServices_iface );
+ 
+     *obj = &enumvar->IEnumVARIANT_iface;
+     TRACE( "returning iface %p\n", *obj );
+@@ -3535,6 +3691,183 @@ HRESULT SWbemNamedValueSet_create( void **obj )
+     return hr;
+ }
+ 
++struct qualifierset
++{
++    ISWbemQualifierSet ISWbemQualifierSet_iface;
++    LONG refs;
++};
++
++static struct qualifierset *impl_from_ISWbemQualifierSet( ISWbemQualifierSet *iface )
++{
++    return CONTAINING_RECORD( iface, struct qualifierset, ISWbemQualifierSet_iface );
++}
++
++static HRESULT WINAPI qualifierset_QueryInterface( ISWbemQualifierSet *iface, REFIID riid, void **ppvObject )
++{
++    struct qualifierset *qualifierset = impl_from_ISWbemQualifierSet( iface );
++
++    TRACE( "%p %s %p\n", qualifierset, debugstr_guid( riid ), ppvObject );
++
++    if (IsEqualGUID( riid, &IID_ISWbemQualifierSet ) ||
++        IsEqualGUID( riid, &IID_IDispatch ) ||
++        IsEqualGUID( riid, &IID_IUnknown ))
++    {
++        *ppvObject = iface;
++    }
++    else
++    {
++        WARN( "interface %s not implemented\n", debugstr_guid( riid ) );
++        *ppvObject = NULL;
++        return E_NOINTERFACE;
++    }
++
++    ISWbemQualifierSet_AddRef( iface );
++    return S_OK;
++}
++
++static ULONG WINAPI qualifierset_AddRef( ISWbemQualifierSet *iface )
++{
++    struct qualifierset *qualifierset = impl_from_ISWbemQualifierSet( iface );
++    return InterlockedIncrement( &qualifierset->refs );
++}
++
++static ULONG WINAPI qualifierset_Release( ISWbemQualifierSet *iface )
++{
++    struct qualifierset *qualifierset = impl_from_ISWbemQualifierSet( iface );
++    LONG refs = InterlockedDecrement( &qualifierset->refs );
++
++    if (!refs)
++    {
++        TRACE( "destroying %p\n", qualifierset );
++        free( qualifierset );
++    }
++
++    return refs;
++}
++
++static HRESULT WINAPI qualifierset_GetTypeInfoCount( ISWbemQualifierSet *iface, UINT *count )
++{
++    struct qualifierset *qualifierset = impl_from_ISWbemQualifierSet( iface );
++
++    TRACE( "%p, %p\n", qualifierset, count );
++
++    *count = 1;
++    return S_OK;
++}
++
++static HRESULT WINAPI qualifierset_GetTypeInfo( ISWbemQualifierSet *iface, UINT index, LCID lcid, ITypeInfo **info )
++{
++    struct qualifierset *qualifierset = impl_from_ISWbemQualifierSet( iface );
++
++    TRACE( "%p, %u, %#lx, %p\n", qualifierset, index, lcid, info );
++
++    return get_typeinfo( ISWbemQualifierSet_tid, info );
++}
++
++static HRESULT WINAPI qualifierset_GetIDsOfNames( ISWbemQualifierSet *iface, REFIID riid,
++        LPOLESTR *names, UINT count, LCID lcid, DISPID *dispid )
++{
++    struct qualifierset *qualifierset = impl_from_ISWbemQualifierSet( iface );
++    ITypeInfo *typeinfo;
++    HRESULT hr;
++
++    TRACE( "%p, %s, %p, %u, %#lx, %p\n", qualifierset, debugstr_guid( riid ), names, count, lcid, dispid );
++
++    if (!names || !count || !dispid) return E_INVALIDARG;
++
++    hr = get_typeinfo( ISWbemQualifierSet_tid, &typeinfo );
++    if (SUCCEEDED(hr))
++    {
++        hr = ITypeInfo_GetIDsOfNames( typeinfo, names, count, dispid );
++        ITypeInfo_Release( typeinfo );
++    }
++    return hr;
++}
++
++static HRESULT WINAPI qualifierset_Invoke( ISWbemQualifierSet *iface, DISPID member, REFIID riid, LCID lcid,
++        WORD flags, DISPPARAMS *params, VARIANT *result, EXCEPINFO *excep_info, UINT *arg_err )
++{
++    struct qualifierset *qualifierset = impl_from_ISWbemQualifierSet( iface );
++    ITypeInfo *typeinfo;
++    HRESULT hr;
++
++    TRACE( "%p, %ld, %s, %#lx, %#x, %p, %p, %p, %p\n", qualifierset, member, debugstr_guid( riid ),
++            lcid, flags, params, result, excep_info, arg_err );
++
++    hr = get_typeinfo( ISWbemQualifierSet_tid, &typeinfo );
++    if (SUCCEEDED(hr))
++    {
++        hr = ITypeInfo_Invoke( typeinfo, &qualifierset->ISWbemQualifierSet_iface, member, flags,
++                params, result, excep_info, arg_err );
++        ITypeInfo_Release( typeinfo );
++    }
++    return hr;
++}
++
++static HRESULT WINAPI qualifierset__NewEnum( ISWbemQualifierSet *iface, IUnknown **unk )
++{
++    FIXME( "%p %p stub\n", iface, unk );
++    return EnumVARIANT_create( ENUM_QUALIFIERS, NULL, NULL, (IEnumVARIANT **)unk );
++}
++
++static HRESULT WINAPI qualifierset_Item( ISWbemQualifierSet *iface, BSTR name, LONG iFlags, ISWbemQualifier **objWbemQualifier )
++{
++    FIXME( "\n" );
++    return E_NOTIMPL;
++}
++
++static HRESULT WINAPI qualifierset_get_Count( ISWbemQualifierSet *iface, LONG *iCount )
++{
++    FIXME( "\n" );
++    *iCount = 0;
++    return S_OK;
++}
++
++static HRESULT WINAPI qualifierset_Add( ISWbemQualifierSet *iface, BSTR strName, VARIANT *varVal,
++        VARIANT_BOOL bPropagatesToSubclass, VARIANT_BOOL bPropagatesToInstance, VARIANT_BOOL bIsOverridable,
++        LONG iFlags, ISWbemQualifier **objWbemQualifier )
++{
++    FIXME( "\n" );
++    return E_NOTIMPL;
++}
++
++static HRESULT WINAPI qualifierset_Remove( ISWbemQualifierSet *iface, BSTR strName, LONG iFlags )
++{
++    FIXME( "\n" );
++    return E_NOTIMPL;
++}
++
++static const ISWbemQualifierSetVtbl qualifierset_vtbl =
++{
++    qualifierset_QueryInterface,
++    qualifierset_AddRef,
++    qualifierset_Release,
++    qualifierset_GetTypeInfoCount,
++    qualifierset_GetTypeInfo,
++    qualifierset_GetIDsOfNames,
++    qualifierset_Invoke,
++    qualifierset__NewEnum,
++    qualifierset_Item,
++    qualifierset_get_Count,
++    qualifierset_Add,
++    qualifierset_Remove,
++};
++
++static HRESULT SWbemQualifierSet_create( ISWbemQualifierSet **obj )
++{
++    struct qualifierset *qualifierset;
++
++    TRACE( "%p\n", obj );
++
++    if (!(qualifierset = calloc( 1, sizeof(*qualifierset) ))) return E_OUTOFMEMORY;
++    qualifierset->ISWbemQualifierSet_iface.lpVtbl = &qualifierset_vtbl;
++    qualifierset->refs = 1;
++
++    *obj = &qualifierset->ISWbemQualifierSet_iface;
++    TRACE( "returning iface %p\n", *obj );
++    return S_OK;
++}
++
+ struct objectpath
+ {
+     ISWbemObjectPath ISWbemObjectPath_iface;
+@@ -3714,7 +4047,8 @@ static HRESULT WINAPI objectpath_get_DisplayName( ISWbemObjectPath *iface, BSTR
+     FIXME( "%p, %p semi-stub\n", objectpath, strDisplayName );
+ 
+     if (FAILED( hr = IWbemPath_GetText( objectpath->path, WBEMPATH_GET_SERVER_TOO, &len, NULL ) )) return hr;
+-    if (!(buf = SysAllocStringLen( L"winmgmts:", len + ARRAY_SIZE( L"winmgmts:" ) - 2 ) )) return E_OUTOFMEMORY;
++    if (!(buf = SysAllocStringLen( NULL, len + ARRAY_SIZE( L"winmgmts:" ) - 2 ) )) return E_OUTOFMEMORY;
++    lstrcpyW( buf, L"winmgmts:" );
+     /* TODO: add 'authenticationLevel' and 'impersonationLevel' from the security object. Native also
+      * includes 'Name', 'SoftwareElementID', 'SoftwareElementState' and 'TargetOperatingSystem' values.
+      * The last three are currently missing from the properties. */
+diff --git a/dlls/wbemprox/builtin.c b/dlls/wbemprox/builtin.c
+index de3c060..2212622 100644
+--- a/dlls/wbemprox/builtin.c
++++ b/dlls/wbemprox/builtin.c
+@@ -2734,41 +2734,48 @@ static void free_associations( struct association *assoc, UINT count )
+     free( assoc );
+ }
+ 
++static WCHAR *get_ref( const struct view *view, UINT idx )
++{
++    WCHAR *ret;
++    VARIANT val;
++
++    if (get_propval( view, idx, L"__PATH", &val, NULL, NULL ) != S_OK) return NULL;
++    ret = wcsdup( V_BSTR(&val) );
++    VariantClear( &val );
++    return ret;
++}
++
+ static struct association *get_diskdrivetodiskpartition_pairs( UINT *count )
+ {
+     struct association *ret = NULL;
+     struct query *query, *query2 = NULL;
+-    VARIANT val;
+-    HRESULT hr;
+     UINT i;
+ 
+     if (!(query = create_query( WBEMPROX_NAMESPACE_CIMV2 ))) return NULL;
+-    if ((hr = parse_query( WBEMPROX_NAMESPACE_CIMV2, L"SELECT * FROM Win32_DiskDrive",
+-                           &query->view, &query->mem )) != S_OK) goto done;
+-    if ((hr = execute_view( query->view )) != S_OK) goto done;
++    if (parse_query( WBEMPROX_NAMESPACE_CIMV2, L"SELECT * FROM Win32_DiskDrive",
++                     &query->view, &query->mem ) != S_OK) goto done;
++    if (execute_view( query->view ) != S_OK) goto done;
+ 
+-    if (!(query2 = create_query( WBEMPROX_NAMESPACE_CIMV2 ))) return FALSE;
+-    if ((hr = parse_query( WBEMPROX_NAMESPACE_CIMV2, L"SELECT * FROM Win32_DiskPartition",
+-                           &query2->view, &query2->mem )) != S_OK) goto done;
+-    if ((hr = execute_view( query2->view )) != S_OK) goto done;
++    if (!(query2 = create_query( WBEMPROX_NAMESPACE_CIMV2 ))) return NULL;
++    if (parse_query( WBEMPROX_NAMESPACE_CIMV2, L"SELECT * FROM Win32_DiskPartition",
++                     &query2->view, &query2->mem ) != S_OK) goto done;
++    if (execute_view( query2->view ) != S_OK) goto done;
+ 
+     if (!(ret = calloc( query->view->result_count, sizeof(*ret) ))) goto done;
+ 
+     for (i = 0; i < query->view->result_count; i++)
+     {
+-        if ((hr = get_propval( query->view, i, L"__PATH", &val, NULL, NULL )) != S_OK) goto done;
+-        if (!(ret[i].ref = wcsdup( V_BSTR(&val) ))) goto done;
+-        VariantClear( &val );
+-
+-        if ((hr = get_propval( query2->view, i, L"__PATH", &val, NULL, NULL )) != S_OK) goto done;
+-        if (!(ret[i].ref2 = wcsdup( V_BSTR(&val) ))) goto done;
+-        VariantClear( &val );
++        if (!(ret[i].ref = get_ref( query->view, i )) || !(ret[i].ref2 = get_ref( query2->view, i )))
++        {
++            free_associations( ret, i );
++            ret = NULL;
++            goto done;
++        }
+     }
+ 
+     *count = query->view->result_count;
+ 
+ done:
+-    if (!ret) free_associations( ret, query->view->result_count );
+     free_query( query );
+     free_query( query2 );
+     return ret;
+@@ -3053,39 +3060,35 @@ static struct association *get_logicaldisktopartition_pairs( UINT *count )
+ {
+     struct association *ret = NULL;
+     struct query *query, *query2 = NULL;
+-    VARIANT val;
+-    HRESULT hr;
+     UINT i;
+ 
+     if (!(query = create_query( WBEMPROX_NAMESPACE_CIMV2 ))) return NULL;
+-    if ((hr = parse_query( WBEMPROX_NAMESPACE_CIMV2, L"SELECT * FROM Win32_DiskPartition",
+-                           &query->view, &query->mem )) != S_OK) goto done;
+-    if ((hr = execute_view( query->view )) != S_OK) goto done;
++    if (parse_query( WBEMPROX_NAMESPACE_CIMV2, L"SELECT * FROM Win32_DiskPartition",
++                     &query->view, &query->mem ) != S_OK) goto done;
++    if (execute_view( query->view ) != S_OK) goto done;
+ 
+-    if (!(query2 = create_query( WBEMPROX_NAMESPACE_CIMV2 ))) return FALSE;
+-    if ((hr = parse_query( WBEMPROX_NAMESPACE_CIMV2,
+-                           L"SELECT * FROM Win32_LogicalDisk WHERE DriveType=2 OR DriveType=3", &query2->view,
+-                           &query2->mem )) != S_OK) goto done;
+-    if ((hr = execute_view( query2->view )) != S_OK) goto done;
++    if (!(query2 = create_query( WBEMPROX_NAMESPACE_CIMV2 ))) return NULL;
++    if (parse_query( WBEMPROX_NAMESPACE_CIMV2,
++                     L"SELECT * FROM Win32_LogicalDisk WHERE DriveType=2 OR DriveType=3", &query2->view,
++                     &query2->mem ) != S_OK) goto done;
++    if (execute_view( query2->view ) != S_OK) goto done;
+ 
+     if (!(ret = calloc( query->view->result_count, sizeof(*ret) ))) goto done;
+ 
+     /* assume fixed and removable disks are enumerated in the same order as partitions */
+     for (i = 0; i < query->view->result_count; i++)
+     {
+-        if ((hr = get_propval( query->view, i, L"__PATH", &val, NULL, NULL )) != S_OK) goto done;
+-        if (!(ret[i].ref = wcsdup( V_BSTR(&val) ))) goto done;
+-        VariantClear( &val );
+-
+-        if ((hr = get_propval( query2->view, i, L"__PATH", &val, NULL, NULL )) != S_OK) goto done;
+-        if (!(ret[i].ref2 = wcsdup( V_BSTR(&val) ))) goto done;
+-        VariantClear( &val );
++        if (!(ret[i].ref = get_ref( query->view, i )) || !(ret[i].ref2 = get_ref( query2->view, i )))
++        {
++            free_associations( ret, i );
++            ret = NULL;
++            goto done;
++        }
+     }
+ 
+     *count = query->view->result_count;
+ 
+ done:
+-    if (!ret) free_associations( ret, query->view->result_count );
+     free_query( query );
+     free_query( query2 );
+     return ret;
+@@ -3619,7 +3622,7 @@ static struct record_pnpentity *get_pnp_entities( UINT *count )
+                                 if ((tmp = realloc( ret, nb_allocated * sizeof(*ret) ))) ret = tmp;
+                                 else
+                                 {
+-                                    while (--i)
++                                    while (i--)
+                                     {
+                                         free( (void *)ret[i].caption );
+                                         free( (void *)ret[i].class_guid );
+@@ -3937,7 +3940,7 @@ static enum fill_status fill_cache_memory( struct table *table, const struct exp
+         rec->level = i + 2;
+         rec->max_cache_size = rec->installed_size;
+         rec->number_of_blocks = rec->installed_size;
+-        swprintf( str, sizeof(str), L"Cache Memory %u", idx );
++        swprintf( str, ARRAY_SIZE(str), L"Cache Memory %u", idx );
+         rec->device_id = wcsdup( str );
+         rec->status = L"OK";
+         if (!match_row( table, idx, cond, &status ))
+@@ -3980,7 +3983,7 @@ static enum fill_status fill_processor( struct table *table, const struct expr *
+     }
+ 
+     RtlGetNativeSystemInformation( SystemCpuInformation, &info, sizeof(info), NULL );
+-    swprintf( version, sizeof(version), L"Model %u, Stepping %u",
++    swprintf( version, ARRAY_SIZE(version), L"Model %u, Stepping %u",
+               HIBYTE(info.ProcessorRevision), LOBYTE(info.ProcessorRevision) );
+ 
+     for (i = 0; i < num_packages; i++)
+@@ -4714,7 +4717,7 @@ static struct display_adapter *get_display_adapters( UINT *count )
+             if ((tmp = realloc( ret, nb_allocated * sizeof(*ret) ))) ret = tmp;
+             else
+             {
+-                while (--i)
++                while (i--)
+                 {
+                     free( ret[i].driver_date );
+                     free( ret[i].driver_desc );
+@@ -5076,6 +5079,7 @@ builtin_namespaces[WBEMPROX_NAMESPACE_LAST] =
+ {
+     {L"cimv2", cimv2_builtin_classes, ARRAY_SIZE(cimv2_builtin_classes)},
+     {L"Microsoft\\Windows\\Storage", win_storage_builtin_classes, ARRAY_SIZE(win_storage_builtin_classes)},
++    {L"SecurityCenter2", NULL, 0},
+     {L"StandardCimv2", NULL, 0},
+     {L"wmi", wmi_builtin_classes, ARRAY_SIZE(wmi_builtin_classes)},
+ };
+diff --git a/dlls/wbemprox/class.c b/dlls/wbemprox/class.c
+index 63df0e4..b1e5794 100644
+--- a/dlls/wbemprox/class.c
++++ b/dlls/wbemprox/class.c
+@@ -180,7 +180,7 @@ static HRESULT WINAPI enum_class_object_Skip(
+ 
+     if (nCount > view->result_count - ec->index)
+     {
+-        ec->index = view->result_count - 1;
++        ec->index = view->result_count;
+         return WBEM_S_FALSE;
+     }
+     ec->index += nCount;
+@@ -718,6 +718,7 @@ static HRESULT WINAPI class_object_SpawnInstance(
+         return hr;
+     }
+     hr = create_class_object( co->ns, co->name, iter, 0, record, ppNewInstance );
++    if (FAILED(hr)) destroy_record( record );
+     IEnumWbemClassObject_Release( iter );
+     return hr;
+ }
+@@ -783,7 +784,7 @@ static HRESULT create_signature_columns_and_data( IEnumWbemClassObject *iter, UI
+ {
+     struct column *columns;
+     BYTE *row;
+-    IWbemClassObject *param;
++    IWbemClassObject *param = NULL;
+     VARIANT val;
+     HRESULT hr = E_OUTOFMEMORY;
+     UINT offset = 0;
+@@ -791,7 +792,7 @@ static HRESULT create_signature_columns_and_data( IEnumWbemClassObject *iter, UI
+     int i = 0;
+ 
+     count = count_instances( iter );
+-    if (!(columns = malloc( count * sizeof(struct column) ))) return E_OUTOFMEMORY;
++    if (!(columns = calloc( count, sizeof(struct column) ))) return E_OUTOFMEMORY;
+     if (!(row = calloc( count, sizeof(LONGLONG) ))) goto error;
+ 
+     for (;;)
+@@ -822,6 +823,7 @@ static HRESULT create_signature_columns_and_data( IEnumWbemClassObject *iter, UI
+     return S_OK;
+ 
+ error:
++    if (param) IWbemClassObject_Release( param );
+     for (; i >= 0; i--) free( (WCHAR *)columns[i].name );
+     free( columns );
+     free( row );
+@@ -946,7 +948,7 @@ static HRESULT WINAPI class_object_GetMethod(
+         if (ppOutSignature) *ppOutSignature = out;
+         else if (out) IWbemClassObject_Release( out );
+     }
+-    else IWbemClassObject_Release( in );
++    else if (in) IWbemClassObject_Release( in );
+     return hr;
+ }
+ 
+diff --git a/dlls/wbemprox/process.c b/dlls/wbemprox/process.c
+index 195fc39..d03d78b 100644
+--- a/dlls/wbemprox/process.c
++++ b/dlls/wbemprox/process.c
+@@ -40,15 +40,15 @@ static HRESULT get_owner( VARIANT *user, VARIANT *domain, VARIANT *retval )
+     GetUserNameW( NULL, &len );
+     if (GetLastError() != ERROR_INSUFFICIENT_BUFFER) goto done;
+     if (!(V_BSTR( user ) = SysAllocStringLen( NULL, len - 1 ))) goto done;
+-    if (!GetUserNameW( V_BSTR( user ), &len )) goto done;
+     V_VT( user ) = VT_BSTR;
++    if (!GetUserNameW( V_BSTR( user ), &len )) goto done;
+ 
+     len = 0;
+     GetComputerNameW( NULL, &len );
+     if (GetLastError() != ERROR_BUFFER_OVERFLOW) goto done;
+     if (!(V_BSTR( domain ) = SysAllocStringLen( NULL, len - 1 ))) goto done;
+-    if (!GetComputerNameW( V_BSTR( domain ), &len )) goto done;
+     V_VT( domain ) = VT_BSTR;
++    if (!GetComputerNameW( V_BSTR( domain ), &len )) goto done;
+ 
+     error = 0;
+ 
+diff --git a/dlls/wbemprox/services.c b/dlls/wbemprox/services.c
+index 3b55a53..7ca8979 100644
+--- a/dlls/wbemprox/services.c
++++ b/dlls/wbemprox/services.c
+@@ -843,6 +843,7 @@ static HRESULT WINAPI wbem_services_ExecNotificationQueryAsync(
+         goto done;
+     }
+     if (!(query = calloc( 1, sizeof(*query) ))) goto done;
++    query->ns = services->ns;
+     async = (struct async_header *)query;
+ 
+     if (!(init_async( async, sink, async_exec_query )))
+@@ -1085,7 +1086,7 @@ static HRESULT WINAPI wbem_context_Clone(
+ {
+     struct wbem_context *context = impl_from_IWbemContext( iface );
+     struct wbem_context_value *value;
+-    IWbemContext *cloned_context;
++    IWbemContext *cloned_context = NULL;
+     HRESULT hr;
+ 
+     TRACE("%p, %p\n", iface, newcopy);
+@@ -1105,7 +1106,7 @@ static HRESULT WINAPI wbem_context_Clone(
+     else
+     {
+         *newcopy = NULL;
+-        IWbemContext_Release( cloned_context );
++        if (cloned_context) IWbemContext_Release( cloned_context );
+     }
+ 
+     return hr;
+diff --git a/dlls/wbemprox/wbemprox_private.h b/dlls/wbemprox/wbemprox_private.h
+index b8d2cb5..1da85a1 100644
+--- a/dlls/wbemprox/wbemprox_private.h
++++ b/dlls/wbemprox/wbemprox_private.h
+@@ -23,6 +23,7 @@ enum wbm_namespace
+ {
+     WBEMPROX_NAMESPACE_CIMV2,
+     WBEMPROX_NAMESPACE_MS_WINDOWS_STORAGE,
++    WBEMPROX_NAMESPACE_SECURITYCENTER2,
+     WBEMPROX_NAMESPACE_STANDARDCIMV2,
+     WBEMPROX_NAMESPACE_WMI,
+     WBEMPROX_NAMESPACE_LAST,
+diff --git a/dlls/winebus.sys/main.c b/dlls/winebus.sys/main.c
+index 81e4166..acdac55 100644
+--- a/dlls/winebus.sys/main.c
++++ b/dlls/winebus.sys/main.c
+@@ -1200,7 +1200,7 @@ static void bus_options_init(void)
+     options.disable_sdl = !check_bus_option(L"Enable SDL", 1);
+     if (options.disable_sdl) TRACE("SDL devices disabled in registry\n");
+     options.disable_hidraw = check_bus_option(L"DisableHidraw", 0);
+-    if (options.disable_hidraw) TRACE("UDEV hidraw devices disabled in registry\n");
++    if (options.disable_hidraw) TRACE("IOHID and UDEV hidraw devices disabled in registry\n");
+     options.disable_input = check_bus_option(L"DisableInput", 0);
+     if (options.disable_input) TRACE("UDEV input devices disabled in registry\n");
+     options.disable_udevd = check_bus_option(L"DisableUdevd", 0);
+@@ -1465,6 +1465,7 @@ static NTSTATUS hid_get_device_string(DEVICE_OBJECT *device, DWORD index, WCHAR
+         else memcpy(buffer, ext->desc.product, len);
+         return STATUS_SUCCESS;
+     case HID_STRING_ID_ISERIALNUMBER:
++        if (!*ext->desc.serialnumber) return STATUS_INVALID_PARAMETER;
+         len = (wcslen(ext->desc.serialnumber) + 1) * sizeof(WCHAR);
+         if (len > buffer_len) return STATUS_BUFFER_TOO_SMALL;
+         else memcpy(buffer, ext->desc.serialnumber, len);
+diff --git a/dlls/winedmo/unix_demuxer.c b/dlls/winedmo/unix_demuxer.c
+index 4c6bc15..e5c17e2 100644
+--- a/dlls/winedmo/unix_demuxer.c
++++ b/dlls/winedmo/unix_demuxer.c
+@@ -190,14 +190,14 @@ NTSTATUS demuxer_create( void *arg )
+     return STATUS_SUCCESS;
+ 
+ failed:
++    for (i = 0; demuxer->streams && i < demuxer->ctx->nb_streams; i++)
++        av_bsf_free( &demuxer->streams[i].filter );
++    free( demuxer->streams );
+     if (demuxer->ctx)
+     {
+         avio_context_free( &demuxer->ctx->pb );
+         avformat_free_context( demuxer->ctx );
+     }
+-    for (i = 0; demuxer->streams && i < demuxer->ctx->nb_streams; i++)
+-        av_bsf_free( &demuxer->streams[i].filter );
+-    free( demuxer->streams );
+     free( demuxer );
+     return STATUS_UNSUCCESSFUL;
+ }
+@@ -210,12 +210,12 @@ NTSTATUS demuxer_destroy( void *arg )
+ 
+     TRACE( "demuxer %p\n", demuxer );
+ 
+-    params->context = demuxer->ctx->pb->opaque;
+-    avio_context_free( &demuxer->ctx->pb );
+-    avformat_free_context( demuxer->ctx );
+     for (i = 0; i < demuxer->ctx->nb_streams; i++)
+         av_bsf_free( &demuxer->streams[i].filter );
+     free( demuxer->streams );
++    params->context = demuxer->ctx->pb->opaque;
++    avio_context_free( &demuxer->ctx->pb );
++    avformat_free_context( demuxer->ctx );
+     free( demuxer );
+ 
+     return STATUS_SUCCESS;
+diff --git a/dlls/winedmo/unixlib.c b/dlls/winedmo/unixlib.c
+index ea0ccde..9fe3d0e 100644
+--- a/dlls/winedmo/unixlib.c
++++ b/dlls/winedmo/unixlib.c
+@@ -197,7 +197,7 @@ static NTSTATUS wow64_demuxer_destroy( void *arg )
+         struct winedmo_demuxer demuxer;
+         PTR32 context;
+     } *params32 = arg;
+-    struct demuxer_create_params params;
++    struct demuxer_destroy_params params;
+     NTSTATUS status;
+ 
+     params.demuxer = params32->demuxer;
+diff --git a/dlls/winegstreamer/wg_parser.c b/dlls/winegstreamer/wg_parser.c
+index 1a29015..ea6cc70 100644
+--- a/dlls/winegstreamer/wg_parser.c
++++ b/dlls/winegstreamer/wg_parser.c
+@@ -894,6 +894,12 @@ static void free_stream(struct wg_parser_stream *stream)
+         if (stream->tags[i])
+             g_free(stream->tags[i]);
+     }
++
++    if (stream->codec_caps)
++        gst_caps_unref(stream->codec_caps);
++    if (stream->current_caps)
++        gst_caps_unref(stream->current_caps);
++
+     free(stream);
+ }
+ 
+diff --git a/dlls/winegstreamer/wg_transform.c b/dlls/winegstreamer/wg_transform.c
+index 180bf25..9fa4d70 100644
+--- a/dlls/winegstreamer/wg_transform.c
++++ b/dlls/winegstreamer/wg_transform.c
+@@ -1449,6 +1449,7 @@ static void wg_stepper_class_init(WgStepperClass *klass)
+     gst_element_class_set_metadata(GST_ELEMENT_CLASS(klass), "winegstreamer buffer stepper", "Connector",
+         "Hold incoming buffer for manual pushing", "Yuxuan Shui <yshui@codeweavers.com>");
+     klass->parent_class.change_state = wg_stepper_change_state;
++    (void)wg_stepper_parent_class; /* silence unused variable warning */
+ }
+ 
+ static GstFlowReturn wg_stepper_chain_cb(GstPad *pad, GstObject *parent, GstBuffer *buf)
+diff --git a/dlls/winhttp/cookie.c b/dlls/winhttp/cookie.c
+index e1f7563..4b62de3 100644
+--- a/dlls/winhttp/cookie.c
++++ b/dlls/winhttp/cookie.c
+@@ -54,7 +54,11 @@ static struct domain *add_domain( struct session *session, WCHAR *name )
+     list_init( &domain->entry );
+     list_init( &domain->cookies );
+ 
+-    domain->name = wcsdup( name );
++    if (!(domain->name = wcsdup( name )))
++    {
++        free( domain );
++        return NULL;
++    }
+     list_add_tail( &session->cookie_cache, &domain->entry );
+ 
+     TRACE("%s\n", debugstr_w(domain->name));
+diff --git a/dlls/winhttp/request.c b/dlls/winhttp/request.c
+index dbd0de4..ad19ff2 100644
+--- a/dlls/winhttp/request.c
++++ b/dlls/winhttp/request.c
+@@ -1772,7 +1772,7 @@ static DWORD add_host_header( struct request *request, DWORD modifier )
+     {
+         return process_header( request, L"Host", connect->hostname, modifier, TRUE );
+     }
+-    len = lstrlenW( connect->hostname ) + 7; /* sizeof(":65335") */
++    len = lstrlenW( connect->hostname ) + 7; /* sizeof(":65535") */
+     if (!(host = malloc( len * sizeof(WCHAR) ))) return ERROR_OUTOFMEMORY;
+     swprintf( host, len, L"%s:%u", connect->hostname, port );
+     ret = process_header( request, L"Host", host, modifier, TRUE );
+@@ -2299,7 +2299,7 @@ static DWORD send_request( struct request *request, const WCHAR *headers, DWORD
+                                || !wcscmp( request->verb, L"PUT" )))))
+     {
+         WCHAR length[21]; /* decimal long int + null */
+-        swprintf( length, ARRAY_SIZE(length), L"%ld", total_len );
++        swprintf( length, ARRAY_SIZE(length), L"%lu", total_len );
+         process_header( request, L"Content-Length", length, WINHTTP_ADDREQ_FLAG_ADD_IF_NEW, TRUE );
+     }
+     if (request->flags & REQUEST_FLAG_WEBSOCKET_UPGRADE)
+diff --git a/dlls/winhttp/session.c b/dlls/winhttp/session.c
+index 4acdad5..adc6979 100644
+--- a/dlls/winhttp/session.c
++++ b/dlls/winhttp/session.c
+@@ -2562,7 +2562,7 @@ BOOL WINAPI WinHttpTimeFromSystemTime( const SYSTEMTIME *time, LPWSTR string )
+ {
+     TRACE("%p, %p\n", time, string);
+ 
+-    if (!time || !string)
++    if (!time || !string || time->wDayOfWeek > 6 || time->wMonth < 1 || time->wMonth > 12)
+     {
+         SetLastError( ERROR_INVALID_PARAMETER );
+         return FALSE;
+diff --git a/dlls/winhttp/url.c b/dlls/winhttp/url.c
+index 4d10a17..15e3dbe 100644
+--- a/dlls/winhttp/url.c
++++ b/dlls/winhttp/url.c
+@@ -368,13 +368,14 @@ static BOOL uses_default_port( INTERNET_SCHEME scheme, INTERNET_PORT port )
+     return FALSE;
+ }
+ 
+-static DWORD get_comp_length( DWORD len, DWORD flags, WCHAR *comp )
++static DWORD get_comp_length( DWORD len, DWORD flags, const WCHAR *comp )
+ {
+-    DWORD ret;
+-    unsigned int i;
++    DWORD ret, i;
+ 
+-    ret = len ? len : lstrlenW( comp );
+-    if (!(flags & ICU_ESCAPE)) return ret;
++    if (!len) len = wcslen( comp );
++    if (!(flags & ICU_ESCAPE)) return len;
++
++    ret = len;
+     for (i = 0; i < len; i++) if (need_escape( comp[i] )) ret += 2;
+     return ret;
+ }
+diff --git a/include/evr.idl b/include/evr.idl
+index 413f5af..1812364 100644
+--- a/include/evr.idl
++++ b/include/evr.idl
+@@ -237,6 +237,20 @@ typedef enum MFVideoAspectRatioMode
+     MFVideoARMode_Mask             = 0x00000007,
+ } MFVideoAspectRatioMode;
+ 
++typedef enum MFVideoRenderPrefs
++{
++    MFVideoRenderPrefs_DoNotRenderBorder     = 0x00000001,
++    MFVideoRenderPrefs_DoNotClipToDevice     = 0x00000002,
++    MFVideoRenderPrefs_AllowOutputThrottling = 0x00000004,
++    MFVideoRenderPrefs_ForceOutputThrottling = 0x00000008,
++    MFVideoRenderPrefs_ForceBatching         = 0x00000010,
++    MFVideoRenderPrefs_AllowBatching         = 0x00000020,
++    MFVideoRenderPrefs_ForceScaling          = 0x00000040,
++    MFVideoRenderPrefs_AllowScaling          = 0x00000080,
++    MFVideoRenderPrefs_DoNotRepaintOnStop    = 0x00000100,
++    MFVideoRenderPrefs_Mask                  = 0x000001ff
++} MFVideoRenderPrefs;
++
+ [
+     object,
+     uuid(a490b1e4-ab84-4d31-a1b2-181e03b1077a),

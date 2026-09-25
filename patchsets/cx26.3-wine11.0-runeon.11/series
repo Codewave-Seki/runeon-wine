@@ -59,3 +59,7 @@ patches/runeon/0103-flsgetvalue2.patch
 patches/runeon/0104-steam-nwjs-automatic-launch.patch
 patches/runeon/0105-dxgi-driver-version.patch
 patches/runeon/0106-winegstreamer-unfixed-caps-pool.patch
+patches/upstream/0062-wine-11.16-targeted-fixes.patch
+patches/upstream/0063-wine-11.17-targeted-fixes.patch
+patches/upstream/0064-wine-11.18-targeted-fixes.patch
+patches/upstream/0065-wine-11.18-imm32-ime-keydown-lparam.patch
