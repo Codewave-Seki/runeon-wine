@@ -1688,6 +1688,33 @@
           "contains": "if (class < ARRAY_SIZE(info_len)) len = info_len[class];"
         }
       ]
+    },
+    {
+      "order": 124,
+      "path": "patches/runeon/0107-rosetta-self-modifying-code-step.patch",
+      "sha256": "ea2f138b3c174e576dab7d04d46f66496d20a47ec362375f68fa42b41719dcf9",
+      "kind": "runeon-product",
+      "status": "active",
+      "risk": "high",
+      "runeonTasks": [
+        "T811"
+      ],
+      "summary": "Optionally single-step writes to writable executable pages under Rosetta, so an instruction rewritten by the one before it executes from its first byte; gated on a per-application registry policy.",
+      "testStrategy": "Standalone self-modifying CPUID probe under Rosetta and under Wine with the policy off and on, a genuine wild-write counterexample, and the upstream ntdll unwind and exception suites off and on.",
+      "verification": [
+        {
+          "path": "dlls/ntdll/unix/virtual.c",
+          "contains": "static BOOL rosetta_smc_step;"
+        },
+        {
+          "path": "dlls/ntdll/unix/env.c",
+          "contains": "virtual_init_rosetta_smc_step();"
+        },
+        {
+          "path": "dlls/ntdll/unix/signal_x86_64.c",
+          "contains": "if (thread_data->smc_step_armed && TRAP_sig(ucontext) == TRAP_x86_TRCTRAP)"
+        }
+      ]
     }
   ],
   "targetedReview": {

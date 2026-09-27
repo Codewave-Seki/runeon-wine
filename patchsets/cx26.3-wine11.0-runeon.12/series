@@ -76,3 +76,4 @@ patches/upstream/0075-wine-11.16-ntdll-rtlbarrier-overshoot.patch
 patches/upstream/0076-wine-11.17-ntdll-reserved-area-overlap.patch
 patches/upstream/0077-wine-11.18-ntdll-oem-string-length.patch
 patches/upstream/0078-wine-11.18-ntdll-token-info-bounds.patch
+patches/runeon/0107-rosetta-self-modifying-code-step.patch

@@ -1,0 +1,298 @@
+From: Runeon contributors
+Subject: [PATCH] ntdll: Optionally single-step writes to executable memory under Rosetta.
+
+Rosetta can miss an instruction that the instruction right before it has
+just rewritten on a writable executable page: execution resumes one byte
+into the new instruction. A standalone probe reproduces this with an ADD
+that turns the next four bytes into CPUID, both natively under Rosetta and
+under Wine, while the same bytes run correctly if a trap lands right after
+the write.
+
+When HKCU\Software\Wine\AppDefaults\<app.exe>\Runeon\RosettaSelfModifyingCodeStep
+is a non-zero DWORD and the process is translated, writable executable
+pages are write-protected through the existing write-watch bits, the way
+write exceptions already do it. A write from code running on its thread
+stack opens the page, single-steps the writing instruction, and protects
+the page again in the trap. An application's own trap flag is preserved
+and its trap delivered. Writes from the signal or kernel stack only open
+the page. Without the value, or on a native process, nothing changes.
+
+diff --git a/dlls/ntdll/unix/env.c b/dlls/ntdll/unix/env.c
+index 832adfc..e855d41 100644
+--- a/dlls/ntdll/unix/env.c
++++ b/dlls/ntdll/unix/env.c
+@@ -1851,6 +1851,7 @@ static void init_peb( RTL_USER_PROCESS_PARAMETERS *params, void *module )
+ #endif
+ 
+     virtual_set_large_address_space();
++    virtual_init_rosetta_smc_step();
+     load_global_options( &params->ImagePathName );
+ 
+     if (wow_peb)
+diff --git a/dlls/ntdll/unix/signal_x86_64.c b/dlls/ntdll/unix/signal_x86_64.c
+index 91926a8..4b8e52c 100644
+--- a/dlls/ntdll/unix/signal_x86_64.c
++++ b/dlls/ntdll/unix/signal_x86_64.c
+@@ -2544,6 +2544,19 @@ static void segv_handler( int signal, siginfo_t *siginfo, void *sigcontext )
+         rec.ExceptionInformation[1] = (ULONG_PTR)siginfo->si_addr;
+         if (!virtual_handle_fault( &rec, (void *)RSP_sig(ucontext) ) || check_invalid_gsbase( ucontext ))
+         {
++            struct ntdll_thread_data *thread_data = ntdll_get_thread_data();
++
++            if (thread_data->smc_step_request)
++            {
++                /* single-step the write so the page is protected again right after it */
++                thread_data->smc_step_request = FALSE;
++                if (!thread_data->smc_step_armed)
++                {
++                    thread_data->smc_step_app_tf = !!(EFL_sig(ucontext) & 0x100);
++                    thread_data->smc_step_armed = TRUE;
++                }
++                EFL_sig(ucontext) |= 0x100;
++            }
+             leave_handler( ucontext );
+             return;
+         }
+@@ -2596,6 +2609,21 @@ static void trap_handler( int signal, siginfo_t *siginfo, void *sigcontext )
+     ucontext_t *ucontext = init_handler( sigcontext );
+     EXCEPTION_RECORD rec = { 0 };
+     struct xcontext context;
++    struct ntdll_thread_data *thread_data = ntdll_get_thread_data();
++
++    if (thread_data->smc_step_armed && TRAP_sig(ucontext) == TRAP_x86_TRCTRAP)
++    {
++        BOOL app_tf = thread_data->smc_step_app_tf;
++
++        virtual_rosetta_smc_step_done();
++        if (!app_tf)
++        {
++            EFL_sig(ucontext) &= ~0x100;
++            leave_handler( ucontext );
++            return;
++        }
++        /* the application was single-stepping itself: deliver its trap */
++    }
+ 
+     if (handle_syscall_trap( ucontext, siginfo )) return;
+ 
+diff --git a/dlls/ntdll/unix/unix_private.h b/dlls/ntdll/unix/unix_private.h
+index 0c68ca4..e036d93 100644
+--- a/dlls/ntdll/unix/unix_private.h
++++ b/dlls/ntdll/unix/unix_private.h
+@@ -116,6 +116,10 @@ struct ntdll_thread_data
+     PRTL_THREAD_START_ROUTINE start;         /* thread entry point */
+     void                     *param;         /* thread entry point parameter */
+     void                     *jmp_buf;       /* setjmp buffer for exception handling */
++    void                     *smc_step_pages[2]; /* exec-write pages opened for one single-stepped write */
++    BOOL                      smc_step_request;  /* a write was just opened; single-step the writer */
++    BOOL                      smc_step_armed;    /* the trap flag was set for that step */
++    BOOL                      smc_step_app_tf;   /* the application had already set the trap flag */
+ };
+ 
+ C_ASSERT( sizeof(struct ntdll_thread_data) <= sizeof(((TEB *)0)->GdiTebBatch) );
+@@ -311,6 +315,8 @@ extern SIZE_T virtual_uninterrupted_read_memory( const void *addr, void *buffer,
+ extern NTSTATUS virtual_uninterrupted_write_memory( void *addr, const void *buffer, SIZE_T size );
+ extern void virtual_set_force_exec( BOOL enable );
+ extern void virtual_enable_write_exceptions( BOOL enable );
++extern void virtual_init_rosetta_smc_step(void);
++extern void virtual_rosetta_smc_step_done(void);
+ extern void virtual_set_large_address_space(void);
+ extern void virtual_fill_image_information( const struct pe_image_info *pe_info,
+                                             SECTION_IMAGE_INFORMATION *info );
+diff --git a/dlls/ntdll/unix/virtual.c b/dlls/ntdll/unix/virtual.c
+index b82ef6e..9ca8fb4 100644
+--- a/dlls/ntdll/unix/virtual.c
++++ b/dlls/ntdll/unix/virtual.c
+@@ -241,6 +241,10 @@ static void *preload_reserve_start;
+ static void *preload_reserve_end;
+ static BOOL force_exec_prot;  /* whether to force PROT_EXEC on all PROT_READ mmaps */
+ static BOOL enable_write_exceptions;  /* raise exception on writes to executable memory */
++/* Rosetta can miss an instruction rewritten by the instruction right before it
++ * on a writable executable page. When enabled, such pages are write-protected
++ * and each write is single-stepped, so translation restarts after it. */
++static BOOL rosetta_smc_step;
+ 
+ struct range_entry
+ {
+@@ -1989,7 +1993,7 @@ static BOOL set_vprot( struct file_view *view, void *base, size_t size, BYTE vpr
+     }
+     else
+     {
+-        if (enable_write_exceptions && is_vprot_exec_write( vprot )) vprot |= VPROT_WRITEWATCH;
++        if ((enable_write_exceptions || rosetta_smc_step) && is_vprot_exec_write( vprot )) vprot |= VPROT_WRITEWATCH;
+         else if (use_kernel_writewatch && view->protect & VPROT_WRITEWATCH) vprot &= ~VPROT_WRITEWATCH;
+         set_page_vprot( base, size, vprot );
+     }
+@@ -2049,6 +2053,8 @@ static void update_write_watches( void *base, size_t size, size_t accessed_size
+     TRACE( "updating watch %p-%p-%p\n", base, (char *)base + accessed_size, (char *)base + size );
+     /* clear write watch flag on accessed pages */
+     set_page_vprot_bits( base, accessed_size, 0, VPROT_WRITEWATCH );
++    if (rosetta_smc_step && !is_write_watch_range( base, size ))
++        set_page_vprot_exec_write_protect( base, size );
+     /* restore page protections on the entire range */
+     mprotect_range( base, size, 0, 0 );
+ }
+@@ -4545,6 +4551,55 @@ static NTSTATUS grow_thread_stack( char *page, struct thread_stack_info *stack_i
+ }
+ 
+ 
++/***********************************************************************
++ *           rosetta_smc_step_track
++ *
++ * Remember a page opened for writing, so the signal handler single-steps the
++ * writer and the page is protected again right after it. virtual_mutex held.
++ */
++static void rosetta_smc_step_track( void *page )
++{
++    struct ntdll_thread_data *thread_data = ntdll_get_thread_data();
++    unsigned int i;
++
++    for (i = 0; i < ARRAY_SIZE(thread_data->smc_step_pages); i++)
++    {
++        if (thread_data->smc_step_pages[i] == page) break;
++        if (thread_data->smc_step_pages[i]) continue;
++        thread_data->smc_step_pages[i] = page;
++        break;
++    }
++    /* With no free slot the page simply stays writable until the next change. */
++    if (i == ARRAY_SIZE(thread_data->smc_step_pages)) WARN( "no slot for page %p\n", page );
++    thread_data->smc_step_request = TRUE;
++}
++
++
++/***********************************************************************
++ *           virtual_rosetta_smc_step_done
++ *
++ * Called from the single-step trap after the writing instruction completed.
++ */
++void virtual_rosetta_smc_step_done(void)
++{
++    struct ntdll_thread_data *thread_data = ntdll_get_thread_data();
++    unsigned int i;
++
++    mutex_lock( &virtual_mutex );  /* no need for signal masking inside signal handler */
++    for (i = 0; i < ARRAY_SIZE(thread_data->smc_step_pages); i++)
++    {
++        void *page = thread_data->smc_step_pages[i];
++
++        if (!page) continue;
++        thread_data->smc_step_pages[i] = NULL;
++        if (!is_write_watch_range( page, 1 ) && set_page_vprot_exec_write_protect( page, host_page_size ))
++            mprotect_range( page, host_page_size, 0, 0 );
++    }
++    thread_data->smc_step_armed = FALSE;
++    mutex_unlock( &virtual_mutex );
++}
++
++
+ /***********************************************************************
+  *           virtual_handle_fault
+  */
+@@ -4602,6 +4657,8 @@ NTSTATUS virtual_handle_fault( EXCEPTION_RECORD *rec, void *stack )
+     }
+     else if (err == EXCEPTION_WRITE_FAULT)
+     {
++        struct thread_stack_info stack_info;
++
+         if (vprot & VPROT_WRITEWATCH)
+         {
+             if (enable_write_exceptions && is_vprot_exec_write( vprot ) && !ntdll_get_thread_data()->allow_writes)
+@@ -4614,6 +4671,13 @@ NTSTATUS virtual_handle_fault( EXCEPTION_RECORD *rec, void *stack )
+             {
+                 set_page_vprot_bits( page, host_page_size, 0, VPROT_WRITEWATCH );
+                 mprotect_range( page, host_page_size, 0, 0 );
++                /* Only a writer running on its thread stack is stepped. A write from
++                 * the signal or kernel stack, e.g. an exception frame pushed onto a
++                 * custom stack, is a run of host stores that a single step cannot
++                 * cover; that page just stays writable. */
++                if (rosetta_smc_step && is_vprot_exec_write( vprot ) && !is_write_watch_range( page, 1 ) &&
++                    is_inside_thread_stack( stack, &stack_info ))
++                    rosetta_smc_step_track( page );
+             }
+         }
+         /* ignore fault if page is writable now */
+@@ -5104,6 +5168,75 @@ static BOOL force_laa(void)
+     return result;
+ }
+ 
++#ifdef __APPLE__
++static int is_apple_silicon(void);
++#endif
++
++/***********************************************************************
++ *           virtual_init_rosetta_smc_step
++ *
++ * Opt-in only: HKCU\Software\Wine\AppDefaults\<app.exe>\Runeon, DWORD
++ * RosettaSelfModifyingCodeStep != 0. Without it nothing changes.
++ */
++void virtual_init_rosetta_smc_step(void)
++{
++#if defined(__APPLE__) && defined(__x86_64__)
++    static const WCHAR valueW[] = {'R','o','s','e','t','t','a','S','e','l','f','M','o','d','i','f','y','i','n','g',
++                                   'C','o','d','e','S','t','e','p',0};
++    static const WCHAR runeonW[] = {'\\','R','u','n','e','o','n',0};
++    UNICODE_STRING nameW, valuenameW;
++    HANDLE root, key = 0;
++    OBJECT_ATTRIBUTES attr;
++    char tmp[64];
++    KEY_VALUE_PARTIAL_INFORMATION *info = (KEY_VALUE_PARTIAL_INFORMATION *)tmp;
++    struct file_view *view;
++    sigset_t sigset;
++    DWORD count;
++    BOOL enable = FALSE;
++    WCHAR *app_name;
++
++    if (!is_apple_silicon()) return;
++    if ((app_name = ntdll_wcsrchr( main_wargv[0], '\\' ))) app_name++;
++    else app_name = main_wargv[0];
++
++    if (!open_hkcu_key( "Software\\Wine\\AppDefaults", &root ))
++    {
++        ULONG len = wcslen( app_name ) + ARRAY_SIZE(runeonW);
++        if ((nameW.Buffer = malloc( len * sizeof(WCHAR) )))
++        {
++            wcscpy( nameW.Buffer, app_name );
++            wcscat( nameW.Buffer, runeonW );
++            nameW.Length = (len - 1) * sizeof(WCHAR);
++            InitializeObjectAttributes( &attr, &nameW, 0, root, NULL );
++            NtOpenKey( &key, KEY_QUERY_VALUE, &attr );
++            free( nameW.Buffer );
++        }
++        NtClose( root );
++    }
++    if (key)
++    {
++        valuenameW.Length = sizeof(valueW) - sizeof(WCHAR);
++        valuenameW.Buffer = (WCHAR *)valueW;
++        if (!NtQueryValueKey( key, &valuenameW, KeyValuePartialInformation, tmp, sizeof(tmp) - 1, &count ) &&
++            info->Type == REG_DWORD && info->DataLength >= sizeof(DWORD) && *(DWORD *)info->Data)
++            enable = TRUE;
++        NtClose( key );
++    }
++    if (!enable) return;
++
++    FIXME( "single-stepping writes to executable memory for Rosetta\n" );
++    server_enter_uninterrupted_section( &virtual_mutex, &sigset );
++    rosetta_smc_step = TRUE;
++    WINE_RB_FOR_EACH_ENTRY( view, &views_tree, struct file_view, entry )
++    {
++        if (view->protect & VPROT_WRITEWATCH) continue;
++        if (set_page_vprot_exec_write_protect( view->base, view->size ))
++            mprotect_range( view->base, view->size, 0, 0 );
++    }
++    server_leave_uninterrupted_section( &virtual_mutex, &sigset );
++#endif
++}
++
+ /***********************************************************************
+  *           virtual_set_large_address_space
+  *
+@@ -5212,6 +5345,8 @@ static NTSTATUS allocate_virtual_memory( void **ret, SIZE_T *size_ptr, ULONG typ
+             if (status == STATUS_SUCCESS)
+             {
+                 base = view->base;
++                if (rosetta_smc_step && !(vprot & VPROT_WRITEWATCH))
++                    set_page_vprot_exec_write_protect( base, size );
+                 if (vprot & VPROT_EXEC || force_exec_prot) mprotect_range( base, size, 0, 0 );
+             }
+         }
