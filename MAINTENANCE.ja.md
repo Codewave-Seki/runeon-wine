@@ -22,7 +22,7 @@ Runeon Wine は、能動的な上流監査と diagnostics 主導の調査とい�
 
 ## 現在の Wine 11.x レビューベースライン
 
-現在の Dev 候補：[`cx26.3-wine11.0-runeon.12`](patchsets/cx26.3-wine11.0-runeon.12/manifest.json)（Pre-release）。seed `2026.09.27` に対応し、App 配布条件は `>=1.8 (0)` です。`.11` に上流の `RtlVirtualUnwind2` NULL 出力修正、さらに 12 件の ntdll 修正、実行可能メモリへの書き込みを Rosetta 向けにシングルステップするオプトイン機能（`0107`）を追加します。ビルド、署名、readiness、Dev 配布の確認は合格しました。より広い Steam/ゲームの確認は未完了です。Production は変更されていません。
+現在の Dev 候補：[`cx26.3-wine11.0-runeon.13`](patchsets/cx26.3-wine11.0-runeon.13/manifest.json)（Pre-release）。seed `2026.09.28` に対応し、App 配布条件は `>=1.8 (0)` です。`.12` に `0108` を追加します。オプトインの Rosetta 自己書き換えコードポリシーが有効な場合、書き込み可能な実行可能ページはすべての書き込みをシングルステップする代わりに、読み取り/実行のコードフェーズと実行不可の読み書きデータフェーズを切り替えます。ビルド、回帰スイート、署名、readiness、Dev 配布の確認は合格しました。より広い Steam/ゲームの確認は未完了です。`.12`（seed `2026.09.27`）は置き換え済みの Dev 候補で、変更せずに保持します。Production は変更されていません。
 
 現在の Production ソース：[`cx26.3-wine11.0-runeon.11`](BACKPORTS-11.16-11.18-SWEEP.ja.md)（正式版/latest）。seed `2026.09.26` に対応し、App 配布条件は `>=1.8 (0)` です。`.10` に Wine 11.16–11.18 の選別バックポート、winegstreamer のビデオバッファプールのフォールバック、2 つのオプトイン入口を追加します。ビルド、署名、readiness、Dev/Production 配布の確認は合格しました。ユーザーは 2026-09-26 に Dev で問題が見つからなかったと報告し、Production を承認しました。Production は同一の署名済み Dev archive を再ビルドせずに昇格します。
 

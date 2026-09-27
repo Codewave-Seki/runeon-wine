@@ -22,7 +22,7 @@ Runeon Wine accepts input from proactive upstream audits and diagnostics-driven 
 
 ## Current Wine 11.x review baseline
 
-Current Dev candidate: [`cx26.3-wine11.0-runeon.12`](patchsets/cx26.3-wine11.0-runeon.12/manifest.json) (Pre-release) for seed `2026.09.27`, App gate `>=1.8 (0)`. It adds the upstream `RtlVirtualUnwind2` NULL-output fix, twelve further ntdll fixes and the opt-in Rosetta single-step for writes to executable memory (`0107`) to `.11`. Build, signing, readiness and Dev distribution checks passed; broader Steam/game acceptance is pending. Production is unchanged.
+Current Dev candidate: [`cx26.3-wine11.0-runeon.13`](patchsets/cx26.3-wine11.0-runeon.13/manifest.json) (Pre-release) for seed `2026.09.28`, App gate `>=1.8 (0)`. It adds `0108` to `.12`: with the opt-in Rosetta self-modifying code policy on, writable executable pages alternate between a read/execute code phase and a non-executable read/write data phase instead of single-stepping every write. Build, regression suites, signing, readiness and Dev distribution checks passed; broader Steam/game acceptance is pending. `.12` (seed `2026.09.27`) is a superseded Dev candidate, retained unchanged. Production is unchanged.
 
 Current Production source: [`cx26.3-wine11.0-runeon.11`](BACKPORTS-11.16-11.18-SWEEP.md) (stable/latest) for seed `2026.09.26`, App gate `>=1.8 (0)`. It adds the filtered Wine 11.16–11.18 sweep, the winegstreamer video-pool fallback and two opt-in hooks to `.10`. Build, signing, readiness and Dev/Production distribution checks passed; the user reported no issues in Dev and authorized Production on 2026-09-26. Production promotes the exact signed Dev archive without rebuilding.
 
