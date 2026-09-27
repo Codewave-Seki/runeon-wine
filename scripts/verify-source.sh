@@ -51,7 +51,7 @@ if jq -e '.patches[] | select(.path | contains("cfgmgr32-invalid-notification-ha
     || die "cfgmgr32 page-fault upstream test missing"
 fi
 
-while IFS=$'\t' read -r relative_source marker_text; do
+while IFS=$'\t' read -r relative_source marker_text occurrences; do
   [[ -n "$relative_source" && -n "$marker_text" ]] \
     || die "invalid source verification marker in $patch_manifest"
   case "$relative_source" in
@@ -61,6 +61,13 @@ while IFS=$'\t' read -r relative_source marker_text; do
   require_file "$verification_source"
   grep -Fq "$marker_text" "$verification_source" \
     || die "source verification marker missing in $relative_source: $marker_text"
-done < <(jq -r '.patches[] | .verification[]? | [.path, .contains] | @tsv' "$patch_manifest")
+  # A fix can make a line identical to one that already exists elsewhere in
+  # the file; an expected count then proves the patch applied.
+  if [[ -n "$occurrences" ]]; then
+    found="$(grep -Fc -- "$marker_text" "$verification_source" || true)"
+    [[ "$found" == "$occurrences" ]] \
+      || die "source verification marker in $relative_source found $found times, expected $occurrences: $marker_text"
+  fi
+done < <(jq -r '.patches[] | .verification[]? | [.path, .contains, (.occurrences // "" | tostring)] | @tsv' "$patch_manifest")
 
 printf 'verified %s on %s\n' "$patch_set_id" "$base_id"
