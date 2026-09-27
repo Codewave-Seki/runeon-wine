@@ -1,0 +1,73 @@
+From: Soham Nandy <soham.nandy2006@gmail.com>
+Subject: [PATCH] ntdll: Preserve nonvolatile registers across VEH callbacks.
+
+Backported from WineHQ commit 1306b22921 (wine-11.11) without code
+changes.
+
+Some handlers restore nonvolatile registers before returning, which corrupted
+the dispatcher's own state. The wrapper covers the eight nonvolatile integer
+registers, not XMM6-XMM15. Other architectures call the handler directly as
+before.
+
+diff --git a/dlls/ntdll/exception.c b/dlls/ntdll/exception.c
+--- a/dlls/ntdll/exception.c
++++ b/dlls/ntdll/exception.c
+@@ -138,6 +138,49 @@
+     return ret;
+ }
+ 
++#if defined(__x86_64__) && !defined(__arm64ec__)
++/*
++ * Some vectored exception handlers restore nonvolatile registers before
++ * returning. Preserve the caller state across the callback.
++ */
++extern LONG WINAPI call_vectored_handler( EXCEPTION_POINTERS *ptr, PVECTORED_EXCEPTION_HANDLER func );
++__ASM_GLOBAL_FUNC( call_vectored_handler,
++                    "pushq %rbx\n\t"
++                    __ASM_SEH(".seh_pushreg %rbx\n\t")
++                    "pushq %rsi\n\t"
++                    __ASM_SEH(".seh_pushreg %rsi\n\t")
++                    "pushq %rdi\n\t"
++                    __ASM_SEH(".seh_pushreg %rdi\n\t")
++                    "pushq %rbp\n\t"
++                    __ASM_SEH(".seh_pushreg %rbp\n\t")
++                    "pushq %r12\n\t"
++                    __ASM_SEH(".seh_pushreg %r12\n\t")
++                    "pushq %r13\n\t"
++                    __ASM_SEH(".seh_pushreg %r13\n\t")
++                    "pushq %r14\n\t"
++                    __ASM_SEH(".seh_pushreg %r14\n\t")
++                    "pushq %r15\n\t"
++                    __ASM_SEH(".seh_pushreg %r15\n\t")
++                    "subq $0x28,%rsp\n\t"
++                    __ASM_SEH(".seh_stackalloc 0x28\n\t")
++                    __ASM_SEH(".seh_endprologue\n\t")
++                    "callq *%rdx\n\t"
++                    "addq $0x28,%rsp\n\t"
++                    "popq %r15\n\t"
++                    "popq %r14\n\t"
++                    "popq %r13\n\t"
++                    "popq %r12\n\t"
++                    "popq %rbp\n\t"
++                    "popq %rdi\n\t"
++                    "popq %rsi\n\t"
++                    "popq %rbx\n\t"
++                    "ret" )
++#else
++static inline LONG call_vectored_handler( EXCEPTION_POINTERS *ptr, PVECTORED_EXCEPTION_HANDLER func )
++{
++    return func( ptr );
++}
++#endif
+ 
+ /**********************************************************************
+  *           call_vectored_handlers
+@@ -168,7 +211,7 @@
+ 
+         TRACE( "calling handler at %p code=%lx flags=%lx\n",
+                func, rec->ExceptionCode, rec->ExceptionFlags );
+-        ret = func( &except_ptrs );
++        ret = call_vectored_handler( &except_ptrs, func );
+         TRACE( "handler at %p returned %lx\n", func, ret );
+ 
+         RtlEnterCriticalSection( &vectored_handlers_section );

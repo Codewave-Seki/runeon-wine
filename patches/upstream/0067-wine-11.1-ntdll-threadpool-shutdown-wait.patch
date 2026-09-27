@@ -1,0 +1,22 @@
+From: Ziia Shi <mkrsym1@gmail.com>
+Subject: [PATCH] ntdll: Avoid infinite wait during process termination.
+
+Backported from WineHQ commit e0e8166da6 (wine-11.1) without code
+changes.
+
+During process termination, threadpool callbacks can no longer finish, so a
+wait on them never returns and the process hangs on exit. Normal waits while
+the process runs are unchanged.
+
+diff --git a/dlls/ntdll/threadpool.c b/dlls/ntdll/threadpool.c
+--- a/dlls/ntdll/threadpool.c
++++ b/dlls/ntdll/threadpool.c
+@@ -2083,7 +2083,7 @@
+     struct threadpool *pool = object->pool;
+ 
+     RtlEnterCriticalSection( &pool->cs );
+-    while (!object_is_finished( object, group_wait ))
++    while (!RtlDllShutdownInProgress() && !object_is_finished( object, group_wait ))
+     {
+         if (group_wait)
+             RtlSleepConditionVariableCS( &object->group_finished_event, &pool->cs, NULL );

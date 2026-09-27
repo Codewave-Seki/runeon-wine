@@ -1,0 +1,87 @@
+From: Alexandre Julliard <julliard@winehq.org>
+Subject: [PATCH] ntdll: Fix handling of exit unwind when there are no TEB frames.
+
+Backported from WineHQ commit 1ad0e3fed6 (wine-11.13) without code
+changes.
+
+With end_frame == NULL the old bound was always false, so builtin TEB handlers
+were skipped and the unwind could stop before the remaining PE frames.
+
+diff --git a/dlls/ntdll/signal_arm.c b/dlls/ntdll/signal_arm.c
+--- a/dlls/ntdll/signal_arm.c
++++ b/dlls/ntdll/signal_arm.c
+@@ -521,9 +521,10 @@
+         }
+         else  /* hack: call builtin handlers registered in the tib list */
+         {
+-            while (is_valid_frame( (ULONG_PTR)teb_frame ) &&
+-                   (DWORD)teb_frame < new_context.Sp &&
+-                   (DWORD)teb_frame < (DWORD)end_frame)
++            ULONG_PTR last_frame = new_context.Sp;
++            if (end_frame && (ULONG_PTR)end_frame < last_frame) last_frame = (ULONG_PTR)end_frame;
++
++            while (is_valid_frame( (ULONG_PTR)teb_frame ) && (ULONG_PTR)teb_frame < last_frame)
+             {
+                 TRACE( "calling TEB handler %p (rec=%p, frame=%p context=%p, dispatch=%p)\n",
+                        teb_frame->Handler, rec, teb_frame, dispatch.ContextRecord, &dispatch );
+@@ -550,7 +551,7 @@
+                     break;
+                 }
+             }
+-            if ((DWORD)teb_frame == (DWORD)end_frame && (DWORD)end_frame < new_context.Sp) break;
++            if ((ULONG_PTR)teb_frame == last_frame && last_frame < new_context.Sp) break;
+         }
+ 
+         if (dispatch.EstablisherFrame == (DWORD)end_frame) break;
+diff --git a/dlls/ntdll/signal_arm64.c b/dlls/ntdll/signal_arm64.c
+--- a/dlls/ntdll/signal_arm64.c
++++ b/dlls/ntdll/signal_arm64.c
+@@ -558,9 +558,10 @@
+         }
+         else  /* hack: call builtin handlers registered in the tib list */
+         {
+-            while (is_valid_frame( (ULONG_PTR)teb_frame ) &&
+-                   (ULONG64)teb_frame < new_context.Sp &&
+-                   (ULONG64)teb_frame < (ULONG64)end_frame)
++            ULONG_PTR last_frame = new_context.Sp;
++            if (end_frame && (ULONG_PTR)end_frame < last_frame) last_frame = (ULONG_PTR)end_frame;
++
++            while (is_valid_frame( (ULONG_PTR)teb_frame ) && (ULONG_PTR)teb_frame < last_frame)
+             {
+                 TRACE( "calling TEB handler %p (rec=%p, frame=%p context=%p, dispatch=%p)\n",
+                        teb_frame->Handler, rec, teb_frame, dispatch.ContextRecord, &dispatch );
+@@ -587,7 +588,7 @@
+                     break;
+                 }
+             }
+-            if ((ULONG64)teb_frame == (ULONG64)end_frame && (ULONG64)end_frame < new_context.Sp) break;
++            if ((ULONG_PTR)teb_frame == last_frame && last_frame < new_context.Sp) break;
+         }
+ 
+         if (dispatch.EstablisherFrame == (ULONG64)end_frame) break;
+diff --git a/dlls/ntdll/signal_x86_64.c b/dlls/ntdll/signal_x86_64.c
+--- a/dlls/ntdll/signal_x86_64.c
++++ b/dlls/ntdll/signal_x86_64.c
+@@ -777,9 +777,10 @@
+         }
+         else  /* hack: call builtin handlers registered in the tib list */
+         {
+-            while (is_valid_frame( (ULONG_PTR)teb_frame ) &&
+-                   (ULONG64)teb_frame < new_context.Rsp &&
+-                   (ULONG64)teb_frame < (ULONG64)end_frame)
++            ULONG_PTR last_frame = new_context.Rsp;
++            if (end_frame && (ULONG_PTR)end_frame < last_frame) last_frame = (ULONG_PTR)end_frame;
++
++            while (is_valid_frame( (ULONG_PTR)teb_frame ) && (ULONG_PTR)teb_frame < last_frame)
+             {
+                 TRACE( "calling TEB handler %p (rec=%p, frame=%p context=%p, dispatch=%p)\n",
+                        teb_frame->Handler, rec, teb_frame, dispatch.ContextRecord, &dispatch );
+@@ -807,7 +808,7 @@
+                     break;
+                 }
+             }
+-            if ((ULONG64)teb_frame == (ULONG64)end_frame && (ULONG64)end_frame < new_context.Rsp) break;
++            if ((ULONG_PTR)teb_frame == last_frame && last_frame < new_context.Rsp) break;
+         }
+ 
+         if (dispatch.EstablisherFrame == (ULONG64)end_frame) break;

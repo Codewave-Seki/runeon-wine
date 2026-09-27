@@ -1,0 +1,30 @@
+From: Nikola Kuburović <nikola.kuburovic123@gmail.com>
+Subject: [PATCH] ntdll: Fix out-of-bounds access in NtQueryInformationToken.
+
+Backported from WineHQ commit 35f715b4ef (wine-11.18) without code
+changes.
+
+The table is shorter than the information class enumeration, so the old check
+allowed an out-of-bounds read.
+
+diff --git a/dlls/ntdll/unix/security.c b/dlls/ntdll/unix/security.c
+--- a/dlls/ntdll/unix/security.c
++++ b/dlls/ntdll/unix/security.c
+@@ -367,7 +367,7 @@
+         0,    /* TokenRestrictedDeviceGroups */
+         0,    /* TokenSecurityAttributes */
+         0,    /* TokenIsRestricted */
+-        0     /* TokenProcessTrustLevel */
++        0,    /* TokenProcessTrustLevel */
+     };
+ 
+     ULONG len = 0;
+@@ -375,7 +375,7 @@
+ 
+     TRACE( "(%p,%s,%p,%d,%p)\n", token, debugstr_TokenInformationClass(class), info, length, retlen );
+ 
+-    if (class < MaxTokenInfoClass) len = info_len[class];
++    if (class < ARRAY_SIZE(info_len)) len = info_len[class];
+     if (retlen) *retlen = len;
+     if (length < len) return STATUS_BUFFER_TOO_SMALL;
+ 

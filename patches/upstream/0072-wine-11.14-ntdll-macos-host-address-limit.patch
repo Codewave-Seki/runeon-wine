@@ -1,0 +1,32 @@
+From: Brendan Shanks <bshanks@codeweavers.com>
+Subject: [PATCH] ntdll: Hard code the host address space limit on macOS.
+
+Backported from WineHQ commit 8ad6011269 (wine-11.14) without code
+changes.
+
+The probe returned 0x7fffffff0000 on macOS, above the real limit, so
+allocations were attempted in a range the kernel never maps. The WoW64 address
+limits are unchanged.
+
+diff --git a/dlls/ntdll/unix/virtual.c b/dlls/ntdll/unix/virtual.c
+--- a/dlls/ntdll/unix/virtual.c
++++ b/dlls/ntdll/unix/virtual.c
+@@ -2763,6 +2763,10 @@
+  */
+ static void *get_host_addr_space_limit(void)
+ {
++#ifdef __APPLE__
++    /* See MACH_VM_MAX_ADDRESS_RAW in xnu osfmk/mach/arm/vm_param.h */
++    return (void *)0x7ffffe000000;
++#else
+     unsigned int flags = MAP_PRIVATE | MAP_ANON;
+     UINT_PTR addr = (UINT_PTR)1 << 63;
+ 
+@@ -2782,6 +2786,7 @@
+         addr >>= 1;
+     }
+     return (void *)((addr << 1) - (granularity_mask + 1));
++#endif
+ }
+ 
+ #endif /* _WIN64 */

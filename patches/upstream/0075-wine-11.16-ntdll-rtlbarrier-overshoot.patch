@@ -1,0 +1,30 @@
+From: Paul Gofman <pgofman@codeweavers.com>
+Subject: [PATCH] ntdll: Treat 'reached_thread_count > total_thread_count' the same as equal in RtlBarrier().
+
+Backported from WineHQ commit e96bcf9eeb (wine-11.16) without code
+changes.
+
+Both barrier conditions change together; an overshoot previously left threads
+waiting on a phase that had already completed.
+
+diff --git a/dlls/ntdll/sync.c b/dlls/ntdll/sync.c
+--- a/dlls/ntdll/sync.c
++++ b/dlls/ntdll/sync.c
+@@ -1458,7 +1458,7 @@
+ 
+     /* Wait for previous wait iteration to complete. */
+     count = 0;
+-    while (ReadAcquire( &b->reached_thread_count ) == b->total_thread_count)
++    while (ReadAcquire( &b->reached_thread_count ) >= b->total_thread_count)
+     {
+         if (count < spin_count)
+         {
+@@ -1470,7 +1470,7 @@
+                           sizeof(b->reached_thread_count), NULL );
+     }
+     InterlockedIncrement( &b->waiting_thread_count );
+-    if (InterlockedIncrement( &b->reached_thread_count ) == b->total_thread_count)
++    if (InterlockedIncrement( &b->reached_thread_count ) >= b->total_thread_count)
+     {
+         WriteRelease( &b->wait_barrier_complete, 1 );
+         RtlWakeAddressAll( (const void *)&b->wait_barrier_complete );

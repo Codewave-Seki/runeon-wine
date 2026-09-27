@@ -1422,6 +1422,272 @@
           "contains": "if (type) *data = NULL;"
         }
       ]
+    },
+    {
+      "order": 112,
+      "path": "patches/upstream/0067-wine-11.1-ntdll-threadpool-shutdown-wait.patch",
+      "sha256": "ca2004895fc0947b54d17c8253eb80f055019da31a057a4898fba69a23fb273e",
+      "kind": "upstream-backport",
+      "status": "active",
+      "risk": "medium",
+      "firstWineRelease": "wine-11.1",
+      "upstreamCommits": [
+        "e0e8166da602c823b5039933de8a907461d09be2"
+      ],
+      "runeonTasks": [
+        "T810"
+      ],
+      "summary": "Stop tp_object_wait() from waiting forever once DLL shutdown is in progress (Wine-Bug 59178).",
+      "verification": [
+        {
+          "path": "dlls/ntdll/threadpool.c",
+          "contains": "while (!RtlDllShutdownInProgress() && !object_is_finished( object, group_wait ))"
+        }
+      ]
+    },
+    {
+      "order": 113,
+      "path": "patches/upstream/0068-wine-11.1-ntdll-rtlwalkframechain-no-function-entry.patch",
+      "sha256": "4bbf4e439d126cbee086518346ad2b4629c81456c426257335953ba35660b54d",
+      "kind": "upstream-backport",
+      "status": "active",
+      "risk": "low",
+      "firstWineRelease": "wine-11.1",
+      "upstreamCommits": [
+        "064cdd87e33486f03ea1dc68f07784a7e66aef35",
+        "02831b283ec70b5a4f92b33f49a6860f70697ce6"
+      ],
+      "runeonTasks": [
+        "T810"
+      ],
+      "summary": "Stop the x64 RtlWalkFrameChain() walk at a frame without a function entry, with the upstream RtlCaptureStackBackTrace() tests.",
+      "verification": [
+        {
+          "path": "dlls/ntdll/signal_x86_64.c",
+          "contains": "if (!func) break;"
+        }
+      ]
+    },
+    {
+      "order": 114,
+      "path": "patches/upstream/0069-wine-11.1-ntdll-dir-scan-null-deref.patch",
+      "sha256": "b5ba7836568b5a5cd0854d49f3817c2b30858c011cecb4b84f70254a2f5e1a5f",
+      "kind": "upstream-backport",
+      "status": "active",
+      "risk": "low",
+      "firstWineRelease": "wine-11.1",
+      "upstreamCommits": [
+        "74272424dcccddaff0836a5826a3c379c20857ae"
+      ],
+      "runeonTasks": [
+        "T810"
+      ],
+      "summary": "Do not dereference a NULL cached directory entry when a restarted scan fails to initialize.",
+      "verification": [
+        {
+          "path": "dlls/ntdll/unix/file.c",
+          "contains": "if (restart_scan && *data_ret) (*data_ret)->pos = 0;"
+        }
+      ]
+    },
+    {
+      "order": 115,
+      "path": "patches/upstream/0070-wine-11.11-ntdll-veh-nonvolatile-registers.patch",
+      "sha256": "88799598a19c12881e5fbd6a9c8b44672e52ef355778af5d1ca8cc661bbef8e6",
+      "kind": "upstream-backport",
+      "status": "active",
+      "risk": "medium",
+      "firstWineRelease": "wine-11.11",
+      "upstreamCommits": [
+        "1306b22921a0f40f033f1fd25bd75fc5878e758d"
+      ],
+      "runeonTasks": [
+        "T810"
+      ],
+      "summary": "Call x64 vectored exception handlers through a wrapper that saves and restores the nonvolatile integer registers.",
+      "verification": [
+        {
+          "path": "dlls/ntdll/exception.c",
+          "contains": "extern LONG WINAPI call_vectored_handler( EXCEPTION_POINTERS *ptr, PVECTORED_EXCEPTION_HANDLER func );"
+        }
+      ]
+    },
+    {
+      "order": 116,
+      "path": "patches/upstream/0071-wine-11.13-ntdll-exit-unwind-teb-frames.patch",
+      "sha256": "2a4f9acef0db056d85cd42f4286d4d09399ed38cbd3f0c96dd04580e08208088",
+      "kind": "upstream-backport",
+      "status": "active",
+      "risk": "medium",
+      "firstWineRelease": "wine-11.13",
+      "upstreamCommits": [
+        "1ad0e3fed689421126677fd4889634384abbc03e"
+      ],
+      "runeonTasks": [
+        "T810"
+      ],
+      "summary": "Handle exit unwind (NULL end_frame) in RtlUnwindEx() without stopping early at the TEB frame list (Wine-Bug 59850).",
+      "verification": [
+        {
+          "path": "dlls/ntdll/signal_x86_64.c",
+          "contains": "if (end_frame && (ULONG_PTR)end_frame < last_frame) last_frame = (ULONG_PTR)end_frame;"
+        }
+      ]
+    },
+    {
+      "order": 117,
+      "path": "patches/upstream/0072-wine-11.14-ntdll-macos-host-address-limit.patch",
+      "sha256": "87cd942245c921c956648689c60ac0a8390f88596908e8a4e7f1328cf82080b8",
+      "kind": "upstream-backport",
+      "status": "active",
+      "risk": "medium",
+      "firstWineRelease": "wine-11.14",
+      "upstreamCommits": [
+        "8ad60112690b0171bcd6e07f1d604ba70f7ac003"
+      ],
+      "runeonTasks": [
+        "T810"
+      ],
+      "summary": "Use the kernel's fixed user address limit on macOS instead of probing for it.",
+      "verification": [
+        {
+          "path": "dlls/ntdll/unix/virtual.c",
+          "contains": "return (void *)0x7ffffe000000;"
+        }
+      ]
+    },
+    {
+      "order": 118,
+      "path": "patches/upstream/0073-wine-11.16-ntdll-maxversiontested-sign-extension.patch",
+      "sha256": "a91e296cd63444f2b377c83218476dc0b651fcd5bad4be1552ad7f094d094eb0",
+      "kind": "upstream-backport",
+      "status": "active",
+      "risk": "low",
+      "firstWineRelease": "wine-11.16",
+      "upstreamCommits": [
+        "a9673ffb56886991bde4bdd544761459915a0f1e"
+      ],
+      "runeonTasks": [
+        "T810"
+      ],
+      "summary": "Avoid sign extension when packing MaxVersionTested from an application manifest.",
+      "verification": [
+        {
+          "path": "dlls/ntdll/actctx.c",
+          "contains": "compat->MaxVersionTested =  ((ULONGLONG)version.major << 48) |"
+        }
+      ]
+    },
+    {
+      "order": 119,
+      "path": "patches/upstream/0074-wine-11.16-ntdll-map-free-area-limits.patch",
+      "sha256": "a336c7e351554d7172d66369e889a66f8b59e0d6c20799a1e415ee2b67796c19",
+      "kind": "upstream-backport",
+      "status": "active",
+      "risk": "medium",
+      "firstWineRelease": "wine-11.16",
+      "upstreamCommits": [
+        "1276773f69890b63113d23647258f16f2957996e"
+      ],
+      "runeonTasks": [
+        "T810"
+      ],
+      "summary": "Keep map_free_area() inside the requested base and end limits.",
+      "verification": [
+        {
+          "path": "dlls/ntdll/unix/virtual.c",
+          "contains": "if ((start = try_map_free_area( max( (char *)base, (char *)view->base + view->size ),"
+        }
+      ]
+    },
+    {
+      "order": 120,
+      "path": "patches/upstream/0075-wine-11.16-ntdll-rtlbarrier-overshoot.patch",
+      "sha256": "20330a78e377150309bb4796a3b35f8db7c58887890787f40c4617f0ece15c30",
+      "kind": "upstream-backport",
+      "status": "active",
+      "risk": "low",
+      "firstWineRelease": "wine-11.16",
+      "upstreamCommits": [
+        "e96bcf9eebf596d79b396e6e36487d477729c9ae"
+      ],
+      "runeonTasks": [
+        "T810"
+      ],
+      "summary": "Treat a reached count above the total the same as equal in RtlBarrier().",
+      "verification": [
+        {
+          "path": "dlls/ntdll/sync.c",
+          "contains": "if (InterlockedIncrement( &b->reached_thread_count ) >= b->total_thread_count)"
+        }
+      ]
+    },
+    {
+      "order": 121,
+      "path": "patches/upstream/0076-wine-11.17-ntdll-reserved-area-overlap.patch",
+      "sha256": "1b5062b120d50c95b776b1d773077f6ff254bed49d3e35be488321666233435a",
+      "kind": "upstream-backport",
+      "status": "active",
+      "risk": "medium",
+      "firstWineRelease": "wine-11.17",
+      "upstreamCommits": [
+        "a5d6a7b0bf43bd1d14ee5b7e0c0516ac8135e2cc"
+      ],
+      "runeonTasks": [
+        "T810"
+      ],
+      "summary": "Report a partial overlap in mmap_is_in_reserved_area() when a reserved area starts inside the range (Wine-Bug 60275).",
+      "verification": [
+        {
+          "path": "dlls/ntdll/unix/virtual.c",
+          "contains": "if ((char *)area->base > (char *)addr + size) break;"
+        }
+      ]
+    },
+    {
+      "order": 122,
+      "path": "patches/upstream/0077-wine-11.18-ntdll-oem-string-length.patch",
+      "sha256": "ac2c75f9b21d52722a6aff5c4770be8556100c578f25d2b519d872331ea936e1",
+      "kind": "upstream-backport",
+      "status": "active",
+      "risk": "low",
+      "firstWineRelease": "wine-11.18",
+      "upstreamCommits": [
+        "6987ca475f7dafe039c4ec104ab7915175d6b8f3"
+      ],
+      "runeonTasks": [
+        "T810"
+      ],
+      "summary": "Size RtlUpcaseUnicodeStringToOemString() output with the OEM length, not the ANSI length (Wine-Bug 60241).",
+      "verification": [
+        {
+          "path": "dlls/ntdll/rtlstr.c",
+          "contains": "DWORD len = RtlUnicodeStringToOemSize( uni );",
+          "occurrences": 2
+        }
+      ]
+    },
+    {
+      "order": 123,
+      "path": "patches/upstream/0078-wine-11.18-ntdll-token-info-bounds.patch",
+      "sha256": "61a15d9d5cafe6ae4fe667c9dbf9f8e02dec2d763b7d9ce64fa644c6910501de",
+      "kind": "upstream-backport",
+      "status": "active",
+      "risk": "low",
+      "firstWineRelease": "wine-11.18",
+      "upstreamCommits": [
+        "35f715b4effa872e714be0673ef42c10b56f9fdc"
+      ],
+      "runeonTasks": [
+        "T810"
+      ],
+      "summary": "Bound NtQueryInformationToken() lookups by the size of the length table.",
+      "verification": [
+        {
+          "path": "dlls/ntdll/unix/security.c",
+          "contains": "if (class < ARRAY_SIZE(info_len)) len = info_len[class];"
+        }
+      ]
     }
   ],
   "targetedReview": {

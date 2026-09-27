@@ -1,0 +1,21 @@
+From: Alex Henrie <alexhenrie24@gmail.com>
+Subject: [PATCH] ntdll: Fix length computation in RtlUpcaseUnicodeStringToOemString.
+
+Backported from WineHQ commit 6987ca475f (wine-11.18) without code
+changes.
+
+The two lengths differ when the ANSI and OEM code pages encode the string to
+a different number of bytes.
+
+diff --git a/dlls/ntdll/rtlstr.c b/dlls/ntdll/rtlstr.c
+--- a/dlls/ntdll/rtlstr.c
++++ b/dlls/ntdll/rtlstr.c
+@@ -823,7 +823,7 @@
+                                                    BOOLEAN doalloc )
+ {
+     NTSTATUS ret = STATUS_SUCCESS;
+-    DWORD len = RtlUnicodeStringToAnsiSize( uni );
++    DWORD len = RtlUnicodeStringToOemSize( uni );
+ 
+     oem->Length = len - 1;
+     if (doalloc)

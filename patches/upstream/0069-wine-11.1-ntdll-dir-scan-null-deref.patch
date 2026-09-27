@@ -1,0 +1,21 @@
+From: Jiajin Cui <cuijiajin@uniontech.com>
+Subject: [PATCH] ntdll: Prevent null pointer dereference in directory scanning.
+
+Backported from WineHQ commit 74272424dc (wine-11.1) without code
+changes.
+
+get_cached_dir_data() could reset the position of a cache entry that was
+never allocated.
+
+diff --git a/dlls/ntdll/unix/file.c b/dlls/ntdll/unix/file.c
+--- a/dlls/ntdll/unix/file.c
++++ b/dlls/ntdll/unix/file.c
+@@ -2845,7 +2845,7 @@
+     }
+ 
+     *data_ret = dir_data_cache[entry];
+-    if (restart_scan) (*data_ret)->pos = 0;
++    if (restart_scan && *data_ret) (*data_ret)->pos = 0;
+     return status;
+ }
+ 
