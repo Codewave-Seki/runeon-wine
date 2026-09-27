@@ -106,6 +106,33 @@ create_reproducible_tar_gz() {
   fi
 }
 
+# Checks every source verification marker of a patch manifest against a
+# patched tree. A marker with "occurrences" must match exactly that many lines:
+# a fix can turn a line into a copy of one that already exists elsewhere in the
+# file, and a plain presence check would then pass without the patch.
+verify_source_markers() {
+  local manifest="$1"
+  local root="$2"
+  local relative_source marker_text occurrences found
+
+  require_command jq
+  while IFS=$'\t' read -r relative_source marker_text occurrences; do
+    [[ -n "$relative_source" && -n "$marker_text" ]] \
+      || die "invalid source verification marker in $manifest"
+    case "$relative_source" in
+      /*|../*|*/../*) die "unsafe source verification path: $relative_source" ;;
+    esac
+    require_file "$root/$relative_source"
+    grep -Fq -- "$marker_text" "$root/$relative_source" \
+      || die "source verification marker missing in $relative_source: $marker_text"
+    if [[ -n "$occurrences" ]]; then
+      found="$(grep -Fc -- "$marker_text" "$root/$relative_source" || true)"
+      [[ "$found" == "$occurrences" ]] \
+        || die "source verification marker in $relative_source found $found times, expected $occurrences: $marker_text"
+    fi
+  done < <(jq -r '.patches[] | .verification[]? | [.path, .contains, (.occurrences // "" | tostring)] | @tsv' "$manifest")
+}
+
 assert_wine_source_root() {
   local source_root="$1"
 

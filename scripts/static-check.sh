@@ -112,4 +112,7 @@ if [[ -z "${RUNEON_WINE_PATCHSET_DEFINITION:-}" ]]; then
   done
 fi
 
+python3 "$repo_root/tests/verification-marker-check.py" >/dev/null \
+  || die "verification marker self-test failed: tests/verification-marker-check.py"
+
 printf 'static checks passed for %s\n' "$patch_set_id"
