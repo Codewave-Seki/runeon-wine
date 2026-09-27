@@ -1,0 +1,117 @@
+From: Runeon contributors
+Subject: [PATCH] ntdll: Switch Rosetta self-modifying code pages between write and execute phases.
+
+With the RosettaSelfModifyingCodeStep policy from 0107, every write to a
+writable executable page faulted, was single-stepped and re-protected the
+page. A game whose copy protection keeps writing data into a large
+read/write/execute section spent most of its time in that cycle and in
+Rosetta retranslating the page: counters in a diagnostic build showed about
+270 stepped writes per second, of which only 26 in a whole session landed
+near their own instruction.
+
+When the policy is on, such a page now alternates between a code phase
+(read/execute, write-watched) and a data phase (read/write, not
+executable). A write fault switches the page to the data phase without a
+single step, unless the write lands within 64 bytes of its instruction or
+the writing instruction lies on the same page; that case keeps the page
+executable, since the writer needs it to make progress, and is
+single-stepped exactly as before when the writer runs on its thread
+stack. Executing a page in its data
+phase raises an execute fault, which switches it back to the code phase.
+A write fault that loses the race against another thread that already
+switched the page is ignored, as CrossOver's w|x write-fault hack does for
+read/write/execute pages.
+
+Rosetta raises an execute fault (error code 0x15) for a translated page
+that loses PROT_EXEC and runs rewritten code afterwards. With the policy
+off nothing changes.
+
+diff --git a/dlls/ntdll/unix/virtual.c b/dlls/ntdll/unix/virtual.c
+index 9ca8fb4..a61e5bd 100644
+--- a/dlls/ntdll/unix/virtual.c
++++ b/dlls/ntdll/unix/virtual.c
+@@ -242,8 +242,10 @@ static void *preload_reserve_end;
+ static BOOL force_exec_prot;  /* whether to force PROT_EXEC on all PROT_READ mmaps */
+ static BOOL enable_write_exceptions;  /* raise exception on writes to executable memory */
+ /* Rosetta can miss an instruction rewritten by the instruction right before it
+- * on a writable executable page. When enabled, such pages are write-protected
+- * and each write is single-stepped, so translation restarts after it. */
++ * on a writable executable page. When enabled, such pages alternate between a
++ * code phase (read/execute, write-watched) and a data phase (read/write, not
++ * executable); only a write close to its own instruction is single-stepped,
++ * so translation restarts after it. */
+ static BOOL rosetta_smc_step;
+ 
+ struct range_entry
+@@ -1367,6 +1369,7 @@ static int get_unix_prot( BYTE vprot )
+         if (vprot & VPROT_WRITECOPY) prot |= PROT_WRITE | PROT_READ;
+         if (vprot & VPROT_EXEC) prot |= PROT_EXEC | PROT_READ;
+         if (vprot & VPROT_WRITEWATCH) prot &= ~PROT_WRITE;
++        else if (rosetta_smc_step && is_vprot_exec_write( vprot )) prot &= ~PROT_EXEC;
+     }
+     if (!prot) prot = PROT_NONE;
+     return prot;
+@@ -4633,6 +4636,20 @@ NTSTATUS virtual_handle_fault( EXCEPTION_RECORD *rec, void *stack )
+         goto done;
+     }
+ 
++    /* executing a page in its data phase switches it back to the code phase */
++    if (rosetta_smc_step && err == EXCEPTION_EXECUTE_FAULT && (vprot & VPROT_COMMITTED) &&
++        !(vprot & (VPROT_GUARD | VPROT_WRITEWATCH)) && is_vprot_exec_write( vprot ))
++    {
++        if (is_write_watch_range( page, 1 )) mprotect( page, host_page_size, PROT_READ | PROT_WRITE | PROT_EXEC );
++        else
++        {
++            set_page_vprot_bits( page, host_page_size, VPROT_WRITEWATCH, 0 );
++            mprotect_range( page, host_page_size, 0, 0 );
++        }
++        ret = STATUS_SUCCESS;
++        goto done;
++    }
++
+     /* CW Hack 25719 */
+     if (err == EXCEPTION_EXECUTE_FAULT && (get_unix_prot( vprot ) & PROT_EXEC))
+     {
+@@ -4671,13 +4688,25 @@ NTSTATUS virtual_handle_fault( EXCEPTION_RECORD *rec, void *stack )
+             {
+                 set_page_vprot_bits( page, host_page_size, 0, VPROT_WRITEWATCH );
+                 mprotect_range( page, host_page_size, 0, 0 );
+-                /* Only a writer running on its thread stack is stepped. A write from
+-                 * the signal or kernel stack, e.g. an exception frame pushed onto a
+-                 * custom stack, is a run of host stores that a single step cannot
+-                 * cover; that page just stays writable. */
+-                if (rosetta_smc_step && is_vprot_exec_write( vprot ) && !is_write_watch_range( page, 1 ) &&
+-                    is_inside_thread_stack( stack, &stack_info ))
+-                    rosetta_smc_step_track( page );
++                /* A write near its own instruction, or from an instruction on this page,
++                 * may rewrite what runs next and needs the page executable to make
++                 * progress: keep it read/write/execute and single-step the writer. Any
++                 * other write leaves the page in its data phase. Only a writer on its
++                 * thread stack is stepped; a write from the signal or kernel stack, e.g.
++                 * an exception frame pushed onto a custom stack, is a run of host stores
++                 * that a single step cannot cover, so that page just stays writable. */
++                if (rosetta_smc_step && is_vprot_exec_write( vprot ) && !is_write_watch_range( page, 1 ))
++                {
++                    char *ip = rec->ExceptionAddress;
++                    LONG_PTR delta = (char *)addr - ip;
++
++                    if ((delta > -64 && delta < 64) || ROUND_ADDR( ip, host_page_mask ) == page ||
++                        ROUND_ADDR( ip + 15, host_page_mask ) == page)
++                    {
++                        mprotect( page, host_page_size, PROT_READ | PROT_WRITE | PROT_EXEC );
++                        if (is_inside_thread_stack( stack, &stack_info )) rosetta_smc_step_track( page );
++                    }
++                }
+             }
+         }
+         /* ignore fault if page is writable now */
+@@ -4685,6 +4714,9 @@ NTSTATUS virtual_handle_fault( EXCEPTION_RECORD *rec, void *stack )
+         {
+             if ((vprot & VPROT_WRITEWATCH) || is_write_watch_range( page, 1 ))
+                 ret = STATUS_SUCCESS;
++            /* another thread already switched this page to its data phase */
++            else if (rosetta_smc_step && is_vprot_exec_write( vprot ))
++                ret = STATUS_SUCCESS;
+         }
+     }
+ 
