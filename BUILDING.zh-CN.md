@@ -38,12 +38,13 @@ scripts/verify-source.sh "$source_root"
   --without-cups \
   --without-krb5 \
   --without-gssapi \
-  --without-sdl \
   --without-opencl \
   --without-x
 ```
 
-依赖准备、GStreamer、MoltenVK、GnuTLS、Rockstar scoped D2D wrapper、Apple 用户本机 overlay、签名和 runtime component packaging 仍由 Runeon 产品仓库维护。
+SDL2 支持处于启用状态：`configure` 需要 SDL2 头文件，并记录 `libSDL2-2.0.0.dylib` 这一 soname，`winebus.sys` 在运行时加载它以向游戏提供手柄。Wine 11 只支持 SDL2 API，不支持 SDL3。
+
+依赖准备、GStreamer、MoltenVK、SDL2、GnuTLS、Rockstar scoped D2D wrapper、Apple 用户本机 overlay、签名和 runtime component packaging 仍由 Runeon 产品仓库维护。
 
 ## 4. 生成对应源码包
 

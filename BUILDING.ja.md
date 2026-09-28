@@ -38,12 +38,13 @@ scripts/verify-source.sh "$source_root"
   --without-cups \
   --without-krb5 \
   --without-gssapi \
-  --without-sdl \
   --without-opencl \
   --without-x
 ```
 
-依存関係の準備、GStreamer、MoltenVK、GnuTLS、Rockstar-scoped D2D wrapper、Apple のユーザーローカル overlay、署名、および runtime component packaging は、引き続き Runeon 製品リポジトリで管理します。
+SDL2 サポートは有効です。`configure` には SDL2 ヘッダーが必要で、`libSDL2-2.0.0.dylib` の soname を記録します。`winebus.sys` は実行時にこれを読み込み、ゲームにコントローラーを提供します。Wine 11 が対応するのは SDL2 API のみで、SDL3 には対応しません。
+
+依存関係の準備、GStreamer、MoltenVK、SDL2、GnuTLS、Rockstar-scoped D2D wrapper、Apple のユーザーローカル overlay、署名、および runtime component packaging は、引き続き Runeon 製品リポジトリで管理します。
 
 ## 4. 対応ソース bundle の生成
 

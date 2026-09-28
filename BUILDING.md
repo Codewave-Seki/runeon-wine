@@ -38,12 +38,13 @@ The product build uses the complete CrossOver 26.3/Wine 11.0 source tree. Replac
   --without-cups \
   --without-krb5 \
   --without-gssapi \
-  --without-sdl \
   --without-opencl \
   --without-x
 ```
 
-Dependency preparation, GStreamer, MoltenVK, GnuTLS, the Rockstar-scoped D2D wrapper, Apple user-local overlays, signing, and runtime component packaging remain in the Runeon product repository.
+SDL2 support is enabled: `configure` needs the SDL2 headers and records the `libSDL2-2.0.0.dylib` soname, which `winebus.sys` loads at run time to expose game controllers. Wine 11 supports only the SDL2 API, not SDL3.
+
+Dependency preparation, GStreamer, MoltenVK, SDL2, GnuTLS, the Rockstar-scoped D2D wrapper, Apple user-local overlays, signing, and runtime component packaging remain in the Runeon product repository.
 
 ## 4. Build the corresponding-source bundle
 
