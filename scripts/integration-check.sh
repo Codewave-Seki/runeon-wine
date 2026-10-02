@@ -29,6 +29,13 @@ fi
 "$script_dir/apply-series.sh" "$candidate_root"
 "$script_dir/verify-source.sh" "$candidate_root"
 
+# The route parser check compiles the patched function itself, so it runs
+# only for a patch set that carries it.
+if grep -Fq 'GRAPHICS_ROUTES_PROTOCOL' "$candidate_root/dlls/ntdll/unix/loadorder.c"; then
+  python3 "$script_dir/../tests/graphics-route-check.py" "$candidate_root" >/dev/null \
+    || die "graphics route parser check failed"
+fi
+
 if "$script_dir/apply-series.sh" "$candidate_root" >"$temp_root/reapply.stdout" 2>"$temp_root/reapply.stderr"; then
   die "a second patch application unexpectedly succeeded"
 fi

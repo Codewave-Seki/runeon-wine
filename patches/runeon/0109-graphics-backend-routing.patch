@@ -1,0 +1,212 @@
+From: Runeon contributors
+Subject: [PATCH] ntdll: Select one graphics backend directory per process.
+
+A launcher that ships several Direct3D implementations side by side (for
+example D3DMetal and DXMT) needs each process to load exactly one of them.
+Copying DLLs next to the game cannot guarantee that: a file carrying the Wine
+builtin mark is re-resolved through the builtin search path, so a same-named
+builtin in the base directory wins.
+
+At process start, before any import is resolved, read the route table and
+prepend the chosen backend directory with the existing prepend_dll_path()
+primitive. Backend directories are taken from RUNEON_GFX_DIR_D3DMETAL and
+RUNEON_GFX_DIR_DXMT; when neither is set the behaviour is identical to the
+unpatched base.
+
+The table is one REG_MULTI_SZ value,
+HKCU\Software\Runeon\GraphicsRoutes\Routes, so a reader sees either the old
+or the new table and never half of one. Each entry is "X:\dir=backend" with
+a drive path, backslashes and no trailing separator. A value of the wrong
+type, odd length or missing terminator, or one that needs more than 1 MiB to
+read, is ignored as a whole; a malformed entry is skipped without hiding the
+entries after it. A path inside more than one routed directory, or none, gets
+the d3dmetal default, and a routed backend without a directory loads plain
+Wine rather than another backend.
+
+The string "runeon-graphics-routes-protocol-1" is kept in the built module so
+a launcher can tell this table format from any other before publishing one.
+
+--- a/dlls/ntdll/unix/loader.c
++++ b/dlls/ntdll/unix/loader.c
+@@ -2231,6 +2231,7 @@
+     init_startup_info();
+     *(ULONG_PTR *)&peb->CloudFileFlags = get_image_address();
+     set_load_order_app_name( main_wargv[0] );
++    init_graphics_route( &peb->ProcessParameters->ImagePathName );
+     init_thread_stack( teb, 0, 0, 0 );
+     NtCreateKeyedEvent( &keyed_event, GENERIC_READ | GENERIC_WRITE, NULL, 0 );
+     load_ntdll();
+--- a/dlls/ntdll/unix/loadorder.c
++++ b/dlls/ntdll/unix/loadorder.c
+@@ -383,6 +383,160 @@
+     if ((p = wcsrchr( app_name, '\\' ))) app_name = p + 1;
+     app_key = open_app_key( app_name );
+     main_exe_loaded = TRUE;
++}
++
++
++/* Runeon graphics backend ids; the launcher supplies each directory. */
++enum graphics_backend { GRAPHICS_DEFAULT, GRAPHICS_D3DMETAL, GRAPHICS_DXMT, GRAPHICS_WINE };
++
++/* One route table is at most a few hundred games; a value whose query buffer
++ * would exceed this is not ours. */
++#define GRAPHICS_ROUTES_MAX_SIZE (1024 * 1024)
++
++/* Names the route table format read here. A launcher checks the built ntdll
++ * for this string before publishing a table in this format; change it with
++ * the format. */
++#define GRAPHICS_ROUTES_PROTOCOL "runeon-graphics-routes-protocol-1"
++
++/***************************************************************************
++ *	parse_graphics_route
++ *
++ * Runeon: parse one "X:\dir=backend" entry of the route table. Returns the
++ * backend and sets *dir_len, or GRAPHICS_DEFAULT when the entry is malformed.
++ * The directory must be a drive path with backslashes and no trailing one.
++ */
++static enum graphics_backend parse_graphics_route( const WCHAR *entry, unsigned int len,
++                                                   unsigned int *dir_len )
++{
++    static const WCHAR d3dmetalW[] = {'d','3','d','m','e','t','a','l'};
++    static const WCHAR dxmtW[] = {'d','x','m','t'};
++    static const WCHAR wineW[] = {'w','i','n','e'};
++    unsigned int i, sep = 0, id_len;
++    const WCHAR *id;
++
++    for (i = 0; i < len; i++)
++    {
++        if (entry[i] == '/') return GRAPHICS_DEFAULT;
++        if (entry[i] == '=')
++        {
++            if (sep) return GRAPHICS_DEFAULT;
++            sep = i;
++        }
++    }
++    if (sep < 4 ||
++        !((entry[0] >= 'A' && entry[0] <= 'Z') || (entry[0] >= 'a' && entry[0] <= 'z')) ||
++        entry[1] != ':' || entry[2] != '\\' || entry[sep - 1] == '\\')
++        return GRAPHICS_DEFAULT;
++
++    *dir_len = sep;
++    id = entry + sep + 1;
++    id_len = len - sep - 1;
++    if (id_len == ARRAY_SIZE(d3dmetalW) && !memcmp( id, d3dmetalW, sizeof(d3dmetalW) ))
++        return GRAPHICS_D3DMETAL;
++    if (id_len == ARRAY_SIZE(dxmtW) && !memcmp( id, dxmtW, sizeof(dxmtW) )) return GRAPHICS_DXMT;
++    if (id_len == ARRAY_SIZE(wineW) && !memcmp( id, wineW, sizeof(wineW) )) return GRAPHICS_WINE;
++    return GRAPHICS_DEFAULT;
++}
++
++
++/***************************************************************************
++ *	init_graphics_route
++ *
++ * Runeon: choose exactly one graphics backend directory for this process
++ * before any import is resolved. The launcher publishes the whole route table
++ * as one REG_MULTI_SZ value, HKCU\Software\Runeon\GraphicsRoutes\Routes, so a
++ * process reads either the old or the new table, never half of one. An
++ * executable inside exactly one routed directory gets that backend; everything
++ * else, including overlapping routes and a malformed table, gets the d3dmetal
++ * default. A malformed entry is skipped without hiding the entries after it.
++ * Nothing changes unless the launcher set a backend directory.
++ *
++ * Runs after the WINEDLLDIRn variables are built, so a backend directory never
++ * reaches them: fake dll creation and builtin lookups without a file cannot
++ * copy a backend's modules into the prefix.
++ */
++void init_graphics_route( const UNICODE_STRING *image )
++{
++    static const WCHAR routesW[] = {'R','o','u','t','e','s',0};
++    enum graphics_backend chosen = GRAPHICS_D3DMETAL, backend;
++    KEY_VALUE_PARTIAL_INFORMATION *info = NULL, *grown;
++    unsigned int len = image->Length / sizeof(WCHAR), matches = 0, i, end, count, dir_len;
++    const char *dir = NULL;
++    const WCHAR *data;
++    UNICODE_STRING nameW;
++    DWORD size = 4096;
++    NTSTATUS status = STATUS_NO_MEMORY;
++    HANDLE key;
++
++    if (!getenv( "RUNEON_GFX_DIR_D3DMETAL" ) && !getenv( "RUNEON_GFX_DIR_DXMT" )) return;
++
++    if (!open_hkcu_key( "Software\\Runeon\\GraphicsRoutes", &key ))
++    {
++        init_unicode_string( &nameW, routesW );
++        for (;;)
++        {
++            if (size > GRAPHICS_ROUTES_MAX_SIZE)
++            {
++                WARN( "graphics route table needs %u bytes, ignoring it\n", (unsigned int)size );
++                status = STATUS_BUFFER_OVERFLOW;
++                break;
++            }
++            if (!(grown = realloc( info, size )))
++            {
++                status = STATUS_NO_MEMORY;
++                break;
++            }
++            info = grown;
++            status = NtQueryValueKey( key, &nameW, KeyValuePartialInformation, info, size, &size );
++            if (status != STATUS_BUFFER_OVERFLOW) break;
++        }
++        NtClose( key );
++
++        if (!status && info->Type == REG_MULTI_SZ && info->DataLength >= sizeof(WCHAR) &&
++            !(info->DataLength % sizeof(WCHAR)) &&
++            !((const WCHAR *)info->Data)[info->DataLength / sizeof(WCHAR) - 1])
++        {
++            data = (const WCHAR *)info->Data;
++            count = info->DataLength / sizeof(WCHAR);
++            for (i = 0; i < count && data[i]; i = end + 1)
++            {
++                for (end = i; data[end]; end++) ;
++                if (!(backend = parse_graphics_route( data + i, end - i, &dir_len )))
++                {
++                    WARN( "ignoring invalid graphics route %s\n",
++                          debugstr_wn( data + i, end - i ) );
++                    continue;
++                }
++                /* directory boundary: C:\Game must not match C:\Game2 */
++                if (len <= dir_len || image->Buffer[dir_len] != '\\' ||
++                    wcsnicmp( image->Buffer, data + i, dir_len ))
++                    continue;
++                matches++;
++                chosen = backend;
++            }
++        }
++        else if (status != STATUS_OBJECT_NAME_NOT_FOUND && status != STATUS_BUFFER_OVERFLOW)
++            WARN( "ignoring malformed graphics route table, status %x\n", (int)status );
++        free( info );
++    }
++
++    if (matches > 1)
++    {
++        WARN( "%u graphics routes match %s, using default\n", matches, debugstr_us(image) );
++        chosen = GRAPHICS_D3DMETAL;
++    }
++    switch (chosen)
++    {
++    case GRAPHICS_D3DMETAL: dir = getenv( "RUNEON_GFX_DIR_D3DMETAL" ); break;
++    case GRAPHICS_DXMT: dir = getenv( "RUNEON_GFX_DIR_DXMT" ); break;
++    default: break;
++    }
++    /* a routed backend without a directory loads plain Wine, never another backend */
++    if (chosen == GRAPHICS_DXMT && !dir)
++        WARN( "no directory for graphics backend dxmt, using plain Wine\n" );
++    TRACE( GRAPHICS_ROUTES_PROTOCOL ": graphics backend %u dir %s for %s\n",
++           chosen, debugstr_a(dir), debugstr_us(image) );
++    if (dir && *dir) prepend_dll_path( dir );
+ }
+ 
+ 
+--- a/dlls/ntdll/unix/unix_private.h
++++ b/dlls/ntdll/unix/unix_private.h
+@@ -565,6 +565,8 @@
+ };
+ 
+ extern void set_load_order_app_name( const WCHAR *app_name );
++extern void init_graphics_route( const UNICODE_STRING *image );
++extern void prepend_dll_path( const char *path );
+ extern enum loadorder get_load_order( const UNICODE_STRING *nt_name );
+ 
+ static inline WCHAR ntdll_towupper( WCHAR ch )
