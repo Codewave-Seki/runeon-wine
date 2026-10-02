@@ -22,9 +22,9 @@ Runeon Wine 同时接受主动上游审计和 diagnostics 驱动调查两类输�
 
 ## 当前 Wine 11.x 审查基线
 
-当前 Dev 与 Production 源码：[`cx26.3-wine11.0-runeon.13`](patchsets/cx26.3-wine11.0-runeon.13/manifest.json)（正式版/latest），对应 seed `2026.09.28`，App 门槛 `>=1.8 (0)`。在 `.11` 基础上新增上游 `RtlVirtualUnwind2` 空输出修复、另外 12 个 ntdll 修复与可选的 Rosetta 自修改代码开关（`0107`、`0108`）。构建、回归套件、签名、readiness 与 Dev/Production 分发检查已通过；用户于 2026-09-28 反馈 Dev 未发现问题并授权 Production。Production promote 同一份签名 Dev 归档，不重新构建。`.12`（seed `2026.09.27`）是已被取代的 Dev 候选，保持不变保留。当前 Dev 与 Production seed `2026.09.28.1` 以同一份 `.13` 源码启用 SDL 重新构建，并随附 SDL2 `2.32.10`；Production 使用 Dev 同一份签名归档，真实手柄验收仍待进行。
+当前 Dev 与 Production 源码（App `>=1.10 (0)`）：[`cx26.3-wine11.0-runeon.14`](patchsets/cx26.3-wine11.0-runeon.14/manifest.json)（正式版/latest），对应 seed `2026.10.02`。保留 `.13` 全部补丁，新增按进程选择图形后端（`0109`）。构建、`tests/graphics-route-check.py`、干净 prefix 模块身份探针、签名、readiness 与 Dev/Production 分发检查已通过；用户反馈 Dev 未发现问题，并于 2026-10-02 授权 Production。Production promote 同一份签名 Dev 归档，不重新构建。
 
-当前候选：[`cx26.3-wine11.0-runeon.14`](patchsets/cx26.3-wine11.0-runeon.14/manifest.json)（Pre-release）保留 `.13` 全部补丁，新增按进程选择图形后端（`0109`）；其 seed 仅面向 App `>=1.10 (0)`，尚未发布。
+较早的 App（`>=1.8 (0)`）继续使用 [`cx26.3-wine11.0-runeon.13`](patchsets/cx26.3-wine11.0-runeon.13/manifest.json)（正式版）对应的 seed `2026.09.28.1`。`.13` 在 `.11` 基础上新增上游 `RtlVirtualUnwind2` 空输出修复、另外 12 个 ntdll 修复与可选的 Rosetta 自修改代码开关（`0107`、`0108`），用户于 2026-09-28 授权 Production。seed `2026.09.28.1` 以同一份 `.13` 源码启用 SDL 重新构建，并随附 SDL2 `2.32.10`；真实手柄验收仍待进行。`.12`（seed `2026.09.27`）是已被取代的 Dev 候选，保持不变保留。
 
 `.11` 历史交付（2026-09-26，保留回滚）：[`cx26.3-wine11.0-runeon.11`](BACKPORTS-11.16-11.18-SWEEP.zh-CN.md)（正式版/latest），对应 seed `2026.09.26`，App 门槛 `>=1.8 (0)`。在 `.10` 基础上新增 Wine 11.16–11.18 筛选回移、winegstreamer 视频缓冲池回退与两个可选入口。构建、签名、readiness 与 Dev/Production 分发检查已通过；用户于 2026-09-26 反馈 Dev 未发现问题并授权 Production。Production promote 同一份签名 Dev 归档，不重新构建。
 
