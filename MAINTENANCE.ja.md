@@ -24,6 +24,8 @@ Runeon Wine は、能動的な上流監査と diagnostics 主導の調査とい�
 
 現在の Dev と Production ソース：[`cx26.3-wine11.0-runeon.13`](patchsets/cx26.3-wine11.0-runeon.13/manifest.json)（正式版/latest）。seed `2026.09.28` に対応し、App 配布条件は `>=1.8 (0)` です。`.11` に上流の `RtlVirtualUnwind2` NULL 出力修正、さらに 12 件の ntdll 修正、オプトインの Rosetta 自己書き換えコードポリシー（`0107`、`0108`）を追加します。ビルド、回帰スイート、署名、readiness、Dev/Production 配布の確認は合格しました。ユーザーは 2026-09-28 に Dev で問題が見つからなかったと報告し、Production を承認しました。Production は同一の署名済み Dev archive を再ビルドせずに昇格します。`.12`（seed `2026.09.27`）は置き換え済みの Dev 候補で、変更せずに保持します。現在の Dev と Production seed `2026.09.28.1` は同じ `.13` ソースを SDL 有効で再ビルドし、SDL2 `2.32.10` を同梱します。Production は Dev と同一の署名済みアーカイブを使用し、実機コントローラーでの受け入れ確認はまだです。
 
+現在の候補：[`cx26.3-wine11.0-runeon.14`](patchsets/cx26.3-wine11.0-runeon.14/manifest.json)（Pre-release）は `.13` のすべてのパッチを保持し、プロセスごとのグラフィックスバックエンド選択（`0109`）を追加します。その seed は App `>=1.10 (0)` 専用で、まだ公開されていません。
+
 `.11` の過去の配布（2026-09-26、rollback として保持）：[`cx26.3-wine11.0-runeon.11`](BACKPORTS-11.16-11.18-SWEEP.ja.md)（正式版/latest）。seed `2026.09.26` に対応し、App 配布条件は `>=1.8 (0)` です。`.10` に Wine 11.16–11.18 の選別バックポート、winegstreamer のビデオバッファプールのフォールバック、2 つのオプトイン入口を追加します。ビルド、署名、readiness、Dev/Production 配布の確認は合格しました。ユーザーは 2026-09-26 に Dev で問題が見つからなかったと報告し、Production を承認しました。Production は同一の署名済み Dev archive を再ビルドせずに昇格します。
 
 `.10` の過去の配布（2026-09-23、rollback として保持）：[`cx26.3-wine11.0-runeon.10`](FLSGETVALUE2.ja.md)（正式版/latest）。seed `2026.09.22` と MoltenVK `1.4.2` を使用し、App 配布条件は `>=1.8 (0)` です。Production は同一の署名済み Dev archive を再ビルドせずに昇格します。独立した `patchsets/` 定義を明示的に選択します。既定の series は過去の `.9` のままです。 検証：API、隔離 prefix、署名、release readiness は合格しました。ユーザーは 2026-09-23 に Dev で問題が見つからなかったと報告し、Production を承認しました。この包括的な確認は、すべての Steam/CEF、ゲーム、App 操作を個別に実測したことを意味しません。App インストーラーと配布検証は製品リポジトリが管理します。
