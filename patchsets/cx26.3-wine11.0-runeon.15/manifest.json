@@ -1894,7 +1894,7 @@
         "T836"
       ],
       "summary": "Squashed user-mode fixes first released in wine-11.19 for DLLs used by Steam, launchers, installers and games (crash, memory-safety, leak and error-path fixes); ABI-sensitive, driver-identity, feature series and behaviour changes without a stability benefit excluded.",
-      "testStrategy": "Every commit applies in upstream order without fuzz on top of patches 0001-0110, except the four marked as adapted; every affected module and every module sharing its sources builds for i386 and x86_64; full Wine build and product smoke validation. Upstream test hunks are omitted.",
+      "testStrategy": "Every commit applies in upstream order without fuzz on top of patches 0001-0110, except those documented as adapted; every affected module and every module sharing its sources builds for i386 and x86_64; full Wine build and product smoke validation. Upstream test hunks are omitted.",
       "verification": [
         {
           "path": "dlls/mf/sar.c",
