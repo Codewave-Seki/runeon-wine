@@ -24,6 +24,8 @@ Runeon Wine は、能動的な上流監査と diagnostics 主導の調査とい�
 
 現在の Dev と Production ソース（App `>=1.10 (0)`）：[`cx26.3-wine11.0-runeon.14`](patchsets/cx26.3-wine11.0-runeon.14/manifest.json)（正式版/latest）。seed `2026.10.02` に対応します。`.13` のすべてのパッチを保持し、プロセスごとのグラフィックスバックエンド選択（`0109`）を追加します。ビルド、`tests/graphics-route-check.py`、クリーンな prefix でのモジュール識別プローブ、署名、readiness、Dev/Production 配布の確認は合格しました。ユーザーは Dev で問題が見つからなかったと報告し、2026-10-02 に Production を承認しました。Production は同一の署名済み Dev archive を再ビルドせずに昇格します。
 
+現在の候補：[`cx26.3-wine11.0-runeon.15`](patchsets/cx26.3-wine11.0-runeon.15/manifest.json)（Pre-release）。`.14` を保持し、dwrite の絵文字システムフォールバック（`0110`）と `wine-11.19` の選別修正（`0079`）を追加します。その seed は App `>=1.10 (0)` 向けで、Dev で検証中です。Production にはまだ届いていません。
+
 それ以前の App（`>=1.8 (0)`）は引き続き [`cx26.3-wine11.0-runeon.13`](patchsets/cx26.3-wine11.0-runeon.13/manifest.json)（正式版）に対応する seed `2026.09.28.1` を使用します。`.13` は `.11` に上流の `RtlVirtualUnwind2` NULL 出力修正、さらに 12 件の ntdll 修正、オプトインの Rosetta 自己書き換えコードポリシー（`0107`、`0108`）を追加したもので、ユーザーは 2026-09-28 に Production を承認しました。seed `2026.09.28.1` は同じ `.13` ソースを SDL 有効で再ビルドし、SDL2 `2.32.10` を同梱します。実機コントローラーでの受け入れ確認はまだです。`.12`（seed `2026.09.27`）は置き換え済みの Dev 候補で、変更せずに保持します。
 
 `.11` の過去の配布（2026-09-26、rollback として保持）：[`cx26.3-wine11.0-runeon.11`](BACKPORTS-11.16-11.18-SWEEP.ja.md)（正式版/latest）。seed `2026.09.26` に対応し、App 配布条件は `>=1.8 (0)` です。`.10` に Wine 11.16–11.18 の選別バックポート、winegstreamer のビデオバッファプールのフォールバック、2 つのオプトイン入口を追加します。ビルド、署名、readiness、Dev/Production 配布の確認は合格しました。ユーザーは 2026-09-26 に Dev で問題が見つからなかったと報告し、Production を承認しました。Production は同一の署名済み Dev archive を再ビルドせずに昇格します。
