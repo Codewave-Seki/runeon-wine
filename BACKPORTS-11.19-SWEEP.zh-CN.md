@@ -32,6 +32,8 @@
 | `105ced5bc1` msvcrt | 同样的 `ARRAY_SIZE` 改动，周围几行不同。 |
 | `53b5345251`、`37fd158bfc` mf | 合并：`Flush` 只对仍有音频客户端的活动渲染器执行重置；基线没有 position/pts 字段。 |
 | `ee38ff1725` mf | 基线缺少 `intsafe.h`；用 `~(DWORD)0` 代替 `DWORD_MAX` 比较。 |
+| `258ee951ab` windowscodecs | 补全：新加的溢出检查改为经由公共出口返回，从而释放解码器锁；上游版本在持锁状态下直接返回。 |
+| `ae807355d6` ieframe | 补全：检查 task 的分配结果，回调创建失败时释放 task，只对已创建的回调调用 Release；上游版本仍会对空回调调用 Release，并泄漏 task。 |
 
 ## 验证
 

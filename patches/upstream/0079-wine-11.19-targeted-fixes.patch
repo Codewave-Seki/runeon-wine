@@ -8,6 +8,9 @@ aligned allocations, because the base lacks a later shrink-padding block; 105ced
 same one-line change with different surrounding lines; 53b5345251 and 37fd158bfc are combined
 so that Flush resets only an active renderer that still has an audio client, as the base has no
 position/pts fields; ee38ff1725 compares with ~(DWORD)0 because the base lacks intsafe.h.
+Two upstream fixes are completed: 258ee951ab leaves through the common exit so the decoder
+lock is released, and ae807355d6 checks the task allocation, frees the task when the
+callback cannot be created and releases only a created callback.
 
   38e3dc2e53 Alistair Leslie-Hughes: windows.devices.enumeration: Return E_NOINTERFACE when no interface found.
   01599743e2 Tobiasz Laskowski: ole32: Fix DoDragDrop uninitialized error code.
@@ -38,7 +41,7 @@ position/pts fields; ee38ff1725 compares with ~(DWORD)0 because the base lacks i
   16030c9acc Jacek Caban: ieframe: Clean up VARIANT variables in on_offlineconnected_change and on_silent_change.
   61f135c06f Jacek Caban: ieframe: Fix error handling in get_travellog_stream.
   4e6f9c39dd Jacek Caban: ieframe: Handle memory allocation failure in create_webbrowser.
-  ae807355d6 Jacek Caban: ieframe: Handle memory allocation failure in create_callback.
+  ae807355d6 Jacek Caban: ieframe: Handle memory allocation failure in create_callback. [adapted]
   4220de1c29 Alistair Leslie-Hughes: oleaut32: Use the correct sizeof value in VARIANT_FormatString.
   f8ca33aab8 Alistair Leslie-Hughes: oleaut32: Assign the correct size in FmtMediumTime.
   3e48bc67a2 Bernhard Übelacker: comctl32_v6: Avoid uninitialized values in szDim in SYSLINK_Render.
@@ -50,7 +53,7 @@ position/pts fields; ee38ff1725 compares with ~(DWORD)0 because the base lacks i
   6f0403ada5 Piotr Caban: ncrypt: Make ncrypt provider handles refcounted.
   5f4945e673 Michael Stefaniuc: dmime: Split the Wave track SetParam into helpers per type.
   16672b69f5 Michael Stefaniuc: dmime: Don't leak dsound references in the Wave track SetParam.
-  258ee951ab Esme Povirk: windowscodecs: Check for integer overflow in DDS decoder.
+  258ee951ab Esme Povirk: windowscodecs: Check for integer overflow in DDS decoder. [adapted]
   40551e9e17 Alex Henrie: combase: Fix leak of registry key in get_library_for_classid.
   968b915ea4 Alex Henrie: oleaut32: Call get_ptr_size only once in TLB_size_instance.
   53b5345251 Conor McCarthy: mf/sar: Move audio renderer flush actions inside the conditional code block for active state. [adapted]
@@ -862,7 +865,7 @@ index 9c0711d..42e06e3 100644
      }
  
 diff --git a/dlls/ieframe/navigate.c b/dlls/ieframe/navigate.c
-index e8f6414..7a585e3 100644
+index e8f6414..2dd1626 100644
 --- a/dlls/ieframe/navigate.c
 +++ b/dlls/ieframe/navigate.c
 @@ -585,7 +585,10 @@ static const IHttpSecurityVtbl HttpSecurityVtbl = {
@@ -889,32 +892,39 @@ index e8f6414..7a585e3 100644
          post_data_len = (elem_max+1) * SafeArrayGetElemsize(post_array);
      }
  
-@@ -1058,8 +1062,10 @@ HRESULT navigate_url(DocHost *This, LPCWSTR url, const VARIANT *Flags,
+@@ -1058,8 +1062,14 @@ HRESULT navigate_url(DocHost *This, LPCWSTR url, const VARIANT *Flags,
          task_navigate_bsc_t *task;
  
          task = malloc(sizeof(*task));
 -        task->bsc = create_callback(This, url, post_data, post_data_len, headers);
 -        push_dochost_task(This, &task->header, navigate_bsc_proc, navigate_bsc_task_destr, This->url == NULL);
-+        if((task->bsc = create_callback(This, url, post_data, post_data_len, headers)))
-+            push_dochost_task(This, &task->header, navigate_bsc_proc, navigate_bsc_task_destr, This->url == NULL);
-+        else
++        if(!task)
 +            hres = E_OUTOFMEMORY;
++        else if((task->bsc = create_callback(This, url, post_data, post_data_len, headers)))
++            push_dochost_task(This, &task->header, navigate_bsc_proc, navigate_bsc_task_destr, This->url == NULL);
++        else {
++            free(task);
++            hres = E_OUTOFMEMORY;
++        }
      }
  
      if(post_data)
-@@ -1110,8 +1116,10 @@ static HRESULT navigate_hlink(DocHost *This, IMoniker *mon, IBindCtx *bindctx,
+@@ -1110,9 +1120,12 @@ static HRESULT navigate_hlink(DocHost *This, IMoniker *mon, IBindCtx *bindctx,
      if(This->doc_navigate) {
          hres = async_doc_navigate(This, url, headers, post_data, post_data_len, FALSE);
      }else {
 -        bsc = create_callback(This, url, post_data, post_data_len, headers);
 -        hres = navigate_bsc(This, bsc, mon);
-+        if((bsc = create_callback(This, url, post_data, post_data_len, headers)))
+-        IBindStatusCallback_Release(&bsc->IBindStatusCallback_iface);
++        if((bsc = create_callback(This, url, post_data, post_data_len, headers))) {
 +            hres = navigate_bsc(This, bsc, mon);
-+        else
++            IBindStatusCallback_Release(&bsc->IBindStatusCallback_iface);
++        }else {
 +            hres = E_OUTOFMEMORY;
-         IBindStatusCallback_Release(&bsc->IBindStatusCallback_iface);
++        }
      }
  
+     CoTaskMemFree(url);
 diff --git a/dlls/ieframe/oleobject.c b/dlls/ieframe/oleobject.c
 index c818b60..7c4c211 100644
 --- a/dlls/ieframe/oleobject.c
@@ -1968,7 +1978,7 @@ index 05bbaf8..6a0104a 100644
          }
      }
 diff --git a/dlls/windowscodecs/ddsformat.c b/dlls/windowscodecs/ddsformat.c
-index a1ef19c..d523d3b 100644
+index a1ef19c..9858265 100644
 --- a/dlls/windowscodecs/ddsformat.c
 +++ b/dlls/windowscodecs/ddsformat.c
 @@ -855,7 +855,7 @@ static HRESULT WINAPI DdsFrameDecode_CopyPixels(IWICBitmapFrameDecode *iface,
@@ -1989,13 +1999,16 @@ index a1ef19c..d523d3b 100644
          if (cbBufferSize < cbStride * height) return WINCODEC_ERR_INSUFFICIENTBUFFER;
      }
  
-@@ -1431,6 +1431,10 @@ static HRESULT WINAPI DdsDecoder_Dds_GetFrame(IWICDdsDecoder *iface,
+@@ -1431,6 +1431,13 @@ static HRESULT WINAPI DdsDecoder_Dds_GetFrame(IWICDdsDecoder *iface,
          if (depth > 1) depth /= 2;
      }
  
 +    if (This->info.pixel_format_bpp && (frame_height == 0 || frame_width >= (UINT_MAX / (This->info.pixel_format_bpp / 8) / frame_height)))
++    {
 +        /* Size calculation in CopyPixels may overflow */
-+        return E_FAIL;
++        hr = E_FAIL;
++        goto end;
++    }
 +
      hr = DdsFrameDecode_CreateInstance(&frame_decode);
      if (hr != S_OK) goto end;

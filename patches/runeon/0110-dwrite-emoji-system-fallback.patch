@@ -6,8 +6,9 @@ returned no font for them and Chromium-based clients drew missing glyph
 boxes. Windows draws emoji with Segoe UI Emoji; map the same characters
 there. In the BMP only characters with default emoji presentation
 (Emoji_Presentation=Yes) are mapped, ahead of the Dingbats entry, so
-symbols that default to text presentation keep their text fallback. The
-supplementary emoji blocks are mapped whole.
+symbols that default to text presentation keep their text fallback;
+the emoji inside Dingbats keep the Dingbats families after Segoe UI
+Emoji. The supplementary emoji blocks are mapped whole.
 
 When a mapping was found but none of its families exists or supports the
 input, the whole remaining locale span was reported as unmapped, so text
@@ -16,28 +17,30 @@ only the run that shares the mapping, as for unmapped input, and keep the
 run length intact while trying later families of the same mapping.
 
 Without a font that answers to "Segoe UI Emoji" (directly or through a
-Wine font replacement) the new entries map nothing, so output is the same
-as before apart from the shorter unmapped run.
+Wine font replacement) every character resolves to the families it had
+before, so output is the same apart from the shorter unmapped run.
 
 --- a/dlls/dwrite/analyzer.c
 +++ b/dlls/dwrite/analyzer.c
-@@ -308,6 +308,15 @@
+@@ -307,6 +307,17 @@
+     { "1BC0-1BFF",              L"Noto Sans Batak" },
      { "1C00-1C4F",              L"Noto Sans Lepcha" },
      { "1C50-1C7F",              L"Noto Sans Ol Chiki" },
- 
++
 +    /* BMP characters with default emoji presentation (Emoji_Presentation=Yes),
 +       which Windows draws with Segoe UI Emoji. Characters that default to text
 +       presentation keep their text fallback. These entries come before Dingbats
-+       so that its emoji resolve here first. */
++       so that its emoji try Segoe UI Emoji first. */
 +    { "231A-231B, 23E9-23EC, 23F0, 23F3, 25FD-25FE, 2614-2615, 2648-2653, 267F, "
 +      "2693, 26A1, 26AA-26AB, 26BD-26BE, 26C4-26C5, 26CE, 26D4, 26EA", L"Segoe UI Emoji" },
-+    { "26F2-26F3, 26F5, 26FA, 26FD, 2705, 270A-270B, 2728, 274C, 274E, 2753-2755, "
-+      "2757, 2795-2797, 27B0, 27BF, 2B1B-2B1C, 2B50", L"Segoe UI Emoji" },
-+
++    { "26F2-26F3, 26F5, 26FA, 26FD, 2B1B-2B1C, 2B50", L"Segoe UI Emoji" },
++    /* Emoji inside Dingbats keep the Dingbats families after Segoe UI Emoji. */
++    { "2705, 270A-270B, 2728, 274C, 274E, 2753-2755, 2757, 2795-2797, 27B0, 27BF",
++      L"Segoe UI Emoji, Noto Sans Symbols2, Noto Sans Symbols 2" },
+ 
      /* Dingbats - 2700-27BF */
      { "2700-27BF",              L"Noto Sans Symbols2, Noto Sans Symbols 2" },
- 
-@@ -378,6 +387,13 @@
+@@ -378,6 +389,13 @@
      { "FF00-FFEF",              L"Noto Sans CJK JP" },
  
      { "1F800-1F8FF",            L"Noto Sans Symbols2, Noto Sans Symbols 2" },
@@ -51,7 +54,7 @@ as before apart from the shorter unmapped run.
  };
  
  struct text_source_context
-@@ -2509,7 +2525,7 @@
+@@ -2509,7 +2527,7 @@
      const struct fallback_data *data;
      const WCHAR *locale_name = NULL;
      struct fallback_locale *locale;
@@ -60,7 +63,7 @@ as before apart from the shorter unmapped run.
      IDWriteFont3 *font;
      HRESULT hr;
  
-@@ -2553,23 +2569,25 @@
+@@ -2553,23 +2571,25 @@
          if (SUCCEEDED(create_matching_font(mapping->collection ? mapping->collection : fallback->systemcollection,
                  mapping->families[i], weight, style, stretch, &IID_IDWriteFont3, (void **)&font)))
          {

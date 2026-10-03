@@ -32,6 +32,8 @@ Thirteen commits do not apply because the base differs and were not ported: the 
 | `105ced5bc1` msvcrt | The same `ARRAY_SIZE` change with different surrounding lines. |
 | `53b5345251`, `37fd158bfc` mf | Combined: `Flush` resets only an active renderer that still has an audio client; the base has no position/pts fields. |
 | `ee38ff1725` mf | The base lacks `intsafe.h`; the index is compared with `~(DWORD)0` instead of `DWORD_MAX`. |
+| `258ee951ab` windowscodecs | Completed: the new overflow check leaves through the common exit, so the decoder lock is released; upstream returns while holding it. |
+| `ae807355d6` ieframe | Completed: the task allocation is checked, the task is freed when the callback cannot be created, and only a created callback is released; upstream still releases a NULL callback and leaks the task. |
 
 ## Validation
 

@@ -4,7 +4,8 @@
 Parses system_fallback_config in dlls/dwrite/analyzer.c and resolves sample
 characters the way find_fallback_mapping() does for the neutral locale (first
 entry whose ranges contain the character). Emoji must resolve to an entry that
-lists Segoe UI Emoji, an emoji range may only overlap a later entry, entries keep
+lists Segoe UI Emoji, an emoji range may only overlap a later entry, without an emoji
+font every covered character must keep its previous families, entries keep
 within the parser's 16-range limit, text-presentation symbols stay as they were, and
 existing non-emoji entries must keep their first family. It then checks that
 fallback_map_characters() never overwrites the mapped run length while trying
@@ -94,20 +95,30 @@ def main():
 
     # Lookup takes the first matching entry, so an emoji range may overlap a
     # broader entry only when it comes first.
-    if not any(families == ["Segoe UI Emoji"] for _, families, _ in entries):
+    emoji_entries = [i for i, (_, families, _) in enumerate(entries) if families[0] == "Segoe UI Emoji"]
+    if not emoji_entries:
         fail("no Segoe UI Emoji entry")
-    for i, (ranges, families, _) in enumerate(entries):
-        if families != ["Segoe UI Emoji"]:
-            continue
+    for i in emoji_entries:
+        ranges = entries[i][0]
         if len(ranges) > 16:
             fail(f"entry {i} has {len(ranges)} ranges; the parser keeps only 16")
-        for j, (other, other_families, _) in enumerate(entries[:i]):
-            if other_families == ["Segoe UI Emoji"]:
-                continue
+        for other, _, _ in (entries[j] for j in range(i) if j not in emoji_entries):
             for low, high in ranges:
                 for o_low, o_high in other:
                     if low <= o_high and o_low <= high:
                         fail(f"emoji range {low:04X}-{high:04X} is shadowed by earlier {o_low:04X}-{o_high:04X}")
+    checks += 1
+
+    # Without a Segoe UI Emoji font, every character an emoji entry covers must
+    # resolve to the families it had before the emoji entries were added.
+    without = [e for j, e in enumerate(entries) if j not in emoji_entries]
+    for i in emoji_entries:
+        for low, high in entries[i][0]:
+            for ch in range(low, high + 1):
+                before = neutral_lookup(without, ch) or []
+                after = [f for f in neutral_lookup(entries, ch) if f != "Segoe UI Emoji"]
+                if after != before:
+                    fail(f"U+{ch:04X} without Segoe UI Emoji resolves to {after}, previously {before}")
     checks += 1
 
     for ch, name in EMOJI_SAMPLES.items():

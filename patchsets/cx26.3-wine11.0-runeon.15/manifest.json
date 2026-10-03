@@ -1773,15 +1773,15 @@
     {
       "order": 127,
       "path": "patches/runeon/0110-dwrite-emoji-system-fallback.patch",
-      "sha256": "697ec848316c239c464983ffdf7b6becc5a812267b72a15cd4edbd8637f2d593",
+      "sha256": "20bd9ba1a7a6f64d6b3a26a4ff4ba50affdc78e6d6f3d88639a4a723b1c4082f",
       "kind": "runeon-product",
       "status": "active",
       "risk": "low",
       "runeonTasks": [
         "T836"
       ],
-      "summary": "Maps the characters Windows draws with Segoe UI Emoji to that family in the dwrite system font fallback (BMP characters with default emoji presentation, ahead of Dingbats, and the supplementary emoji blocks), and reports only the run sharing a mapping when none of its families can render it, so text after an emoji keeps its own fallback. Without a font answering to Segoe UI Emoji the new entries map nothing.",
-      "testStrategy": "tests/emoji-fallback-check.py parses the patched fallback table and resolves characters with first-match semantics, as find_fallback_mapping() does for the neutral locale: sample emoji must reach Segoe UI Emoji, text-presentation symbols (check mark, heavy black heart, heart suit, arrow) must keep their previous mapping or none, emoji entries must stay within the parser's 16-range limit and must not be shadowed by an earlier entry; it also checks that fallback_map_characters() keeps and reports the mapped run length. scripts/integration-check.sh runs it on the patched tree. Rendering was checked in a Chromium-based client with a COLRv0 emoji font registered as Segoe UI Emoji.",
+      "summary": "Maps the characters Windows draws with Segoe UI Emoji to that family in the dwrite system font fallback (BMP characters with default emoji presentation, ahead of Dingbats, whose emoji keep the Dingbats families after Segoe UI Emoji, and the supplementary emoji blocks), and reports only the run sharing a mapping when none of its families can render it, so text after an emoji keeps its own fallback. Without a font answering to Segoe UI Emoji every character resolves as before.",
+      "testStrategy": "tests/emoji-fallback-check.py parses the patched fallback table and resolves characters with first-match semantics, as find_fallback_mapping() does for the neutral locale: sample emoji must reach Segoe UI Emoji, text-presentation symbols (check mark, heavy black heart, heart suit, arrow) must keep their previous mapping or none, emoji entries must stay within the parser's 16-range limit and must not be shadowed by an earlier entry, and without a Segoe UI Emoji font every character they cover must resolve to its previous families; it also checks that fallback_map_characters() keeps and reports the mapped run length. scripts/integration-check.sh runs it on the patched tree. Rendering was checked in a Chromium-based client with a COLRv0 emoji font registered as Segoe UI Emoji.",
       "verification": [
         {
           "path": "dlls/dwrite/analyzer.c",
@@ -1796,7 +1796,7 @@
     {
       "order": 128,
       "path": "patches/upstream/0079-wine-11.19-targeted-fixes.patch",
-      "sha256": "ca9d6196635f118441480230ec39ad34f7e5c0ccec028b25b3b27c72adc16a11",
+      "sha256": "b522b12374ca8e6eda9ae5938bddc6d6d74a08988af1f151ed1786acc7fb811c",
       "kind": "upstream-backport",
       "status": "active",
       "risk": "medium",
@@ -1905,7 +1905,7 @@
           "contains": "throw_func = func ? cxx_rva(func->BeginAddress, throw_base) : NULL;"
         }
       ],
-      "adaptation": "60551e1d7b places the overflow checks before both aligned allocations (the base lacks a later shrink-padding block); 105ced5bc1 is the same change with different surrounding lines; 53b5345251 and 37fd158bfc are combined so Flush resets only an active renderer with an audio client (the base has no position/pts fields); ee38ff1725 compares with ~(DWORD)0 because the base lacks intsafe.h."
+      "adaptation": "60551e1d7b places the overflow checks before both aligned allocations (the base lacks a later shrink-padding block); 105ced5bc1 is the same change with different surrounding lines; 53b5345251 and 37fd158bfc are combined so Flush resets only an active renderer with an audio client (the base has no position/pts fields); ee38ff1725 compares with ~(DWORD)0 because the base lacks intsafe.h. 258ee951ab leaves through the common exit so the decoder lock is released; ae807355d6 checks the task allocation, frees the task when the callback cannot be created and releases only a created callback."
     }
   ],
   "targetedReview": {
