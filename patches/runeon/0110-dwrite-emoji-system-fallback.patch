@@ -1,0 +1,92 @@
+From: Runeon contributors
+Subject: [PATCH] dwrite: Fall back to Segoe UI Emoji for emoji, as Windows does.
+
+The system font fallback had no entry for emoji, so MapCharacters()
+returned no font for them and Chromium-based clients drew missing glyph
+boxes. Windows draws emoji with Segoe UI Emoji; map the same characters
+there. In the BMP only characters with default emoji presentation
+(Emoji_Presentation=Yes) are mapped, ahead of the Dingbats entry, so
+symbols that default to text presentation keep their text fallback. The
+supplementary emoji blocks are mapped whole.
+
+When a mapping was found but none of its families exists or supports the
+input, the whole remaining locale span was reported as unmapped, so text
+following an emoji (for example CJK) lost its own fallback too. Report
+only the run that shares the mapping, as for unmapped input, and keep the
+run length intact while trying later families of the same mapping.
+
+Without a font that answers to "Segoe UI Emoji" (directly or through a
+Wine font replacement) the new entries map nothing, so output is the same
+as before apart from the shorter unmapped run.
+
+--- a/dlls/dwrite/analyzer.c
++++ b/dlls/dwrite/analyzer.c
+@@ -308,6 +308,15 @@
+     { "1C00-1C4F",              L"Noto Sans Lepcha" },
+     { "1C50-1C7F",              L"Noto Sans Ol Chiki" },
+ 
++    /* BMP characters with default emoji presentation (Emoji_Presentation=Yes),
++       which Windows draws with Segoe UI Emoji. Characters that default to text
++       presentation keep their text fallback. These entries come before Dingbats
++       so that its emoji resolve here first. */
++    { "231A-231B, 23E9-23EC, 23F0, 23F3, 25FD-25FE, 2614-2615, 2648-2653, 267F, "
++      "2693, 26A1, 26AA-26AB, 26BD-26BE, 26C4-26C5, 26CE, 26D4, 26EA", L"Segoe UI Emoji" },
++    { "26F2-26F3, 26F5, 26FA, 26FD, 2705, 270A-270B, 2728, 274C, 274E, 2753-2755, "
++      "2757, 2795-2797, 27B0, 27BF, 2B1B-2B1C, 2B50", L"Segoe UI Emoji" },
++
+     /* Dingbats - 2700-27BF */
+     { "2700-27BF",              L"Noto Sans Symbols2, Noto Sans Symbols 2" },
+ 
+@@ -378,6 +387,13 @@
+     { "FF00-FFEF",              L"Noto Sans CJK JP" },
+ 
+     { "1F800-1F8FF",            L"Noto Sans Symbols2, Noto Sans Symbols 2" },
++
++    /* Heavy Large Circle, Mahjong and Playing Cards, Enclosed Alphanumeric and Ideographic Supplements
++       (including regional indicators), Miscellaneous Symbols and Pictographs, Emoticons,
++       Transport and Map Symbols, Geometric Shapes Extended colored circles and squares,
++       Supplemental Symbols and Pictographs, Symbols and Pictographs Extended-A */
++    { "2B55, 1F000-1F02F, 1F0A0-1F0FF, 1F100-1F2FF, 1F300-1F64F, "
++      "1F680-1F6FF, 1F7E0-1F7F0, 1F900-1F9FF, 1FA70-1FAFF", L"Segoe UI Emoji" },
+ };
+ 
+ struct text_source_context
+@@ -2509,7 +2525,7 @@
+     const struct fallback_data *data;
+     const WCHAR *locale_name = NULL;
+     struct fallback_locale *locale;
+-    UINT32 i, length = 0, mapped;
++    UINT32 i, length = 0, mapped, supported;
+     IDWriteFont3 *font;
+     HRESULT hr;
+ 
+@@ -2553,23 +2569,25 @@
+         if (SUCCEEDED(create_matching_font(mapping->collection ? mapping->collection : fallback->systemcollection,
+                 mapping->families[i], weight, style, stretch, &IID_IDWriteFont3, (void **)&font)))
+         {
+-            if (!(mapped = fallback_font_get_supported_length(font, source, position, mapped)))
++            if (!(supported = fallback_font_get_supported_length(font, source, position, mapped)))
+             {
+                 IDWriteFont3_Release(font);
+                 continue;
+             }
+ 
+             *ret_font = (IDWriteFont *)font;
+-            *ret_length = mapped;
++            *ret_length = supported;
+             *scale = mapping->scale;
+ 
+             return S_OK;
+         }
+     }
+ 
+-    /* Mapping was found, but either font couldn't be created or there's no font that supports given input. */
++    /* Mapping was found, but either font couldn't be created or there's no font that supports given input.
++       Report only the run that shares this mapping, as for unmapped input, so that text after it is still
++       mapped on the next call. */
+     *ret_font = NULL;
+-    *ret_length = length;
++    *ret_length = mapped;
+ 
+     return S_OK;
+ }

@@ -36,6 +36,12 @@ if grep -Fq 'GRAPHICS_ROUTES_PROTOCOL' "$candidate_root/dlls/ntdll/unix/loadorde
     || die "graphics route parser check failed"
 fi
 
+# Likewise for the dwrite emoji fallback entries.
+if grep -Fq 'L"Segoe UI Emoji"' "$candidate_root/dlls/dwrite/analyzer.c"; then
+  python3 "$script_dir/../tests/emoji-fallback-check.py" "$candidate_root" >/dev/null \
+    || die "dwrite emoji fallback check failed"
+fi
+
 if "$script_dir/apply-series.sh" "$candidate_root" >"$temp_root/reapply.stdout" 2>"$temp_root/reapply.stderr"; then
   die "a second patch application unexpectedly succeeded"
 fi
