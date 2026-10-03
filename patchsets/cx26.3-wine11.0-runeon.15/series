@@ -80,3 +80,4 @@ patches/runeon/0107-rosetta-self-modifying-code-step.patch
 patches/runeon/0108-rosetta-self-modifying-code-write-execute-phases.patch
 patches/runeon/0109-graphics-backend-routing.patch
 patches/runeon/0110-dwrite-emoji-system-fallback.patch
+patches/upstream/0079-wine-11.19-targeted-fixes.patch

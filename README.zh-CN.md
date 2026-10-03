@@ -17,7 +17,7 @@ Runeon Wine 是 Runeon Steam Baseline runtime 的公开源码维护仓库，保�
 - 验证：`.14` 已通过完整 x86_64/WoW64 构建、补丁集与源码校验、`tests/graphics-route-check.py`、干净 prefix 下路由与未路由进程的模块身份探针（14 项均符合预期）、签名、release readiness，以及 App `1.9 (1)` 与 `1.10 (0)` 的鉴权 Dev 与 Production feed/ticket/完整下载检查。用户反馈 Dev（含原地升级）未发现问题，并于 2026-10-02 授权 Production；该概括验收不代表每个游戏或 App 交互场景均已独立实测。
 - 验证：`.13` 已通过完整 x86_64/WoW64 构建、开关关/开下的上游 ntdll `unwind` 与 `exception` 套件、自修改代码与多线程竞争探针、签名、release readiness，以及受支持 build 的鉴权 Dev 与 Production feed/ticket/完整下载检查。用户于 2026-09-28 反馈 Dev 未发现问题并授权 Production；该概括验收不代表每项 Steam/CEF、游戏或 App 交互均已独立实测。
 - Production 保留回滚源码：seed `2026.09.26` 对应 `cx26.3-wine11.0-runeon.11`，seed `2026.09.22` 对应 `cx26.3-wine11.0-runeon.10`，seed `2026.09.13` 对应 `cx26.3-wine11.0-runeon.9`，seed `2026.09.06` 对应 `cx26.3-wine11.0-runeon.8`，seed `2026.08.11.1` 对应 `cx26.3-wine11.0-runeon.6`，seed `2026.08.03.2` 对应 `cx26.3-wine11.0-runeon.5`
-- 上游已审计至：`wine-11.15`（完整审计）；筛选回移覆盖至 `wine-11.18`
+- 上游已审计至：`wine-11.15`（完整审计）；筛选回移覆盖至 `wine-11.19`
 
 [`base/crossover-26.3-wine-11.0.json`](base/crossover-26.3-wine-11.0.json) 是基线 URL、SHA-256 和源码根目录的唯一机器可读来源。[`series`](series) 定义补丁顺序；[`patches/manifest.json`](patches/manifest.json) 记录来源、风险和完整 upstream commit。
 

@@ -1,0 +1,2052 @@
+From: Wine upstream contributors (see commit list)
+Subject: [PATCH] Backport targeted Wine 11.19 fixes.
+
+Squashed backport of 87 WineHQ commits first released in wine-11.19, applied in upstream
+order on top of cx26.3-wine11.0-runeon.15 patches 0001-0110. Test-only hunks are omitted.
+Adaptations, marked [adapted] below: 60551e1d7b places the overflow checks before both
+aligned allocations, because the base lacks a later shrink-padding block; 105ced5bc1 is the
+same one-line change with different surrounding lines; 53b5345251 and 37fd158bfc are combined
+so that Flush resets only an active renderer that still has an audio client, as the base has no
+position/pts fields; ee38ff1725 compares with ~(DWORD)0 because the base lacks intsafe.h.
+
+  38e3dc2e53 Alistair Leslie-Hughes: windows.devices.enumeration: Return E_NOINTERFACE when no interface found.
+  01599743e2 Tobiasz Laskowski: ole32: Fix DoDragDrop uninitialized error code.
+  3c5e9cf70d Alex Henrie: comctl32: Check array length before dereferencing in TOOLBAR_WrapToolbar.
+  6a1df4121c Alex Henrie: shell32: Allocate enough space for the final null in build_paths_list.
+  b47d5ddb5c Alex Henrie: crypt32: Pass the correct length when querying CNGExtraAlgid.
+  105ced5bc1 Alex Henrie: msvcrt: Pass buffer size in WCHARs from _wassert to _snwprintf. [adapted]
+  64e7a99bda Matteo Bruni: d3dcompiler: Fix texcoord bounds check in find_ps_builtin_semantics().
+  69d54bde77 Matteo Bruni: d3dcompiler: Add error checking to GetCurrentDirectoryA() call.
+  8a68c4fed7 Matteo Bruni: d3dx9: Handle 0 argument in make_pow2().
+  6b228c68e0 Matteo Bruni: d3dcompiler: Properly handle a coissue flag on the first assembly shader instruction.
+  c40ba807b5 Matteo Bruni: d3dcompiler: Properly handle a predicate on the first assembly shader instruction.
+  cc9ba51a1a Matteo Bruni: d3dx9/shader: Check for NULL bytecode in get_shader_semantics().
+  75d269b310 Matteo Bruni: d3dx9/effect: Check memory allocation in BeginParameterBlock().
+  f9784db3da Matteo Bruni: d3dx9/effect: Check wide string allocation in D3DXCreateEffect[Compiler]FromFile[Ex]A().
+  4f4d68f6a7 Matteo Bruni: d3dx9/sprite: Check vertex data allocation in d3dx_sprite_flush().
+  8571f65844 Daniel Lehman: ucrtbase: Stub %O in strftime.
+  9514f099f3 Daniel Lehman: msvcp140: Pass along %O in format to time_put.
+  1796b33f0c Alex Henrie: tapi32: Fix backwards string copy in tapiGetLocationInfoA.
+  f07eb106c4 Michael Stefaniuc: dmime: Add missing break for a switch case.
+  822fb6caf8 Michael Stefaniuc: dmime: Fix operator precedence issue.
+  8c8a6665f3 Michael Stefaniuc: dmime: Don't use substraction to compare two signed ints.
+  c052c3d73b Michael Stefaniuc: dmime: Don't leak mem when freeing a sequence track.
+  d8e85ca62a Giang Nguyen: msvcrt: Place the tmpnam() names in the temporary directory for the UCRT.
+  ab8397d2df Jacek Caban: ieframe: Fix DISPID_AMBIENT_SILENT return value.
+  352affa697 Jacek Caban: ieframe: Handle safe array access errors in navigate_url.
+  fac2a9a7f3 Jacek Caban: ieframe: Fix returned cookie in EnumConnections_Next.
+  16030c9acc Jacek Caban: ieframe: Clean up VARIANT variables in on_offlineconnected_change and on_silent_change.
+  61f135c06f Jacek Caban: ieframe: Fix error handling in get_travellog_stream.
+  4e6f9c39dd Jacek Caban: ieframe: Handle memory allocation failure in create_webbrowser.
+  ae807355d6 Jacek Caban: ieframe: Handle memory allocation failure in create_callback.
+  4220de1c29 Alistair Leslie-Hughes: oleaut32: Use the correct sizeof value in VARIANT_FormatString.
+  f8ca33aab8 Alistair Leslie-Hughes: oleaut32: Assign the correct size in FmtMediumTime.
+  3e48bc67a2 Bernhard Übelacker: comctl32_v6: Avoid uninitialized values in szDim in SYSLINK_Render.
+  0f5d7b4696 Alistair Leslie-Hughes: msado15: Add validation checks for position in _Stream_put_Position.
+  68302741b2 Hans Leidekker: dnsapi: Fix record data length in DnsRecordCopyEx().
+  9638b4f0a1 Hans Leidekker: dnsapi: Validate domain name in DnsQuery_UTF8().
+  60551e1d7b Vishnunithyasoundhar S: msvcrt: Check for overflow in aligned memory allocation. [adapted]
+  f16ee9c3ea Piotr Caban: ncrypt: Don't allow setting NCRYPT_PROVIDER_HANDLE_PROPERTY property in NCryptSetProperty.
+  6f0403ada5 Piotr Caban: ncrypt: Make ncrypt provider handles refcounted.
+  5f4945e673 Michael Stefaniuc: dmime: Split the Wave track SetParam into helpers per type.
+  16672b69f5 Michael Stefaniuc: dmime: Don't leak dsound references in the Wave track SetParam.
+  258ee951ab Esme Povirk: windowscodecs: Check for integer overflow in DDS decoder.
+  40551e9e17 Alex Henrie: combase: Fix leak of registry key in get_library_for_classid.
+  968b915ea4 Alex Henrie: oleaut32: Call get_ptr_size only once in TLB_size_instance.
+  53b5345251 Conor McCarthy: mf/sar: Move audio renderer flush actions inside the conditional code block for active state. [adapted]
+  37fd158bfc Conor McCarthy: mf/sar: Check for null audio client before resetting during flush. [adapted]
+  3db306f03d Michael Stefaniuc: dmsynth: Don't leak references when destroying a sink.
+  dbcde6558b Michael Stefaniuc: dmsynth: Don't leak a ref to the sink when destroying the synth.
+  4afdeb537d Alex Henrie: mapi32: Allocate enough space for null terminator in load_mapi_provider.
+  4e14f03fed Conor McCarthy: mfplat: Return the error code from dxgi_buffer_GetUnknown().
+  4066bf413f Conor McCarthy: mfplat: Validate MFInitMediaTypeFromWaveFormatEx() cbSize for WAVE_FORMAT_EXTENSIBLE.
+  3d3cceaff3 Conor McCarthy: mfplat: Check for null media type in sample_allocator_InitializeSampleAllocator().
+  fae895880b Conor McCarthy: mfplat: Check for null media type in sample_allocator_InitializeSampleAllocatorEx().
+  005e6677c7 Conor McCarthy: mfplat: Return the error code on failure of presentation_descriptor_init().
+  281e7a82ef Conor McCarthy: mf/topology_loader: Pass the output pointer to topology_node_get_object() instead of its address.
+  9ab1b050c5 Conor McCarthy: mf/topology_loader: Get the input at the current loop index in topology_node_set_device_manager().
+  30ba741cd1 Conor McCarthy: mf/topology: Return the exchanged new value in topology_generate_id().
+  ed290ca30a Conor McCarthy: mf: Always reset maxlen in mf_get_handler_strings().
+  bdfd1c5097 Conor McCarthy: mf/scheme_handler: Always release the byte stream in scheme_handler_callback_Invoke().
+  ee38ff1725 Conor McCarthy: mf/topology: Guard against overflow in topology_node_reserve_streams(). [adapted]
+  19a1ee907e Conor McCarthy: mf/copier: Validate sample_copier_transform_ProcessOutput() count parameter.
+  59ee9743db Conor McCarthy: mf/sac: Check for memory allocation failure in enum_audio_capture_sources().
+  f6317153b1 Piotr Caban: oleaut32: Don't overflow maximum date value in VariantTimeToSystemTime when handling milliseconds.
+  fa013579f7 Bernhard Kölbl: windows.media.speech: Avoid leaking an HSTRING.
+  5b9e1f26e3 Alex Henrie: mshtml: Decrement the refcount in InstallCallback_Release.
+  acdbd8f9c5 Alex Henrie: urlmon: Close HKEYs with CloseRegistryKey in get_mime_filter.
+  0556aacbdc Herman Semenoff: d3dcompiler_43: Use memchr() and an end pointer in get_line().
+  cb6bdc0f1a Michael Stefaniuc: dmime: Pass the destination buffer size to stream_chunk_get_*.
+  76663fbf83 Alex Henrie: msimtf: Call ImmGetCandidateListCountW from GetCandidateListCountW.
+  8fb1daf2a3 Alex Henrie: advapi32: Correctly pass the domain from LogonUserA to LogonUserW.
+  eb02a3235f Alex Henrie: hnetcfg: Fix stack corruption in fw_app_put_ProcessImageFileName.
+  19c3fc0b1a Alex Henrie: wmp: Also call AddRef on the first connection in EnumConnections_Next.
+  4edd8205ad Gijs Vermeulen: quartz: Check whether the pin is connected in IBasicVideo::get_VideoWidth() and get_VideoHeight().
+  98942b91c5 Alex Henrie: quartz: Don't overallocate in FilterMapper_EnumMatchingFilters.
+  fe6d803917 Michael Stefaniuc: dmime: A MIDI note is just 7 bits so mask off the high bit.
+  3c8b238af0 Conor McCarthy: mfmediaengine: Add a missing else in media_engine_GetCurrentSource().
+  793e2e71f3 Alex Henrie: ws2_32: Increase the size of the WSAAddressToString buffers.
+  58a4ccac8f Aleksei Arsenev: include: Add REPLACEFILE_IGNORE_ACL_ERRORS.
+  abc6aebd55 Aleksei Arsenev: kernelbase: Implement REPLACEFILE_IGNORE_*_ERRORS in ReplaceFileW().
+  93aa62fbee Conor McCarthy: mfsrcsnk: Validate stream identifier is not zero.
+  de02cb1c30 Conor McCarthy: mfsrcsnk: Initialise all necessary sink fields before creating a wave format.
+  1b6b1bf690 Conor McCarthy: mfplat: Set the handler's activate pointer in MFRegisterLocalByteStreamHandler().
+  e235a4500c Janne Kekkonen: dbghelp: Initialize missing DWARF attribute names to empty strings.
+  a19888b97b Alistair Leslie-Hughes: inetmib1: Correctly access the table entries.
+  acedef2f0b Thomas Ritter: gdiplus: Widen DashStyleCustom pens without dashes as solid lines.
+  13625e51fd Anton Baskanov: dmime: Set F_INSTRUMENT_DRUMS for the 10th channel in midi_parser_handle_program_change().
+  6964eb2b01 Daniel Varga: msvcrt: Don't compute handler pointer in cxx_frame_handler if it's not needed.
+
+diff --git a/dlls/advapi32/advapi.c b/dlls/advapi32/advapi.c
+index 1d36dd4..14c5bb0 100644
+--- a/dlls/advapi32/advapi.c
++++ b/dlls/advapi32/advapi.c
+@@ -267,7 +267,7 @@ BOOL WINAPI LogonUserA( LPCSTR lpszUsername, LPCSTR lpszDomain, LPCSTR lpszPassw
+           debugstr_a(lpszDomain), lpszPassword, dwLogonType, dwLogonProvider, phToken);
+ 
+     if (lpszUsername && !(usernameW = strdupAW( lpszUsername ))) return FALSE;
+-    if (lpszDomain && !(domainW = strdupAW( lpszUsername ))) goto done;
++    if (lpszDomain && !(domainW = strdupAW( lpszDomain ))) goto done;
+     if (lpszPassword && !(passwordW = strdupAW( lpszPassword ))) goto done;
+ 
+     ret = LogonUserW( usernameW, domainW, passwordW, dwLogonType, dwLogonProvider, phToken );
+diff --git a/dlls/combase/roapi.c b/dlls/combase/roapi.c
+index a88181a..58b3313 100644
+--- a/dlls/combase/roapi.c
++++ b/dlls/combase/roapi.c
+@@ -109,6 +109,7 @@ static HRESULT get_library_for_classid(const WCHAR *classid, WCHAR **out)
+     }
+ 
+     *out = buf;
++    RegCloseKey(hkey_class);
+     return S_OK;
+ 
+ done:
+diff --git a/dlls/comctl32/toolbar.c b/dlls/comctl32/toolbar.c
+index 3826b18..aa3296d 100644
+--- a/dlls/comctl32/toolbar.c
++++ b/dlls/comctl32/toolbar.c
+@@ -1447,10 +1447,10 @@ TOOLBAR_WrapToolbar(TOOLBAR_INFO *infoPtr)
+ 	    /* 	If the current button is a separator and not hidden,  */
+ 	    /*	go to the next until it reaches a non separator.      */
+ 	    /*	Wrap the last separator if it is before a button.     */
+-	    while( ( ((btnPtr[i].fsStyle & BTNS_SEP) &&
++	    while( i < infoPtr->nNumButtons &&
++	           ( ((btnPtr[i].fsStyle & BTNS_SEP) &&
+ 		      !(btnPtr[i].fsStyle & BTNS_DROPDOWN)) ||
+-		     (btnPtr[i].fsState & TBSTATE_HIDDEN) ) &&
+-			i < infoPtr->nNumButtons )
++		     (btnPtr[i].fsState & TBSTATE_HIDDEN) ) )
+ 	    {
+ 		i++;
+ 		bFound = TRUE;
+diff --git a/dlls/comctl32_v6/syslink.c b/dlls/comctl32_v6/syslink.c
+index ecf9b24..1389550 100644
+--- a/dlls/comctl32_v6/syslink.c
++++ b/dlls/comctl32_v6/syslink.c
+@@ -1235,6 +1235,7 @@ static VOID SYSLINK_Render (const SYSLINK_INFO *infoPtr, HDC hdc, PRECT pRect)
+                 }
+             }
+ 
++            szDim.cx = szDim.cy = 0;
+             if((n == 0 && SkipChars != 0) ||
+                GetTextExtentExPointW(hdc, tx, n, rc.right - x, &nFit, NULL, &szDim))
+             {
+diff --git a/dlls/crypt32/oid.c b/dlls/crypt32/oid.c
+index f0b79f1..9a6588a 100644
+--- a/dlls/crypt32/oid.c
++++ b/dlls/crypt32/oid.c
+@@ -1570,7 +1570,7 @@ static struct OIDInfo *read_oid_info(HKEY root, char *key_name, DWORD *flags)
+         if (cngextra_len)
+         {
+             info->info.pwszCNGExtraAlgid = (WCHAR *)p;
+-            RegQueryValueExW(key, L"CNGExtraAlgid", NULL, NULL, (BYTE *)info->info.pwszCNGExtraAlgid, &cngalgid_len);
++            RegQueryValueExW(key, L"CNGExtraAlgid", NULL, NULL, (BYTE *)info->info.pwszCNGExtraAlgid, &cngextra_len);
+         }
+     }
+ 
+diff --git a/dlls/d3dcompiler_43/asmparser.c b/dlls/d3dcompiler_43/asmparser.c
+index 9cdf7b8..cee5f9b 100644
+--- a/dlls/d3dcompiler_43/asmparser.c
++++ b/dlls/d3dcompiler_43/asmparser.c
+@@ -1198,7 +1198,11 @@ static void asmparser_predicate_supported(struct asm_parser *parser, const struc
+     if (!parser->shader)
+         return;
+     if (parser->shader->num_instrs == 0)
+-        ERR("Predicate without an instruction.\n");
++    {
++        asmparser_message(parser, "Line %u: Predicate on the first shader instruction\n", parser->line_no);
++        set_parse_status(&parser->status, PARSE_ERR);
++        return;
++    }
+     /* Set the predicate of the last instruction added to the shader. */
+     parser->shader->instr[parser->shader->num_instrs - 1]->has_predicate = TRUE;
+     parser->shader->instr[parser->shader->num_instrs - 1]->predicate = *predicate;
+@@ -1218,6 +1222,7 @@ static void asmparser_coissue_supported(struct asm_parser *parser)
+     {
+         asmparser_message(parser, "Line %u: Coissue flag on the first shader instruction\n", parser->line_no);
+         set_parse_status(&parser->status, PARSE_ERR);
++        return;
+     }
+     /* Set the coissue flag of the last instruction added to the shader. */
+     parser->shader->instr[parser->shader->num_instrs - 1]->coissue = TRUE;
+diff --git a/dlls/d3dcompiler_43/bytecodewriter.c b/dlls/d3dcompiler_43/bytecodewriter.c
+index 35f5393..41de99c 100644
+--- a/dlls/d3dcompiler_43/bytecodewriter.c
++++ b/dlls/d3dcompiler_43/bytecodewriter.c
+@@ -891,7 +891,7 @@ static HRESULT find_ps_builtin_semantics(struct bc_writer *writer, const struct
+                 break;
+ 
+             case BWRITERDECLUSAGE_TEXCOORD:
+-                if (usage_idx > texcoords)
++                if (usage_idx >= texcoords)
+                 {
+                     WARN("dcl_texcoord%u not supported in this shader version\n", usage_idx);
+                     return E_INVALIDARG;
+diff --git a/dlls/d3dcompiler_43/compiler.c b/dlls/d3dcompiler_43/compiler.c
+index f5c2591..986522e 100644
+--- a/dlls/d3dcompiler_43/compiler.c
++++ b/dlls/d3dcompiler_43/compiler.c
+@@ -94,6 +94,8 @@ static HRESULT WINAPI d3dcompiler_include_from_file_open(ID3DInclude *iface, D3D
+     else
+     {
+         len = GetCurrentDirectoryA(MAX_PATH, current_dir);
++        if (!len || len >= MAX_PATH)
++            return E_FAIL;
+         current_dir[len] = '\\';
+         len++;
+         initial_dir = current_dir;
+@@ -146,19 +148,17 @@ const struct ID3DIncludeVtbl d3dcompiler_include_from_file_vtbl =
+     d3dcompiler_include_from_file_close
+ };
+ 
+-static const char *get_line(const char **ptr)
++static const char *get_line(const char **ptr, const char *end)
+ {
+     const char *p, *q;
+ 
+-    p = *ptr;
+-    if (!(q = strstr(p, "\n")))
+-    {
+-        if (!*p)
+-            return NULL;
+-        *ptr += strlen(p);
+-        return p;
+-    }
+-    *ptr = q + 1;
++    if ((p = *ptr) >= end)
++        return NULL;
++
++    if (!(q = memchr(p, '\n', end - p)))
++        *ptr = end;
++    else
++        *ptr = q + 1;
+ 
+     return p;
+ }
+@@ -418,10 +418,11 @@ HRESULT WINAPI D3DDisassemble(const void *data, SIZE_T size, UINT flags, const c
+         if (*messages && ERR_ON(d3dcompiler))
+         {
+             const char *ptr = messages;
++            const char *end = ptr + strlen(ptr);
+             const char *line;
+ 
+             ERR("Shader log:\n");
+-            while ((line = get_line(&ptr)))
++            while ((line = get_line(&ptr, end)))
+             {
+                 ERR("    %.*s", (int)(ptr - line), line);
+             }
+diff --git a/dlls/d3dx9_36/d3dx9_private.h b/dlls/d3dx9_36/d3dx9_private.h
+index d47c3e8..c4d083d 100644
+--- a/dlls/d3dx9_36/d3dx9_private.h
++++ b/dlls/d3dx9_36/d3dx9_private.h
+@@ -175,7 +175,7 @@ static inline uint32_t make_pow2(uint32_t num)
+ {
+     DWORD index;
+ 
+-    return BitScanReverse(&index, num - 1) ? 1u << (index + 1) : 1;
++    return num && BitScanReverse(&index, num - 1) ? 1u << (index + 1) : 1;
+ }
+ 
+ struct d3dx_parameter;
+diff --git a/dlls/d3dx9_36/effect.c b/dlls/d3dx9_36/effect.c
+index 7238732..3db5b4e 100644
+--- a/dlls/d3dx9_36/effect.c
++++ b/dlls/d3dx9_36/effect.c
+@@ -4240,7 +4240,8 @@ static HRESULT WINAPI d3dx_effect_BeginParameterBlock(ID3DXEffect *iface)
+         return D3DERR_INVALIDCALL;
+     }
+ 
+-    effect->current_parameter_block = calloc(1, sizeof(*effect->current_parameter_block));
++    if (!(effect->current_parameter_block = calloc(1, sizeof(*effect->current_parameter_block))))
++        return E_OUTOFMEMORY;
+     memcpy(effect->current_parameter_block->magic_string, parameter_block_magic_string,
+             sizeof(parameter_block_magic_string));
+     effect->current_parameter_block->effect = effect;
+@@ -7044,7 +7045,8 @@ HRESULT WINAPI D3DXCreateEffectFromFileExA(struct IDirect3DDevice9 *device, cons
+         return D3DERR_INVALIDCALL;
+ 
+     len = MultiByteToWideChar(CP_ACP, 0, srcfile, -1, NULL, 0);
+-    srcfileW = malloc(len * sizeof(*srcfileW));
++    if (!(srcfileW = malloc(len * sizeof(*srcfileW))))
++        return E_OUTOFMEMORY;
+     MultiByteToWideChar(CP_ACP, 0, srcfile, -1, srcfileW, len);
+ 
+     ret = D3DXCreateEffectFromFileExW(device, srcfileW, defines, include, skipconstants, flags, pool, effect, messages);
+@@ -7180,7 +7182,8 @@ HRESULT WINAPI D3DXCreateEffectCompilerFromFileA(const char *srcfile, const D3DX
+         return D3DERR_INVALIDCALL;
+ 
+     len = MultiByteToWideChar(CP_ACP, 0, srcfile, -1, NULL, 0);
+-    srcfileW = malloc(len * sizeof(*srcfileW));
++    if (!(srcfileW = malloc(len * sizeof(*srcfileW))))
++        return E_OUTOFMEMORY;
+     MultiByteToWideChar(CP_ACP, 0, srcfile, -1, srcfileW, len);
+ 
+     ret = D3DXCreateEffectCompilerFromFileW(srcfileW, defines, include, flags, compiler, messages);
+diff --git a/dlls/d3dx9_36/shader.c b/dlls/d3dx9_36/shader.c
+index c82478a..b2d75a1 100644
+--- a/dlls/d3dx9_36/shader.c
++++ b/dlls/d3dx9_36/shader.c
+@@ -2821,18 +2821,22 @@ static HRESULT get_shader_semantics(const DWORD *byte_code, D3DXSEMANTIC *semant
+         D3DDECLUSAGE_FOG,
+         D3DDECLUSAGE_PSIZE
+     };
+-    uint32_t reg_type, usage, index, version_token = *byte_code;
+-    BOOL is_ps = version_token >> 16 == 0xffff;
++    uint32_t reg_type, usage, index, version_token;
+     unsigned int major, minor, i = 0, j;
++    BOOL is_ps, has_dcl, depth = 0;
+     BYTE colors = 0, rastout = 0;
+-    BOOL has_dcl, depth = 0;
+     WORD texcoords = 0;
+ 
++    if (!byte_code)
++        return D3DERR_INVALIDCALL;
++
++    version_token = *byte_code;
+     if ((version_token & 0xffff0000) != 0xfffe0000 && (version_token & 0xffff0000) != 0xffff0000)
+         return D3DXERR_INVALIDDATA;
+ 
+     major = version_token >> 8 & 0xff;
+     minor = version_token & 0xff;
++    is_ps = version_token >> 16 == 0xffff;
+ 
+     TRACE("%s shader, version %u.%u.\n", is_ps ? "Pixel" : "Vertex", major, minor);
+     ++byte_code;
+diff --git a/dlls/d3dx9_36/sprite.c b/dlls/d3dx9_36/sprite.c
+index 2fe822c..7730bc1 100644
+--- a/dlls/d3dx9_36/sprite.c
++++ b/dlls/d3dx9_36/sprite.c
+@@ -413,8 +413,9 @@ static HRESULT WINAPI d3dx9_sprite_Flush(ID3DXSprite *iface)
+     if(!This->ready) return D3DERR_INVALIDCALL;
+     if(!This->sprite_count) return D3D_OK;
+ 
+-/* TODO: use of a vertex buffer here */
+-    vertices = malloc(sizeof(*vertices) * 6 * This->sprite_count);
++    /* TODO: use a vertex buffer */
++    if (!(vertices = malloc(sizeof(*vertices) * 6 * This->sprite_count)))
++        return E_OUTOFMEMORY;
+ 
+     for(start=0;start<This->sprite_count;start+=count,count=0) {
+         i=start;
+diff --git a/dlls/dbghelp/dwarf.c b/dlls/dbghelp/dwarf.c
+index 4f1908a..98037e2 100644
+--- a/dlls/dbghelp/dwarf.c
++++ b/dlls/dbghelp/dwarf.c
+@@ -1598,7 +1598,7 @@ static struct symt* dwarf2_parse_base_type(dwarf2_debug_info_t* di)
+     cpp_language = is_cpp_language(di->unit_ctx);
+ 
+     if (!dwarf2_find_attribute(di, DW_AT_name, &name))
+-        name.u.string = NULL;
++        name.u.string = "";
+     if (!dwarf2_find_attribute(di, DW_AT_byte_size, &size)) size.u.uvalue = 0;
+     if (!dwarf2_find_attribute(di, DW_AT_encoding, &encoding)) encoding.u.uvalue = DW_ATE_void;
+ 
+diff --git a/dlls/dmime/audiopath.c b/dlls/dmime/audiopath.c
+index 3389f96..179bc76 100644
+--- a/dlls/dmime/audiopath.c
++++ b/dlls/dmime/audiopath.c
+@@ -545,6 +545,7 @@ static HRESULT WINAPI path_config_IPersistStream_Load(IPersistStream *iface, ISt
+             hr = parse_port_configs_list(This, stream, &chunk);
+             if (FAILED(hr))
+                 return hr;
++            break;
+         case MAKE_IDTYPE(FOURCC_LIST, DMUS_FOURCC_DSBUFFER_LIST):
+             FIXME("buffer attributes are not supported\n");
+             break;
+diff --git a/dlls/dmime/lyricstrack.c b/dlls/dmime/lyricstrack.c
+index f7da113..5df882e 100644
+--- a/dlls/dmime/lyricstrack.c
++++ b/dlls/dmime/lyricstrack.c
+@@ -259,7 +259,7 @@ static HRESULT parse_lyrics_track_events(IDirectMusicLyricsTrack *This, IStream
+             if (child.id != DMUS_FOURCC_LYRICSTRACKEVENTHEADER_CHUNK)
+                 return DMUS_E_UNSUPPORTED_STREAM;
+ 
+-            if (FAILED(hr = stream_chunk_get_data(stream, &child, &header, child.size))) {
++            if (FAILED(hr = stream_chunk_get_data(stream, &child, &header, sizeof(header)))) {
+                 WARN("Failed to read data of %s\n", debugstr_chunk(&child));
+                 return hr;
+             }
+@@ -276,7 +276,7 @@ static HRESULT parse_lyrics_track_events(IDirectMusicLyricsTrack *This, IStream
+             if (child.id != DMUS_FOURCC_LYRICSTRACKEVENTTEXT_CHUNK)
+                 return DMUS_E_UNSUPPORTED_STREAM;
+ 
+-            if (FAILED(hr = stream_chunk_get_data(stream, &child, &name, child.size))) {
++            if (FAILED(hr = stream_chunk_get_wstr(stream, &child, name, sizeof(name)))) {
+                 WARN("Failed to read data of %s\n", debugstr_chunk(&child));
+                 return hr;
+             }
+diff --git a/dlls/dmime/midi.c b/dlls/dmime/midi.c
+index ea73608..363fc3a 100644
+--- a/dlls/dmime/midi.c
++++ b/dlls/dmime/midi.c
+@@ -260,7 +260,7 @@ static HRESULT midi_parser_handle_program_change(struct midi_parser *parser, str
+     MUSIC_TIME dmusic_time = (ULONGLONG)parser->time * DMUS_PPQ / parser->division;
+     instrument.dwPChannel = event->status & 0xf;
+     instrument.dwFlags = DMUS_IO_INST_PATCH;
+-    instrument.dwPatch = event->data[0];
++    instrument.dwPatch = event->data[0] | (instrument.dwPChannel == 9 ? F_INSTRUMENT_DRUMS : 0);
+     if (FAILED(hr = CoCreateInstance(&CLSID_DirectMusicBand, NULL, CLSCTX_INPROC_SERVER,
+                        &IID_IDirectMusicBand, (void **)&band)))
+         return hr;
+@@ -282,7 +282,7 @@ static HRESULT midi_parser_handle_program_change(struct midi_parser *parser, str
+ static HRESULT midi_parser_handle_note_on_off(struct midi_parser *parser, struct midi_event *event)
+ {
+     BYTE new_velocity = (event->status & 0xf0) == MIDI_NOTE_OFF ? 0 : event->data[1]; /* DirectMusic doesn't have noteoff velocity */
+-    BYTE note = event->data[0], channel = event->status & 0xf;
++    BYTE note = event->data[0] & 0x7f, channel = event->status & 0xf;
+     DWORD index = (DWORD)channel * 128 + note;
+     MUSIC_TIME dmusic_time;
+     struct midi_seqtrack_item *note_state = parser->note_states[index];
+@@ -355,7 +355,9 @@ static HRESULT midi_parser_handle_control(struct midi_parser *parser, struct mid
+ static int midi_seqtrack_item_compare(const void *a, const void *b)
+ {
+     const DMUS_IO_SEQ_ITEM *item_a = a, *item_b = b;
+-    return item_a->mtTime - item_b->mtTime;
++    if (item_a->mtTime == item_b->mtTime)
++        return 0;
++    return item_a->mtTime > item_b->mtTime ? 1 : -1;
+ }
+ 
+ static HRESULT midi_parser_parse(struct midi_parser *parser, IDirectMusicSegment8 *segment)
+diff --git a/dlls/dmime/seqtrack.c b/dlls/dmime/seqtrack.c
+index 1b0e99b..2d31f5d 100644
+--- a/dlls/dmime/seqtrack.c
++++ b/dlls/dmime/seqtrack.c
+@@ -80,6 +80,8 @@ static ULONG WINAPI sequence_track_Release(IDirectMusicTrack8 *iface)
+     TRACE("(%p) ref=%ld\n", This, ref);
+ 
+     if (!ref) {
++        free(This->curve_items);
++        free(This->items);
+         free(This);
+     }
+ 
+diff --git a/dlls/dmime/wavetrack.c b/dlls/dmime/wavetrack.c
+index 64480c6..9d700c7 100644
+--- a/dlls/dmime/wavetrack.c
++++ b/dlls/dmime/wavetrack.c
+@@ -221,6 +221,69 @@ static HRESULT WINAPI wave_track_GetParam(IDirectMusicTrack8 *iface, REFGUID typ
+     return DMUS_E_GET_UNSUPPORTED;
+ }
+ 
++static HRESULT download_to_audio_path(struct wave_track *This, IUnknown *object)
++{
++    IDirectMusicPerformance8 *performance;
++    IDirectMusicAudioPath *audio_path;
++    struct wave_part *part;
++    struct wave_item *item;
++    IDirectSound *dsound;
++    HRESULT hr;
++
++    if (FAILED(hr = IDirectMusicAudioPath_QueryInterface(object, &IID_IDirectMusicPerformance8, (void **)&performance))
++            && SUCCEEDED(hr = IDirectMusicAudioPath_QueryInterface(object, &IID_IDirectMusicAudioPath, (void **)&audio_path)))
++    {
++        hr = IDirectMusicAudioPath_GetObjectInPath(audio_path, DMUS_PCHANNEL_ALL, DMUS_PATH_PERFORMANCE, 0,
++                &GUID_All_Objects, 0, &IID_IDirectMusicPerformance8, (void **)&performance);
++        IDirectMusicAudioPath_Release(audio_path);
++    }
++
++    if (SUCCEEDED(hr))
++        hr = performance_get_dsound(performance, &dsound);
++    IDirectMusicPerformance_Release(performance);
++
++    if (FAILED(hr))
++    {
++        WARN("Failed to get direct sound from param %p, hr %#lx\n", object, hr);
++        return hr;
++    }
++
++    LIST_FOR_EACH_ENTRY(part, &This->parts, struct wave_part, entry)
++    {
++        LIST_FOR_EACH_ENTRY(item, &part->items, struct wave_item, entry)
++        {
++            if (item->buffer) continue;
++            if (FAILED(hr = wave_download_to_dsound(item->object, dsound, &item->buffer)))
++            {
++                WARN("Failed to download wave %p to direct sound, hr %#lx\n", item->object, hr);
++                goto done;
++            }
++        }
++    }
++
++done:
++    IDirectMusic_Release(dsound);
++    return hr;
++}
++
++static HRESULT unload_from_audio_path(struct wave_track *This)
++{
++    struct wave_part *part;
++    struct wave_item *item;
++
++    LIST_FOR_EACH_ENTRY(part, &This->parts, struct wave_part, entry)
++    {
++        LIST_FOR_EACH_ENTRY(item, &part->items, struct wave_item, entry)
++        {
++            if (!item->buffer) continue;
++            IDirectSoundBuffer_Release(item->buffer);
++            item->buffer = NULL;
++        }
++    }
++
++    return S_OK;
++}
++
+ static HRESULT WINAPI wave_track_SetParam(IDirectMusicTrack8 *iface, REFGUID type, MUSIC_TIME time,
+         void *param)
+ {
+@@ -238,46 +301,8 @@ static HRESULT WINAPI wave_track_SetParam(IDirectMusicTrack8 *iface, REFGUID typ
+     }
+     if (IsEqualGUID(type, &GUID_DownloadToAudioPath))
+     {
+-        IDirectMusicPerformance8 *performance;
+-        IDirectMusicAudioPath *audio_path;
+         IUnknown *object = param;
+-        struct wave_part *part;
+-        struct wave_item *item;
+-        IDirectSound *dsound;
+-        HRESULT hr;
+-
+-        if (FAILED(hr = IDirectMusicAudioPath_QueryInterface(object, &IID_IDirectMusicPerformance8, (void **)&performance))
+-                && SUCCEEDED(hr = IDirectMusicAudioPath_QueryInterface(object, &IID_IDirectMusicAudioPath, (void **)&audio_path)))
+-        {
+-            hr = IDirectMusicAudioPath_GetObjectInPath(audio_path, DMUS_PCHANNEL_ALL, DMUS_PATH_PERFORMANCE, 0,
+-                    &GUID_All_Objects, 0, &IID_IDirectMusicPerformance8, (void **)&performance);
+-            IDirectMusicAudioPath_Release(audio_path);
+-        }
+-
+-        if (SUCCEEDED(hr))
+-            hr = performance_get_dsound(performance, &dsound);
+-        IDirectMusicPerformance_Release(performance);
+-
+-        if (FAILED(hr))
+-        {
+-            WARN("Failed to get direct sound from param %p, hr %#lx\n", param, hr);
+-            return hr;
+-        }
+-
+-        LIST_FOR_EACH_ENTRY(part, &This->parts, struct wave_part, entry)
+-        {
+-            LIST_FOR_EACH_ENTRY(item, &part->items, struct wave_item, entry)
+-            {
+-                if (item->buffer) continue;
+-                if (FAILED(hr = wave_download_to_dsound(item->object, dsound, &item->buffer)))
+-                {
+-                    WARN("Failed to download wave %p to direct sound, hr %#lx\n", item->object, hr);
+-                    return hr;
+-                }
+-            }
+-        }
+-
+-        return hr;
++        return download_to_audio_path(This, object);
+     }
+     if (IsEqualGUID(type, &GUID_Enable_Auto_Download)) {
+         FIXME("GUID_Enable_Auto_Download not handled yet\n");
+@@ -288,22 +313,7 @@ static HRESULT WINAPI wave_track_SetParam(IDirectMusicTrack8 *iface, REFGUID typ
+         return S_OK;
+     }
+     if (IsEqualGUID(type, &GUID_UnloadFromAudioPath))
+-    {
+-        struct wave_part *part;
+-        struct wave_item *item;
+-
+-        LIST_FOR_EACH_ENTRY(part, &This->parts, struct wave_part, entry)
+-        {
+-            LIST_FOR_EACH_ENTRY(item, &part->items, struct wave_item, entry)
+-            {
+-                if (!item->buffer) continue;
+-                IDirectSoundBuffer_Release(item->buffer);
+-                item->buffer = NULL;
+-            }
+-        }
+-
+-        return S_OK;
+-    }
++        return unload_from_audio_path(This);
+ 
+     return DMUS_E_TYPE_UNSUPPORTED;
+ }
+@@ -542,7 +552,7 @@ static HRESULT WINAPI wave_IPersistStream_Load(IPersistStream *iface, IStream *s
+     if (!stream)
+         return E_POINTER;
+ 
+-    if ((hr = stream_get_chunk(stream, &wavt) != S_OK))
++    if ((hr = stream_get_chunk(stream, &wavt)) != S_OK)
+         return hr;
+     if (wavt.id != FOURCC_LIST || wavt.type != DMUS_FOURCC_WAVETRACK_LIST)
+         return DMUS_E_UNSUPPORTED_STREAM;
+diff --git a/dlls/dmsynth/synth.c b/dlls/dmsynth/synth.c
+index ff862b6..594abfc 100644
+--- a/dlls/dmsynth/synth.c
++++ b/dlls/dmsynth/synth.c
+@@ -423,6 +423,9 @@ static ULONG WINAPI synth_Release(IDirectMusicSynth8 *iface)
+         struct wave *wave;
+         void *next;
+ 
++        if (This->sink)
++            IDirectMusicSynthSink_Release(This->sink);
++
+         LIST_FOR_EACH_ENTRY_SAFE(instrument, next, &This->instruments, struct instrument, entry)
+         {
+             list_remove(&instrument->entry);
+diff --git a/dlls/dmsynth/synthsink.c b/dlls/dmsynth/synthsink.c
+index 5388e48..45ba1d7 100644
+--- a/dlls/dmsynth/synthsink.c
++++ b/dlls/dmsynth/synthsink.c
+@@ -435,6 +435,10 @@ static ULONG WINAPI synth_sink_Release(IDirectMusicSynthSink *iface)
+             IDirectMusicSynthSink_Activate(iface, FALSE);
+         if (This->master_clock)
+             IReferenceClock_Release(This->master_clock);
++        if (This->dsound)
++            IDirectSound_Release(This->dsound);
++        if (This->dsound_buffer)
++            IDirectSoundBuffer_Release(This->dsound_buffer);
+ 
+         This->cs.DebugInfo->Spare[0] = 0;
+         DeleteCriticalSection(&This->cs);
+diff --git a/dlls/dnsapi/query.c b/dlls/dnsapi/query.c
+index a28d98f..7f29ca3 100644
+--- a/dlls/dnsapi/query.c
++++ b/dlls/dnsapi/query.c
+@@ -170,7 +170,7 @@ DNS_STATUS WINAPI DnsQuery_A( const char *name, WORD type, DWORD options, void *
+ DNS_STATUS WINAPI DnsQuery_UTF8( const char *name, WORD type, DWORD options, void *servers, DNS_RECORDA **result,
+                                  void **reserved )
+ {
+-    DNS_STATUS ret = DNS_ERROR_RCODE_NOT_IMPLEMENTED;
++    DNS_STATUS ret;
+     unsigned char answer[4096];
+     DWORD len = sizeof(answer);
+     struct query_params query_params = { name, type, options, answer, &len };
+@@ -179,8 +179,7 @@ DNS_STATUS WINAPI DnsQuery_UTF8( const char *name, WORD type, DWORD options, voi
+     TRACE( "(%s, %s, %#lx, %p, %p, %p)\n", debugstr_a(name), debugstr_type( type ),
+            options, servers, result, reserved );
+ 
+-    if (!name || !result)
+-        return ERROR_INVALID_PARAMETER;
++    if (!name || !result) return ERROR_INVALID_PARAMETER;
+ 
+     if (type == DNS_TYPE_A)
+     {
+@@ -219,10 +218,10 @@ DNS_STATUS WINAPI DnsQuery_UTF8( const char *name, WORD type, DWORD options, voi
+         }
+     }
+ 
++    if ((ret = DnsValidateName_UTF8( name, DnsNameDomain )) && ret != DNS_ERROR_NON_RFC_NAME) return ret;
+     if ((ret = RESOLV_CALL( set_serverlist, servers ))) return ret;
+ 
+-    ret = RESOLV_CALL( query, &query_params );
+-    if (!ret)
++    if (!(ret = RESOLV_CALL( query, &query_params )))
+     {
+         DNS_MESSAGE_BUFFER *buffer = (DNS_MESSAGE_BUFFER *)answer;
+ 
+@@ -245,8 +244,7 @@ DNS_STATUS WINAPI DnsQuery_UTF8( const char *name, WORD type, DWORD options, voi
+         }
+     }
+ 
+-    if (ret == DNS_ERROR_RCODE_NAME_ERROR && type == DNS_TYPE_A &&
+-        !(options & DNS_QUERY_NO_NETBT))
++    if (ret == DNS_ERROR_RCODE_NAME_ERROR && type == DNS_TYPE_A && !(options & DNS_QUERY_NO_NETBT))
+     {
+         TRACE( "dns lookup failed, trying netbios query\n" );
+         ret = do_query_netbios( name, result );
+diff --git a/dlls/dnsapi/record.c b/dlls/dnsapi/record.c
+index 1b4cbfe..8a8df97 100644
+--- a/dlls/dnsapi/record.c
++++ b/dlls/dnsapi/record.c
+@@ -534,6 +534,7 @@ PDNS_RECORD WINAPI DnsRecordCopyEx( PDNS_RECORD src, DNS_CHARSET in, DNS_CHARSET
+                 goto error;
+             }
+         }
++        dst->wDataLength = sizeof(dst->Data.TXT);
+         break;
+     }
+     case DNS_TYPE_MINFO:
+@@ -550,9 +551,6 @@ PDNS_RECORD WINAPI DnsRecordCopyEx( PDNS_RECORD src, DNS_CHARSET in, DNS_CHARSET
+         }
+ 
+         dst->wDataLength = sizeof(dst->Data.MINFO);
+-        if (out == DnsCharSetUnicode) dst->wDataLength +=
+-            (wcslen( dst->Data.MINFO.pNameMailbox ) + 1) * sizeof(WCHAR) +
+-            (wcslen( dst->Data.MINFO.pNameErrorsMailbox ) + 1) * sizeof(WCHAR);
+         break;
+     }
+     case DNS_TYPE_AFSDB:
+@@ -563,8 +561,6 @@ PDNS_RECORD WINAPI DnsRecordCopyEx( PDNS_RECORD src, DNS_CHARSET in, DNS_CHARSET
+         if (!dst->Data.MX.pNameExchange) goto error;
+ 
+         dst->wDataLength = sizeof(dst->Data.MX);
+-        if (out == DnsCharSetUnicode) dst->wDataLength +=
+-            (wcslen( dst->Data.MX.pNameExchange ) + 1) * sizeof(WCHAR);
+         break;
+     }
+     case DNS_TYPE_NXT:
+@@ -573,8 +569,6 @@ PDNS_RECORD WINAPI DnsRecordCopyEx( PDNS_RECORD src, DNS_CHARSET in, DNS_CHARSET
+         if (!dst->Data.NXT.pNameNext) goto error;
+ 
+         dst->wDataLength = sizeof(dst->Data.NXT);
+-        if (out == DnsCharSetUnicode) dst->wDataLength +=
+-            (wcslen( dst->Data.NXT.pNameNext ) + 1) * sizeof(WCHAR);
+         break;
+     }
+     case DNS_TYPE_CNAME:
+@@ -590,8 +584,6 @@ PDNS_RECORD WINAPI DnsRecordCopyEx( PDNS_RECORD src, DNS_CHARSET in, DNS_CHARSET
+         if (!dst->Data.PTR.pNameHost) goto error;
+ 
+         dst->wDataLength = sizeof(dst->Data.PTR);
+-        if (out == DnsCharSetUnicode) dst->wDataLength +=
+-            (wcslen( dst->Data.PTR.pNameHost ) + 1) * sizeof(WCHAR);
+         break;
+     }
+     case DNS_TYPE_SIG:
+@@ -600,8 +592,6 @@ PDNS_RECORD WINAPI DnsRecordCopyEx( PDNS_RECORD src, DNS_CHARSET in, DNS_CHARSET
+         if (!dst->Data.SIG.pNameSigner) goto error;
+ 
+         dst->wDataLength = sizeof(dst->Data.SIG);
+-        if (out == DnsCharSetUnicode) dst->wDataLength +=
+-            (wcslen( dst->Data.SIG.pNameSigner ) + 1) * sizeof(WCHAR);
+         break;
+     }
+     case DNS_TYPE_SOA:
+@@ -617,9 +607,6 @@ PDNS_RECORD WINAPI DnsRecordCopyEx( PDNS_RECORD src, DNS_CHARSET in, DNS_CHARSET
+         }
+ 
+         dst->wDataLength = sizeof(dst->Data.SOA);
+-        if (out == DnsCharSetUnicode) dst->wDataLength +=
+-            (wcslen( dst->Data.SOA.pNamePrimaryServer ) + 1) * sizeof(WCHAR) +
+-            (wcslen( dst->Data.SOA.pNameAdministrator ) + 1) * sizeof(WCHAR);
+         break;
+     }
+     case DNS_TYPE_SRV:
+@@ -628,8 +615,6 @@ PDNS_RECORD WINAPI DnsRecordCopyEx( PDNS_RECORD src, DNS_CHARSET in, DNS_CHARSET
+         if (!dst->Data.SRV.pNameTarget) goto error;
+ 
+         dst->wDataLength = sizeof(dst->Data.SRV);
+-        if (out == DnsCharSetUnicode) dst->wDataLength +=
+-            (wcslen( dst->Data.SRV.pNameTarget ) + 1) * sizeof(WCHAR);
+         break;
+     }
+     default:
+diff --git a/dlls/gdiplus/graphicspath.c b/dlls/gdiplus/graphicspath.c
+index 7ed3352..2917019 100644
+--- a/dlls/gdiplus/graphicspath.c
++++ b/dlls/gdiplus/graphicspath.c
+@@ -2659,6 +2659,11 @@ static void remove_repeated_points(GpPath *path)
+     path->pathdata.Count = path_size;
+ }
+ 
++static BOOL is_dashed(const GpPen *pen)
++{
++    return pen->dash != DashStyleSolid && (pen->dash != DashStyleCustom || pen->numdashes);
++}
++
+ GpStatus WINGDIPAPI GdipWidenPath(GpPath *path, GpPen *pen, GpMatrix *matrix,
+     REAL flatness)
+ {
+@@ -2711,7 +2716,7 @@ GpStatus WINGDIPAPI GdipWidenPath(GpPath *path, GpPen *pen, GpMatrix *matrix,
+ 
+             if ((types[i]&PathPointTypeCloseSubpath) == PathPointTypeCloseSubpath)
+             {
+-                if (pen->dash != DashStyleSolid)
++                if (is_dashed(pen))
+                     widen_dashed_figure(flat_path, subpath_start, i, 1, pen, pen_width, &last_point);
+                 else
+                     widen_closed_figure(flat_path->pathdata.Points, subpath_start, i, pen, pen_width, &last_point);
+@@ -2719,7 +2724,7 @@ GpStatus WINGDIPAPI GdipWidenPath(GpPath *path, GpPen *pen, GpMatrix *matrix,
+             else if (i == flat_path->pathdata.Count-1 ||
+                 (types[i+1]&PathPointTypePathTypeMask) == PathPointTypeStart)
+             {
+-                if (pen->dash != DashStyleSolid)
++                if (is_dashed(pen))
+                     widen_dashed_figure(flat_path, subpath_start, i, 0, pen, pen_width, &last_point);
+                 else
+                     widen_open_figure(flat_path->pathdata.Points, subpath_start, i, pen, pen_width,
+diff --git a/dlls/hnetcfg/apps.c b/dlls/hnetcfg/apps.c
+index 842ead4..6af6856 100644
+--- a/dlls/hnetcfg/apps.c
++++ b/dlls/hnetcfg/apps.c
+@@ -282,17 +282,16 @@ static HRESULT WINAPI fw_app_put_ProcessImageFileName(
+     res = WNetGetUniversalNameW(image, UNIVERSAL_NAME_INFO_LEVEL, NULL, &sz);
+     if (res == WN_MORE_DATA)
+     {
+-        if (!(path = malloc(sz)))
++        if (!(info = malloc(sz)))
+             return E_OUTOFMEMORY;
+ 
+-        info = (UNIVERSAL_NAME_INFOW *)&path;
+-        res = WNetGetUniversalNameW(image, UNIVERSAL_NAME_INFO_LEVEL, &info, &sz);
++        res = WNetGetUniversalNameW(image, UNIVERSAL_NAME_INFO_LEVEL, info, &sz);
+         if (res == NO_ERROR)
+         {
+             SysFreeString(This->filename);
+             This->filename = SysAllocString(info->lpUniversalName);
+         }
+-        free(path);
++        free(info);
+         return HRESULT_FROM_WIN32(res);
+     }
+ 
+diff --git a/dlls/ieframe/client.c b/dlls/ieframe/client.c
+index cbdcf7a..a09fa53 100644
+--- a/dlls/ieframe/client.c
++++ b/dlls/ieframe/client.c
+@@ -616,7 +616,7 @@ static HRESULT WINAPI ClDispatch_Invoke(IDispatch *iface, DISPID dispIdMember, R
+         return S_OK;
+     case DISPID_AMBIENT_SILENT:
+         V_VT(pVarResult) = VT_BOOL;
+-        V_BOOL(pVarResult) = This->offline;
++        V_BOOL(pVarResult) = This->silent;
+         return S_OK;
+     }
+ 
+diff --git a/dlls/ieframe/dochost.c b/dlls/ieframe/dochost.c
+index add816f..00ddd66 100644
+--- a/dlls/ieframe/dochost.c
++++ b/dlls/ieframe/dochost.c
+@@ -403,15 +403,13 @@ static IStream *get_travellog_stream(DocHost *This)
+         return NULL;
+ 
+     hres = CreateStreamOnHGlobal(NULL, TRUE, &stream);
+-    if(SUCCEEDED(hres))
++    if(SUCCEEDED(hres)) {
+         hres = IPersistHistory_SaveHistory(persist_history, stream);
+-    IPersistHistory_Release(persist_history);
+-    if(FAILED(hres)) {
+-        IStream_Release(stream);
+-        return NULL;
++        if(FAILED(hres))
++            IStream_Release(stream);
+     }
+-
+-    return stream;
++    IPersistHistory_Release(persist_history);
++    return SUCCEEDED(hres) ? stream : NULL;
+ }
+ 
+ static void dump_travellog(DocHost *This)
+diff --git a/dlls/ieframe/events.c b/dlls/ieframe/events.c
+index 9c0711d..42e06e3 100644
+--- a/dlls/ieframe/events.c
++++ b/dlls/ieframe/events.c
+@@ -201,8 +201,7 @@ static HRESULT WINAPI EnumConnections_Next(IEnumConnections *iface, ULONG cConne
+             break;
+ 
+         pgcd[cnt].pUnk = (IUnknown*)This->cp->sinks[This->iter];
+-        pgcd[cnt].dwCookie = cnt+1;
+-        This->iter++;
++        pgcd[cnt].dwCookie = ++This->iter;
+         cnt++;
+     }
+ 
+diff --git a/dlls/ieframe/navigate.c b/dlls/ieframe/navigate.c
+index e8f6414..7a585e3 100644
+--- a/dlls/ieframe/navigate.c
++++ b/dlls/ieframe/navigate.c
+@@ -585,7 +585,10 @@ static const IHttpSecurityVtbl HttpSecurityVtbl = {
+ static BindStatusCallback *create_callback(DocHost *doc_host, LPCWSTR url, PBYTE post_data,
+         ULONG post_data_len, LPCWSTR headers)
+ {
+-    BindStatusCallback *ret = malloc(sizeof(BindStatusCallback));
++    BindStatusCallback *ret;
++
++    if(!(ret = malloc(sizeof(BindStatusCallback))))
++        return NULL;
+ 
+     ret->IBindStatusCallback_iface.lpVtbl = &BindStatusCallbackVtbl;
+     ret->IHttpNegotiate_iface.lpVtbl      = &HttpNegotiateVtbl;
+@@ -1022,8 +1025,9 @@ HRESULT navigate_url(DocHost *This, LPCWSTR url, const VARIANT *Flags,
+ 
+     if(post_array) {
+         LONG elem_max;
+-        SafeArrayAccessData(post_array, (void**)&post_data);
+-        SafeArrayGetUBound(post_array, 1, &elem_max);
++        if(FAILED(hres = SafeArrayAccessData(post_array, (void**)&post_data)) ||
++           FAILED(hres = SafeArrayGetUBound(post_array, 1, &elem_max)))
++            return hres;
+         post_data_len = (elem_max+1) * SafeArrayGetElemsize(post_array);
+     }
+ 
+@@ -1058,8 +1062,10 @@ HRESULT navigate_url(DocHost *This, LPCWSTR url, const VARIANT *Flags,
+         task_navigate_bsc_t *task;
+ 
+         task = malloc(sizeof(*task));
+-        task->bsc = create_callback(This, url, post_data, post_data_len, headers);
+-        push_dochost_task(This, &task->header, navigate_bsc_proc, navigate_bsc_task_destr, This->url == NULL);
++        if((task->bsc = create_callback(This, url, post_data, post_data_len, headers)))
++            push_dochost_task(This, &task->header, navigate_bsc_proc, navigate_bsc_task_destr, This->url == NULL);
++        else
++            hres = E_OUTOFMEMORY;
+     }
+ 
+     if(post_data)
+@@ -1110,8 +1116,10 @@ static HRESULT navigate_hlink(DocHost *This, IMoniker *mon, IBindCtx *bindctx,
+     if(This->doc_navigate) {
+         hres = async_doc_navigate(This, url, headers, post_data, post_data_len, FALSE);
+     }else {
+-        bsc = create_callback(This, url, post_data, post_data_len, headers);
+-        hres = navigate_bsc(This, bsc, mon);
++        if((bsc = create_callback(This, url, post_data, post_data_len, headers)))
++            hres = navigate_bsc(This, bsc, mon);
++        else
++            hres = E_OUTOFMEMORY;
+         IBindStatusCallback_Release(&bsc->IBindStatusCallback_iface);
+     }
+ 
+diff --git a/dlls/ieframe/oleobject.c b/dlls/ieframe/oleobject.c
+index c818b60..7c4c211 100644
+--- a/dlls/ieframe/oleobject.c
++++ b/dlls/ieframe/oleobject.c
+@@ -266,6 +266,7 @@ static HRESULT on_offlineconnected_change(WebBrowser *This)
+     else if(V_VT(&offline) != VT_EMPTY)
+         WARN("wrong V_VT(silent) %d\n", V_VT(&offline));
+ 
++    VariantClear(&offline);
+     return S_OK;
+ }
+ 
+@@ -280,6 +281,7 @@ static HRESULT on_silent_change(WebBrowser *This)
+     else if(V_VT(&silent) != VT_EMPTY)
+         WARN("wrong V_VT(silent) %d\n", V_VT(&silent));
+ 
++    VariantClear(&silent);
+     return S_OK;
+ }
+ 
+diff --git a/dlls/ieframe/webbrowser.c b/dlls/ieframe/webbrowser.c
+index 857287f..2af790f 100644
+--- a/dlls/ieframe/webbrowser.c
++++ b/dlls/ieframe/webbrowser.c
+@@ -1285,7 +1285,8 @@ static HRESULT create_webbrowser(int version, IUnknown *outer, REFIID riid, void
+     if (outer && !IsEqualIID(riid, &IID_IUnknown))
+         return CLASS_E_NOAGGREGATION;
+ 
+-    ret = calloc(1, sizeof(WebBrowser));
++    if (!(ret = calloc(1, sizeof(WebBrowser))))
++        return E_OUTOFMEMORY;
+ 
+     ret->IUnknown_inner.lpVtbl = &internal_unk_vtbl;
+     ret->IWebBrowser2_iface.lpVtbl = &WebBrowser2Vtbl;
+diff --git a/dlls/inetmib1/main.c b/dlls/inetmib1/main.c
+index 2f96791..157bab5 100644
+--- a/dlls/inetmib1/main.c
++++ b/dlls/inetmib1/main.c
+@@ -982,7 +982,7 @@ static BOOL mib2IpNetQuery(BYTE bPduType, SnmpVarBind *pVarBind,
+                 {
+                     *pErrorStatus = mapStructEntryToValue(mib2IpNetMap,
+                         DEFINE_SIZEOF(mib2IpNetMap),
+-                        &ipNetTable[tableIndex - 1], item, pVarBind);
++                        &ipNetTable->table[tableIndex - 1], item, pVarBind);
+                     if (!*pErrorStatus && bPduType == SNMP_PDU_GETNEXT)
+                         ret = setOidWithItemAndInteger(&pVarBind->name, &myOid,
+                             item, tableIndex);
+diff --git a/dlls/kernelbase/file.c b/dlls/kernelbase/file.c
+index 187d4a4..df87679 100644
+--- a/dlls/kernelbase/file.c
++++ b/dlls/kernelbase/file.c
+@@ -2734,7 +2734,8 @@ BOOL WINAPI DECLSPEC_HOTPATCH ReplaceFileW( const WCHAR *replaced, const WCHAR *
+     TRACE( "%s %s %s 0x%08lx %p %p\n", debugstr_w(replaced), debugstr_w(replacement), debugstr_w(backup),
+            flags, exclude, reserved );
+ 
+-    if (flags) FIXME("Ignoring flags %lx\n", flags);
++    if (flags & ~(REPLACEFILE_IGNORE_MERGE_ERRORS | REPLACEFILE_IGNORE_ACL_ERRORS))
++        FIXME("Ignoring flags %lx\n", flags);
+ 
+     /* First two arguments are mandatory */
+     if (!replaced || !replacement)
+diff --git a/dlls/mapi32/util.c b/dlls/mapi32/util.c
+index 3cd18bb..3f4f78a 100644
+--- a/dlls/mapi32/util.c
++++ b/dlls/mapi32/util.c
+@@ -989,7 +989,7 @@ static void load_mapi_provider(HKEY hkeyMail, LPCWSTR valueName, HMODULE *mapi_p
+ 
+                     /* Expand the path if necessary */
+                     dwExpandLen = ExpandEnvironmentStringsW(dllPath, NULL, 0);
+-                    dllPathExpanded = HeapAlloc(GetProcessHeap(), 0, sizeof(WCHAR) * dwExpandLen + 1);
++                    dllPathExpanded = HeapAlloc(GetProcessHeap(), 0, (dwExpandLen + 1) * sizeof(WCHAR));
+ 
+                     if (dllPathExpanded)
+                     {
+diff --git a/dlls/mf/copier.c b/dlls/mf/copier.c
+index ab995fb..9ebbb23 100644
+--- a/dlls/mf/copier.c
++++ b/dlls/mf/copier.c
+@@ -494,6 +494,11 @@ static HRESULT WINAPI sample_copier_transform_ProcessOutput(IMFTransform *iface,
+ 
+     TRACE("%p, %#lx, %lu, %p, %p.\n", iface, flags, count, buffers, status);
+ 
++    if (count != 1)
++        return E_INVALIDARG;
++
++    *status = buffers->dwStatus = 0;
++
+     EnterCriticalSection(&transform->cs);
+     if (!(transform->flags & SAMPLE_COPIER_OUTPUT_TYPE_SET))
+         hr = MF_E_TRANSFORM_TYPE_NOT_SET;
+diff --git a/dlls/mf/main.c b/dlls/mf/main.c
+index 537db31..80f1dab 100644
+--- a/dlls/mf/main.c
++++ b/dlls/mf/main.c
+@@ -652,7 +652,10 @@ static HRESULT mf_get_handler_strings(const WCHAR *path, WCHAR filter, unsigned
+         while (!RegEnumKeyExW(hkey, index++, buffW, &size, NULL, NULL, NULL, NULL))
+         {
+             if (filter && !wcschr(buffW, filter))
++            {
++                size = maxlen;
+                 continue;
++            }
+ 
+             if (FAILED(hr = prop_string_vector_append(dst, &capacity, i > 0, buffW)))
+                 break;
+diff --git a/dlls/mf/sac.c b/dlls/mf/sac.c
+index d5c6518..3514148 100644
+--- a/dlls/mf/sac.c
++++ b/dlls/mf/sac.c
+@@ -73,7 +73,11 @@ HRESULT enum_audio_capture_sources(IMFAttributes *attributes, IMFActivate ***ret
+         goto done;
+     if (FAILED(hr = IMMDeviceCollection_GetCount(devices, &count)))
+         goto done;
+-    sources = CoTaskMemAlloc(count * sizeof(*sources));
++    if (!(sources = CoTaskMemAlloc(count * sizeof(*sources))))
++    {
++        hr = E_OUTOFMEMORY;
++        goto done;
++    }
+     for (i = 0; i < count; ++i)
+     {
+         IMMDevice *device = NULL;
+diff --git a/dlls/mf/sar.c b/dlls/mf/sar.c
+index 19e4eed..01ef779 100644
+--- a/dlls/mf/sar.c
++++ b/dlls/mf/sar.c
+@@ -1456,10 +1456,10 @@ static HRESULT WINAPI audio_renderer_stream_Flush(IMFStreamSink *iface)
+             }
+             release_pending_object(obj);
+         }
++        renderer->queued_frames = 0;
++        if (renderer->audio_client && FAILED(hr = IAudioClient_Reset(renderer->audio_client)))
++            WARN("Failed to reset audio client, hr %#lx.\n", hr);
+     }
+-    renderer->queued_frames = 0;
+-    if (FAILED(hr = IAudioClient_Reset(renderer->audio_client)))
+-        WARN("Failed to reset audio client, hr %#lx.\n", hr);
+     LeaveCriticalSection(&renderer->cs);
+ 
+     return hr;
+diff --git a/dlls/mf/scheme_handler.c b/dlls/mf/scheme_handler.c
+index 7e92748..9efe0ff 100644
+--- a/dlls/mf/scheme_handler.c
++++ b/dlls/mf/scheme_handler.c
+@@ -406,8 +406,8 @@ static HRESULT WINAPI scheme_handler_callback_Invoke(IMFAsyncCallback *iface, IM
+                 hr = IMFSourceResolver_CreateObjectFromByteStream(resolver, stream, context->url, context->flags,
+                         context->props, &obj_type, &object);
+                 IMFSourceResolver_Release(resolver);
+-                IMFByteStream_Release(stream);
+             }
++            IMFByteStream_Release(stream);
+         }
+         else
+         {
+diff --git a/dlls/mf/topology.c b/dlls/mf/topology.c
+index 572d4d4..80e8916 100644
+--- a/dlls/mf/topology.c
++++ b/dlls/mf/topology.c
+@@ -123,6 +123,9 @@ static struct seq_source *impl_from_IMFMediaSourceTopologyProvider(IMFMediaSourc
+ 
+ static HRESULT topology_node_reserve_streams(struct node_streams *streams, DWORD index)
+ {
++    if (index == ~(DWORD)0)
++        return E_OUTOFMEMORY;
++
+     if (!mf_array_reserve((void **)&streams->streams, &streams->size, index + 1, sizeof(*streams->streams)))
+         return E_OUTOFMEMORY;
+ 
+@@ -863,7 +866,7 @@ static TOPOID topology_generate_id(void)
+     }
+     while (InterlockedCompareExchange64((LONG64 *)&next_topology_id, old + 1, old) != old);
+ 
+-    return next_topology_id;
++    return old + 1;
+ }
+ 
+ HRESULT create_topology(TOPOID id, IMFTopology **topology)
+diff --git a/dlls/mf/topology_loader.c b/dlls/mf/topology_loader.c
+index 73f70e6..692e591 100644
+--- a/dlls/mf/topology_loader.c
++++ b/dlls/mf/topology_loader.c
+@@ -581,7 +581,7 @@ static BOOL topology_node_get_object_attributes(IMFTopologyNode *node, IMFAttrib
+         return hr;
+     }
+ 
+-    return topology_node_get_object(node, &IID_IMFAttributes, (void **)&attributes);
++    return topology_node_get_object(node, &IID_IMFAttributes, (void **)attributes);
+ }
+ 
+ BOOL topology_node_is_d3d_aware(IMFTopologyNode *node)
+@@ -673,7 +673,7 @@ HRESULT topology_node_set_device_manager(IMFTopologyNode *node, IUnknown *device
+ 
+         for (i = 0; SUCCEEDED(hr) && i < count; i++)
+         {
+-            if (FAILED(IMFTopologyNode_GetInput(node, 0, &upstream, &output)))
++            if (FAILED(IMFTopologyNode_GetInput(node, i, &upstream, &output)))
+                 continue;
+ 
+             if (topology_node_is_d3d_aware(upstream))
+diff --git a/dlls/mfmediaengine/main.c b/dlls/mfmediaengine/main.c
+index 2ababd6..6fa1c42 100644
+--- a/dlls/mfmediaengine/main.c
++++ b/dlls/mfmediaengine/main.c
+@@ -1715,7 +1715,7 @@ static HRESULT WINAPI media_engine_GetCurrentSource(IMFMediaEngineEx *iface, BST
+ 
+     if (engine->flags & FLAGS_ENGINE_SHUT_DOWN)
+         hr = MF_E_SHUTDOWN;
+-    if (engine->current_source)
++    else if (engine->current_source)
+     {
+         if (!(*url = SysAllocString(engine->current_source)))
+             hr = E_OUTOFMEMORY;
+diff --git a/dlls/mfplat/buffer.c b/dlls/mfplat/buffer.c
+index 6d59245..049239e 100644
+--- a/dlls/mfplat/buffer.c
++++ b/dlls/mfplat/buffer.c
+@@ -1260,13 +1260,13 @@ static HRESULT WINAPI dxgi_buffer_GetSubresourceIndex(IMFDXGIBuffer *iface, UINT
+ static HRESULT WINAPI dxgi_buffer_GetUnknown(IMFDXGIBuffer *iface, REFIID guid, REFIID riid, void **object)
+ {
+     struct buffer *buffer = impl_from_IMFDXGIBuffer(iface);
++    HRESULT hr;
+ 
+     TRACE("%p, %s, %s, %p.\n", iface, debugstr_guid(guid), debugstr_guid(riid), object);
+ 
+-    if (attributes_GetUnknown(&buffer->dxgi_surface.attributes, guid, riid, object) == MF_E_ATTRIBUTENOTFOUND)
+-        return MF_E_NOT_FOUND;
++    hr = attributes_GetUnknown(&buffer->dxgi_surface.attributes, guid, riid, object);
+ 
+-    return S_OK;
++    return hr == MF_E_ATTRIBUTENOTFOUND ? MF_E_NOT_FOUND : hr;
+ }
+ 
+ static HRESULT WINAPI dxgi_buffer_SetUnknown(IMFDXGIBuffer *iface, REFIID guid, IUnknown *data)
+diff --git a/dlls/mfplat/main.c b/dlls/mfplat/main.c
+index a612994..ca5cb71 100644
+--- a/dlls/mfplat/main.c
++++ b/dlls/mfplat/main.c
+@@ -8623,6 +8623,8 @@ HRESULT WINAPI MFRegisterLocalByteStreamHandler(const WCHAR *extension, const WC
+         goto failed;
+     if (mime && !(handler->u.bytestream.mime = wcsdup(mime)))
+         goto failed;
++    handler->activate = activate;
++    IMFActivate_AddRef(handler->activate);
+ 
+     EnterCriticalSection(&local_handlers_section);
+     list_add_head(&local_bytestream_handlers, &handler->entry);
+diff --git a/dlls/mfplat/mediatype.c b/dlls/mfplat/mediatype.c
+index 10a92ad..5e9997a 100644
+--- a/dlls/mfplat/mediatype.c
++++ b/dlls/mfplat/mediatype.c
+@@ -2564,13 +2564,18 @@ static HRESULT WINAPI presentation_descriptor_Clone(IMFPresentationDescriptor *i
+     struct presentation_desc *presentation_desc = impl_from_IMFPresentationDescriptor(iface);
+     struct presentation_desc *object;
+     unsigned int i;
++    HRESULT hr;
+ 
+     TRACE("%p, %p.\n", iface, descriptor);
+ 
+     if (!(object = calloc(1, sizeof(*object))))
+         return E_OUTOFMEMORY;
+ 
+-    presentation_descriptor_init(object, presentation_desc->count);
++    if (FAILED(hr = presentation_descriptor_init(object, presentation_desc->count)))
++    {
++        free(object);
++        return hr;
++    }
+ 
+     EnterCriticalSection(&presentation_desc->attributes.cs);
+ 
+@@ -3119,6 +3124,9 @@ HRESULT WINAPI MFInitMediaTypeFromWaveFormatEx(IMFMediaType *mediatype, const WA
+ 
+     if (format->wFormatTag == WAVE_FORMAT_EXTENSIBLE)
+     {
++        if (format->cbSize < sizeof(WAVEFORMATEXTENSIBLE) - sizeof(WAVEFORMATEX))
++            return E_INVALIDARG;
++
+         memcpy(&subtype, &wfex->SubFormat, sizeof(subtype));
+ 
+         if (wfex->dwChannelMask)
+diff --git a/dlls/mfplat/sample.c b/dlls/mfplat/sample.c
+index 4d75924..a03e91e 100644
+--- a/dlls/mfplat/sample.c
++++ b/dlls/mfplat/sample.c
+@@ -1518,6 +1518,8 @@ static HRESULT WINAPI sample_allocator_InitializeSampleAllocator(IMFVideoSampleA
+ 
+     if (!sample_count)
+         return E_INVALIDARG;
++    if (!media_type)
++        return E_POINTER;
+ 
+     EnterCriticalSection(&allocator->cs);
+ 
+@@ -1613,6 +1615,9 @@ static HRESULT WINAPI sample_allocator_InitializeSampleAllocatorEx(IMFVideoSampl
+ 
+     TRACE("%p, %lu, %lu, %p, %p.\n", iface, initial_sample_count, max_sample_count, attributes, media_type);
+ 
++    if (!media_type)
++        return E_POINTER;
++
+     EnterCriticalSection(&allocator->cs);
+ 
+     hr = sample_allocator_initialize(allocator, initial_sample_count, max_sample_count, attributes, media_type);
+diff --git a/dlls/mfsrcsnk/media_source.c b/dlls/mfsrcsnk/media_source.c
+index 16bf0c0..5498451 100644
+--- a/dlls/mfsrcsnk/media_source.c
++++ b/dlls/mfsrcsnk/media_source.c
+@@ -479,7 +479,7 @@ static HRESULT media_source_start(struct media_source *source, IMFPresentationDe
+ 
+         if (FAILED(hr = IMFStreamDescriptor_GetStreamIdentifier(stream_descriptor, &id)))
+             WARN("Failed to get stream descriptor id, hr %#lx\n", hr);
+-        else if (id > source->stream_count)
++        else if (!id || id > source->stream_count)
+             WARN("Invalid stream descriptor id %lu, hr %#lx\n", id, hr);
+         else
+         {
+diff --git a/dlls/mfsrcsnk/wave.c b/dlls/mfsrcsnk/wave.c
+index cc5351a..9fa3533 100644
+--- a/dlls/mfsrcsnk/wave.c
++++ b/dlls/mfsrcsnk/wave.c
+@@ -935,6 +935,15 @@ HRESULT WINAPI MFCreateWAVEMediaSink(IMFByteStream *bytestream, IMFMediaType *me
+     if (!(object = calloc(1, sizeof(*object))))
+         return E_OUTOFMEMORY;
+ 
++    object->IMFFinalizableMediaSink_iface.lpVtbl = &wave_sink_vtbl;
++    object->IMFMediaEventGenerator_iface.lpVtbl = &wave_sink_events_vtbl;
++    object->IMFStreamSink_iface.lpVtbl = &wave_stream_sink_vtbl;
++    object->IMFClockStateSink_iface.lpVtbl = &wave_sink_clock_sink_vtbl;
++    object->IMFMediaTypeHandler_iface.lpVtbl = &wave_sink_type_handler_vtbl;
++    object->refcount = 1;
++    IMFByteStream_AddRef((object->bytestream = bytestream));
++    InitializeCriticalSection(&object->cs);
++
+     /* FIXME: do basic media type validation */
+ 
+     if (FAILED(hr = MFCreateWaveFormatExFromMFMediaType(media_type, &object->fmt, &size, 0)))
+@@ -947,15 +956,6 @@ HRESULT WINAPI MFCreateWAVEMediaSink(IMFByteStream *bytestream, IMFMediaType *me
+     object->fmt->nAvgBytesPerSec = object->fmt->nSamplesPerSec * object->fmt->nChannels * object->fmt->wBitsPerSample / 8;
+     object->fmt->nBlockAlign = object->fmt->nChannels * object->fmt->wBitsPerSample / 8;
+ 
+-    object->IMFFinalizableMediaSink_iface.lpVtbl = &wave_sink_vtbl;
+-    object->IMFMediaEventGenerator_iface.lpVtbl = &wave_sink_events_vtbl;
+-    object->IMFStreamSink_iface.lpVtbl = &wave_stream_sink_vtbl;
+-    object->IMFClockStateSink_iface.lpVtbl = &wave_sink_clock_sink_vtbl;
+-    object->IMFMediaTypeHandler_iface.lpVtbl = &wave_sink_type_handler_vtbl;
+-    object->refcount = 1;
+-    IMFByteStream_AddRef((object->bytestream = bytestream));
+-    InitializeCriticalSection(&object->cs);
+-
+     if (FAILED(hr = MFCreateEventQueue(&object->event_queue)))
+         goto failed;
+ 
+diff --git a/dlls/msado15/stream.c b/dlls/msado15/stream.c
+index 50833ae..ad58223 100644
+--- a/dlls/msado15/stream.c
++++ b/dlls/msado15/stream.c
+@@ -194,14 +194,17 @@ static HRESULT resize_buffer( struct stream *stream, LONG size )
+ static HRESULT WINAPI stream_put_Position( _Stream *iface, ADO_LONGPTR pos )
+ {
+     struct stream *stream = impl_from_Stream( iface );
+-    HRESULT hr;
+ 
+     TRACE( "%p, %Id\n", stream, pos );
+ 
+     if (stream->state == adStateClosed) return MAKE_ADO_HRESULT( adErrObjectClosed );
+     if (pos < 0) return MAKE_ADO_HRESULT( adErrInvalidArgument );
++    if (pos > stream->size)
++    {
++        WARN("Resizing stream buffer currently not supported\n");
++        return MAKE_ADO_HRESULT( adErrObjectNotSet );
++    }
+ 
+-    if ((hr = resize_buffer( stream, stream->pos )) != S_OK) return hr;
+     stream->pos = pos;
+     return S_OK;
+ }
+diff --git a/dlls/mshtml/pluginhost.c b/dlls/mshtml/pluginhost.c
+index c4a580e..69d2dd5 100644
+--- a/dlls/mshtml/pluginhost.c
++++ b/dlls/mshtml/pluginhost.c
+@@ -2398,7 +2398,7 @@ static ULONG WINAPI InstallCallback_AddRef(IBindStatusCallback *iface)
+ static ULONG WINAPI InstallCallback_Release(IBindStatusCallback *iface)
+ {
+     InstallCallback *This = impl_from_IBindStatusCallback(iface);
+-    LONG ref = InterlockedIncrement(&This->ref);
++    LONG ref = InterlockedDecrement(&This->ref);
+ 
+     TRACE("(%p) ref=%ld\n", This, ref);
+ 
+diff --git a/dlls/msimtf/activeimmapp.c b/dlls/msimtf/activeimmapp.c
+index f062ae2..a2c18b1 100644
+--- a/dlls/msimtf/activeimmapp.c
++++ b/dlls/msimtf/activeimmapp.c
+@@ -204,7 +204,7 @@ static HRESULT WINAPI ActiveIMMApp_GetCandidateListCountA(IActiveIMMApp* This,
+ static HRESULT WINAPI ActiveIMMApp_GetCandidateListCountW(IActiveIMMApp* This,
+         HIMC hIMC, DWORD *pdwListSize, DWORD *pdwBufLen)
+ {
+-   *pdwBufLen = ImmGetCandidateListCountA(hIMC, pdwListSize);
++    *pdwBufLen = ImmGetCandidateListCountW(hIMC, pdwListSize);
+     return S_OK;
+ }
+ 
+diff --git a/dlls/msvcp90/locale.c b/dlls/msvcp90/locale.c
+index 5ff2ad3..b80b7c1 100644
+--- a/dlls/msvcp90/locale.c
++++ b/dlls/msvcp90/locale.c
+@@ -9766,6 +9766,11 @@ ostreambuf_iterator_char* __thiscall time_put_char_put_format(const time_put *th
+             if(*pat == '#') {
+                 mod = '#';
+                 pat++;
++#if _MSVCP_VER >= 140
++            }else if(*pat == 'O') {
++                mod = 'O';
++                pat++;
++#endif
+             }else {
+                 mod = 0;
+             }
+diff --git a/dlls/msvcrt/except.c b/dlls/msvcrt/except.c
+index bcc8ff5..0cca3da 100644
+--- a/dlls/msvcrt/except.c
++++ b/dlls/msvcrt/except.c
+@@ -382,8 +382,7 @@ static DWORD cxx_frame_handler(EXCEPTION_RECORD *rec, ULONG_PTR frame,
+     cxx_exception_type *exc_type;
+     ULONG_PTR orig_frame = frame;
+     ULONG_PTR throw_base;
+-    DWORD throw_func_off;
+-    void *throw_func;
++    void *throw_func = NULL;
+     UINT i, j;
+     int unwindlevel = -1;
+ 
+@@ -401,9 +400,6 @@ static DWORD cxx_frame_handler(EXCEPTION_RECORD *rec, ULONG_PTR frame,
+         return ExceptionContinueSearch;  /* handle only c++ exceptions */
+ 
+     /* update orig_frame if it's a nested exception */
+-    throw_func_off = RtlLookupFunctionEntry(dispatch->ControlPc, &throw_base, NULL)->BeginAddress;
+-    throw_func = cxx_rva(throw_func_off, throw_base);
+-    TRACE("reconstructed handler pointer: %p\n", throw_func);
+     for (i=descr->tryblock_count; i>0; i--)
+     {
+         const tryblock_info *tryblock = cxx_rva(descr->tryblock, dispatch->ImageBase);
+@@ -411,6 +407,16 @@ static DWORD cxx_frame_handler(EXCEPTION_RECORD *rec, ULONG_PTR frame,
+ 
+         if (trylevel>tryblock->end_level && trylevel<=tryblock->catch_level)
+         {
++            if (!throw_func)
++            {
++                RUNTIME_FUNCTION *func = RtlLookupFunctionEntry(dispatch->ControlPc, &throw_base, NULL);
++
++                throw_func = func ? cxx_rva(func->BeginAddress, throw_base) : NULL;
++                if (!throw_func)
++                    ERR("no function entry for %p\n", (void *)dispatch->ControlPc);
++                else
++                    TRACE("reconstructed handler pointer: %p\n", throw_func);
++            }
+             for (j=0; j<tryblock->catchblock_count; j++)
+             {
+                 const catchblock_info *catchblock = cxx_rva(tryblock->catchblock, dispatch->ImageBase);
+diff --git a/dlls/msvcrt/exit.c b/dlls/msvcrt/exit.c
+index c8db6c4..555960e 100644
+--- a/dlls/msvcrt/exit.c
++++ b/dlls/msvcrt/exit.c
+@@ -298,7 +298,7 @@ void DECLSPEC_NORETURN CDECL _wassert(const wchar_t* str, const wchar_t* file, u
+      ((MSVCRT_error_mode == _OUT_TO_DEFAULT) && (MSVCRT_app_type == 2)))
+   {
+     wchar_t text[2048];
+-    _snwprintf(text, sizeof(text), L"File: %ls\nLine: %d\n\nExpression: \"%ls\"", file, line, str);
++    _snwprintf(text, ARRAY_SIZE(text), L"File: %ls\nLine: %d\n\nExpression: \"%ls\"", file, line, str);
+     DoMessageBoxW(L"Assertion failed!", text);
+   }
+   else
+diff --git a/dlls/msvcrt/file.c b/dlls/msvcrt/file.c
+index 0185362..f60b27a 100644
+--- a/dlls/msvcrt/file.c
++++ b/dlls/msvcrt/file.c
+@@ -284,6 +284,8 @@ static int MSVCRT_umask = 0;
+ /* INTERNAL: static data for tmpnam and _wtmpname functions */
+ static LONG tmpnam_unique;
+ static LONG tmpnam_s_unique;
++static LONG wtmpnam_unique;
++static LONG wtmpnam_s_unique;
+ 
+ #define TOUL(x) (ULONGLONG)(x)
+ static const ULONGLONG WCEXE = TOUL('e') << 32 | TOUL('x') << 16 | TOUL('e');
+@@ -915,51 +917,51 @@ static void remove_std_buffer(FILE *file)
+     file->_flag &= ~MSVCRT__USERBUF;
+ }
+ 
+-/* INTERNAL: Convert integer to base32 string (0-9a-v), 0 becomes "" */
+-static int msvcrt_int_to_base32(int num, char *str)
++/* INTERNAL: Convert integer to a string in the given base (0-9a-z), 0 becomes "" */
++static int msvcrt_int_to_base(unsigned int num, unsigned int base, char *str)
+ {
+   char *p;
+-  int n = num;
++  unsigned int n = num;
+   int digits = 0;
+ 
+   while (n != 0)
+   {
+-    n >>= 5;
++    n /= base;
+     digits++;
+   }
+   p = str + digits;
+   *p = 0;
+   while (--p >= str)
+   {
+-    *p = (num & 31) + '0';
++    *p = (num % base) + '0';
+     if (*p > '9')
+       *p += ('a' - '0' - 10);
+-    num >>= 5;
++    num /= base;
+   }
+ 
+   return digits;
+ }
+ 
+-/* INTERNAL: wide character version of msvcrt_int_to_base32 */
+-static int msvcrt_int_to_base32_w(int num, wchar_t *str)
++/* INTERNAL: wide character version of msvcrt_int_to_base */
++static int msvcrt_int_to_base_w(unsigned int num, unsigned int base, wchar_t *str)
+ {
+     wchar_t *p;
+-    int n = num;
++    unsigned int n = num;
+     int digits = 0;
+ 
+     while (n != 0)
+     {
+-        n >>= 5;
++        n /= base;
+         digits++;
+     }
+     p = str + digits;
+     *p = 0;
+     while (--p >= str)
+     {
+-        *p = (num & 31) + '0';
++        *p = (num % base) + '0';
+         if (*p > '9')
+             *p += ('a' - '0' - 10);
+-        num >>= 5;
++        num /= base;
+     }
+ 
+     return digits;
+@@ -5052,14 +5054,59 @@ void CDECL setbuf(FILE* file, char *buf)
+   setvbuf(file, buf, buf ? _IOFBF : _IONBF, BUFSIZ);
+ }
+ 
+-static int tmpnam_helper(char *s, size_t size, LONG *tmpnam_unique, int tmp_max)
++#if _MSVCR_VER >= 140
++static wchar_t tmpnam_dir[MAX_PATH];
++
++static BOOL WINAPI init_tmpnam_dir(INIT_ONCE *once, void *param, void **context)
++{
++    DWORD len = GetTempPathW(ARRAY_SIZE(tmpnam_dir), tmpnam_dir);
++
++    if (!len || len >= ARRAY_SIZE(tmpnam_dir))
++    {
++        tmpnam_dir[0] = '\\';
++        tmpnam_dir[1] = 0;
++    }
++    return TRUE;
++}
++
++/* INTERNAL: directory the tmpnam() family places its names in: the temporary
++ * directory as found on first use, kept for the lifetime of the process even
++ * if the environment changes or the directory does not exist */
++static const wchar_t *get_tmpnam_dir(void)
++{
++    static INIT_ONCE init_once = INIT_ONCE_STATIC_INIT;
++
++    InitOnceExecuteOnce(&init_once, init_tmpnam_dir, NULL, NULL);
++    return tmpnam_dir;
++}
++#endif
++
++static int tmpnam_helper(char *s, size_t size, LONG *tmpnam_unique, int tmp_max, char prefix)
+ {
+     char tmpstr[8];
+     char *p = s;
+     int digits;
++#if _MSVCR_VER >= 140
++    const wchar_t *dir;
++    size_t dir_len;
++#endif
+ 
+     if (!MSVCRT_CHECK_PMT(s != NULL)) return EINVAL;
+ 
++#if _MSVCR_VER >= 140
++    dir = get_tmpnam_dir();
++    dir_len = convert_wcs_to_acp_utf8(dir, NULL, 0) - 1;
++    if (size < dir_len + 2) {
++        if (size) *s = 0;
++        *_errno() = ERANGE;
++        return ERANGE;
++    }
++    convert_wcs_to_acp_utf8(dir, p, dir_len + 1);
++    p += dir_len;
++    *p++ = prefix;
++    size -= dir_len + 1;
++    digits = msvcrt_int_to_base(GetCurrentProcessId(), 36, tmpstr);
++#else
+     if (size < 3) {
+         if (size) *s = 0;
+         *_errno() = ERANGE;
+@@ -5068,7 +5115,8 @@ static int tmpnam_helper(char *s, size_t size, LONG *tmpnam_unique, int tmp_max)
+     *p++ = '\\';
+     *p++ = 's';
+     size -= 2;
+-    digits = msvcrt_int_to_base32(GetCurrentProcessId(), tmpstr);
++    digits = msvcrt_int_to_base(GetCurrentProcessId(), 32, tmpstr);
++#endif
+     if (digits+1 > size) {
+         *s = 0;
+         *_errno() = ERANGE;
+@@ -5085,7 +5133,16 @@ static int tmpnam_helper(char *s, size_t size, LONG *tmpnam_unique, int tmp_max)
+                 break;
+         }
+ 
+-        digits = msvcrt_int_to_base32(digits, tmpstr);
++#if _MSVCR_VER >= 140
++        digits = msvcrt_int_to_base(digits, 36, tmpstr);
++        if (!digits) {
++            tmpstr[0] = '0';
++            tmpstr[1] = 0;
++            digits = 1;
++        }
++#else
++        digits = msvcrt_int_to_base(digits, 32, tmpstr);
++#endif
+         if (digits+1 > size) {
+             *s = 0;
+             *_errno() = ERANGE;
+@@ -5103,7 +5160,7 @@ static int tmpnam_helper(char *s, size_t size, LONG *tmpnam_unique, int tmp_max)
+ 
+ int CDECL tmpnam_s(char *s, size_t size)
+ {
+-    return tmpnam_helper(s, size, &tmpnam_s_unique, TMP_MAX_S);
++    return tmpnam_helper(s, size, &tmpnam_s_unique, TMP_MAX_S, 'u');
+ }
+ 
+ /*********************************************************************
+@@ -5118,19 +5175,38 @@ char * CDECL tmpnam(char *s)
+       data->tmpnam_buffer = malloc(MAX_PATH);
+ 
+     s = data->tmpnam_buffer;
++    return tmpnam_helper(s, MAX_PATH, &tmpnam_unique, TMP_MAX, 's') ? NULL : s;
+   }
+ 
+-  return tmpnam_helper(s, -1, &tmpnam_unique, TMP_MAX) ? NULL : s;
++  return tmpnam_helper(s, -1, &tmpnam_unique, TMP_MAX, 's') ? NULL : s;
+ }
+ 
+-static int wtmpnam_helper(wchar_t *s, size_t size, LONG *tmpnam_unique, int tmp_max)
++static int wtmpnam_helper(wchar_t *s, size_t size, LONG *tmpnam_unique, int tmp_max, wchar_t prefix)
+ {
+     wchar_t tmpstr[8];
+     wchar_t *p = s;
+     int digits;
++#if _MSVCR_VER >= 140
++    const wchar_t *dir;
++    size_t dir_len;
++#endif
+ 
+     if (!MSVCRT_CHECK_PMT(s != NULL)) return EINVAL;
+ 
++#if _MSVCR_VER >= 140
++    dir = get_tmpnam_dir();
++    dir_len = wcslen(dir);
++    if (size < dir_len + 2) {
++        if (size) *s = 0;
++        *_errno() = ERANGE;
++        return ERANGE;
++    }
++    memcpy(p, dir, dir_len * sizeof(*dir));
++    p += dir_len;
++    *p++ = prefix;
++    size -= dir_len + 1;
++    digits = msvcrt_int_to_base_w(GetCurrentProcessId(), 36, tmpstr);
++#else
+     if (size < 3) {
+         if (size) *s = 0;
+         *_errno() = ERANGE;
+@@ -5139,7 +5215,8 @@ static int wtmpnam_helper(wchar_t *s, size_t size, LONG *tmpnam_unique, int tmp_
+     *p++ = '\\';
+     *p++ = 's';
+     size -= 2;
+-    digits = msvcrt_int_to_base32_w(GetCurrentProcessId(), tmpstr);
++    digits = msvcrt_int_to_base_w(GetCurrentProcessId(), 32, tmpstr);
++#endif
+     if (digits+1 > size) {
+         *s = 0;
+         *_errno() = ERANGE;
+@@ -5156,7 +5233,16 @@ static int wtmpnam_helper(wchar_t *s, size_t size, LONG *tmpnam_unique, int tmp_
+                 break;
+         }
+ 
+-        digits = msvcrt_int_to_base32_w(digits, tmpstr);
++#if _MSVCR_VER >= 140
++        digits = msvcrt_int_to_base_w(digits, 36, tmpstr);
++        if (!digits) {
++            tmpstr[0] = '0';
++            tmpstr[1] = 0;
++            digits = 1;
++        }
++#else
++        digits = msvcrt_int_to_base_w(digits, 32, tmpstr);
++#endif
+         if (digits+1 > size) {
+             *s = 0;
+             *_errno() = ERANGE;
+@@ -5177,7 +5263,7 @@ static int wtmpnam_helper(wchar_t *s, size_t size, LONG *tmpnam_unique, int tmp_
+  */
+ int CDECL _wtmpnam_s(wchar_t *s, size_t size)
+ {
+-    return wtmpnam_helper(s, size, &tmpnam_s_unique, TMP_MAX_S);
++    return wtmpnam_helper(s, size, &wtmpnam_s_unique, TMP_MAX_S, 'x');
+ }
+ 
+ /*********************************************************************
+@@ -5192,9 +5278,10 @@ wchar_t * CDECL _wtmpnam(wchar_t *s)
+             data->wtmpnam_buffer = malloc(sizeof(wchar_t[MAX_PATH]));
+ 
+         s = data->wtmpnam_buffer;
++        return wtmpnam_helper(s, MAX_PATH, &wtmpnam_unique, TMP_MAX, 'v') ? NULL : s;
+     }
+ 
+-    return wtmpnam_helper(s, -1, &tmpnam_unique, TMP_MAX) ? NULL : s;
++    return wtmpnam_helper(s, -1, &wtmpnam_unique, TMP_MAX, 'v') ? NULL : s;
+ }
+ 
+ /*********************************************************************
+diff --git a/dlls/msvcrt/heap.c b/dlls/msvcrt/heap.c
+index 70e4ecb..35ce2d8 100644
+--- a/dlls/msvcrt/heap.c
++++ b/dlls/msvcrt/heap.c
+@@ -580,6 +580,12 @@ void * CDECL _aligned_offset_malloc(size_t size, size_t alignment, size_t offset
+     if (alignment < sizeof(void *))
+         alignment = sizeof(void *);
+ 
++    if (size > (size_t)-1 - alignment - sizeof(void *))
++    {
++        *_errno() = ENOMEM;
++        return NULL;
++    }
++
+     /* allocate enough space for void pointer and alignment */
+     temp = malloc(size + alignment + sizeof(void *));
+ 
+@@ -669,6 +675,12 @@ void * CDECL _aligned_offset_realloc(void *memblock, size_t size,
+     }
+     old_size -= old_padding;
+ 
++    if (size > (size_t)-1 - alignment - sizeof(void *))
++    {
++        *_errno() = ENOMEM;
++        return NULL;
++    }
++
+     temp = realloc(*saved, size + alignment + sizeof(void *));
+ 
+     if (!temp)
+diff --git a/dlls/msvcrt/time.c b/dlls/msvcrt/time.c
+index b52bb87..3addaaa 100644
+--- a/dlls/msvcrt/time.c
++++ b/dlls/msvcrt/time.c
+@@ -1151,6 +1151,13 @@ static size_t strftime_impl(STRFTIME_CHAR *str, size_t max,
+             alternate = FALSE;
+         }
+ 
++#if _MSVCR_VER>=140
++        if(*format == 'O') {
++            format++;
++            FIXME("unsupported %%O%c\n", *format);
++        }
++#endif
++
+         if(!MSVCRT_CHECK_PMT(mstm))
+             goto einval_error;
+ 
+diff --git a/dlls/ncrypt/main.c b/dlls/ncrypt/main.c
+index f15527f..4f9983e 100644
+--- a/dlls/ncrypt/main.c
++++ b/dlls/ncrypt/main.c
+@@ -55,9 +55,16 @@ static struct object *allocate_object(enum object_type type)
+     struct object *ret;
+     if (!(ret = calloc(1, sizeof(*ret)))) return NULL;
+     ret->type = type;
++    ret->refs = 1;
+     return ret;
+ }
+ 
++static void provider_addref(NCRYPT_PROV_HANDLE handle)
++{
++    struct object *object = (struct object *)handle;
++    InterlockedIncrement(&object->refs);
++}
++
+ static struct object_property *get_object_property(struct object *object, const WCHAR *name)
+ {
+     unsigned int i;
+@@ -161,6 +168,7 @@ static struct object *create_key_object(enum algid algid, NCRYPT_PROV_HANDLE pro
+     set_object_property(object, NCRYPT_KEY_USAGE_PROPERTY, (BYTE *)&dw_value, sizeof(dw_value));
+     dw_value = 0;
+     set_object_property(object, NCRYPT_KEY_TYPE_PROPERTY, (BYTE *)&dw_value, sizeof(dw_value));
++    provider_addref(provider);
+     set_object_property(object, NCRYPT_PROVIDER_HANDLE_PROPERTY, (BYTE *)&provider, sizeof(provider));
+     return object;
+ }
+@@ -327,6 +335,8 @@ SECURITY_STATUS WINAPI NCryptFreeObject(NCRYPT_HANDLE handle)
+         break;
+     }
+     case STORAGE_PROVIDER:
++        if (InterlockedDecrement(&object->refs))
++            return 0;
+         break;
+ 
+     default:
+@@ -336,6 +346,9 @@ SECURITY_STATUS WINAPI NCryptFreeObject(NCRYPT_HANDLE handle)
+ 
+     for (i = 0; i < object->num_properties; i++)
+     {
++        if (!wcscmp(object->properties[i].key, NCRYPT_PROVIDER_HANDLE_PROPERTY))
++            NCryptFreeObject(*(NCRYPT_HANDLE *)object->properties[i].value);
++
+         free(object->properties[i].key);
+         free(object->properties[i].value);
+     }
+@@ -361,6 +374,8 @@ SECURITY_STATUS WINAPI NCryptGetProperty(NCRYPT_HANDLE handle, const WCHAR *name
+     if (outsize < property->value_size) return NTE_BUFFER_TOO_SMALL;
+ 
+     memcpy(output, property->value, property->value_size);
++    if (!wcscmp(name, NCRYPT_PROVIDER_HANDLE_PROPERTY))
++        provider_addref(*(NCRYPT_PROV_HANDLE*)property->value);
+     return ERROR_SUCCESS;
+ }
+ 
+@@ -540,6 +555,7 @@ SECURITY_STATUS WINAPI NCryptSetProperty(NCRYPT_HANDLE handle, const WCHAR *name
+     if (flags) FIXME("flags %#lx not supported\n", flags);
+ 
+     if (!object) return NTE_INVALID_HANDLE;
++    if (!wcscmp(name, NCRYPT_PROVIDER_HANDLE_PROPERTY)) return NTE_NOT_SUPPORTED;
+     return set_object_property(object, name, input, insize);
+ }
+ 
+diff --git a/dlls/ncrypt/ncrypt_internal.h b/dlls/ncrypt/ncrypt_internal.h
+index effb75d..3baffb0 100644
+--- a/dlls/ncrypt/ncrypt_internal.h
++++ b/dlls/ncrypt/ncrypt_internal.h
+@@ -54,6 +54,7 @@ struct object_property
+ struct object
+ {
+     enum object_type type;
++    LONG refs;
+     DWORD num_properties;
+     struct object_property *properties;
+     union
+diff --git a/dlls/ole32/ole2.c b/dlls/ole32/ole2.c
+index 964d5d9..09669cd 100644
+--- a/dlls/ole32/ole2.c
++++ b/dlls/ole32/ole2.c
+@@ -737,6 +737,9 @@ HRESULT WINAPI DoDragDrop (
+ 
+   TRACE("%p, %p, %#lx, %p.\n", pDataObject, pDropSource, dwOKEffect, pdwEffect);
+ 
++  if (!COM_CurrentInfo()->ole_inits)
++      return CO_E_NOTINITIALIZED;
++
+   if (!pDataObject || !pDropSource || !pdwEffect)
+       return E_INVALIDARG;
+ 
+diff --git a/dlls/oleaut32/typelib.c b/dlls/oleaut32/typelib.c
+index 1c481de..ad47f34 100644
+--- a/dlls/oleaut32/typelib.c
++++ b/dlls/oleaut32/typelib.c
+@@ -1978,7 +1978,7 @@ static HRESULT TLB_size_instance(ITypeInfoImpl *info, SYSKIND sys,
+         break;
+     case VT_VARIANT:
+         *size = sizeof(VARIANT);
+-        if(get_ptr_size(sys) != sizeof(void*))
++        if(ptr_size != sizeof(void*))
+             *size += is_win64 ? -8 : 8; /* 32-bit VARIANT is 8 bytes smaller than 64-bit VARIANT */
+         break;
+     case VT_DECIMAL:
+diff --git a/dlls/oleaut32/varformat.c b/dlls/oleaut32/varformat.c
+index 81407b4..17849e3 100644
+--- a/dlls/oleaut32/varformat.c
++++ b/dlls/oleaut32/varformat.c
+@@ -313,7 +313,7 @@ static const BYTE fmtMediumTime[0x11] =
+ 
+ static const BYTE fmtLongTime[0x0d] =
+ {
+-  0x0a,FMT_TYPE_DATE,sizeof(FMT_SHORT_HEADER),
++  0x0d,FMT_TYPE_DATE,sizeof(FMT_SHORT_HEADER),
+   0x0,0x0,0x0,0x0,0x0,
+   FMT_DATE_TIME_SYS,FMT_GEN_END
+ };
+@@ -1961,7 +1961,7 @@ static HRESULT VARIANT_FormatString(LPVARIANT pVarIn, LPOLESTR lpszFormat,
+   if ((strHeader->flags & (FMT_FLAG_LT|FMT_FLAG_GT)) == FMT_FLAG_GT)
+     bUpper = TRUE;
+   blanks_first = strHeader->copy_chars - lstrlenW(pSrc);
+-  pToken = (const BYTE*)strHeader + sizeof(FMT_DATE_HEADER);
++  pToken = (const BYTE*)strHeader + sizeof(FMT_STRING_HEADER);
+ 
+   while (*pToken != FMT_GEN_END)
+   {
+diff --git a/dlls/oleaut32/variant.c b/dlls/oleaut32/variant.c
+index 98be016..9c75a2c 100644
+--- a/dlls/oleaut32/variant.c
++++ b/dlls/oleaut32/variant.c
+@@ -1456,7 +1456,8 @@ HRESULT WINAPI VarUdateFromDate(DATE dateIn, ULONG dwFlags, UDATE *lpUdate)
+   lpUdate->st.wSecond = timePart;
+   timePart -= lpUdate->st.wSecond;
+   lpUdate->st.wMilliseconds = 0;
+-  if (timePart > 0.5)
++  if ((dateIn < DATE_MAX || lpUdate->st.wHour != 23 || lpUdate->st.wMinute != 59 ||
++              lpUdate->st.wSecond != 59) && timePart > 0.5)
+   {
+     /* Round the milliseconds, adjusting the time/date forward if needed */
+     if (lpUdate->st.wSecond < 59)
+diff --git a/dlls/quartz/filtermapper.c b/dlls/quartz/filtermapper.c
+index 98b8345..5a864ff 100644
+--- a/dlls/quartz/filtermapper.c
++++ b/dlls/quartz/filtermapper.c
+@@ -1351,7 +1351,7 @@ static HRESULT WINAPI FilterMapper_EnumMatchingFilters(
+         if (SUCCEEDED(hrSub))
+         {
+             len = (wcslen(V_BSTR(&var)) + 1) * sizeof(WCHAR);
+-            if (!(regfilters[idx].Name = CoTaskMemAlloc(len*2)))
++            if (!(regfilters[idx].Name = CoTaskMemAlloc(len)))
+                 hr = E_OUTOFMEMORY;
+         }
+ 
+diff --git a/dlls/quartz/window.c b/dlls/quartz/window.c
+index 50fee32..accc0df 100644
+--- a/dlls/quartz/window.c
++++ b/dlls/quartz/window.c
+@@ -849,6 +849,8 @@ static HRESULT WINAPI basic_video_get_VideoWidth(IBasicVideo *iface, LONG *width
+ 
+     if (!width)
+         return E_POINTER;
++    if (!window->pPin->peer)
++        return VFW_E_NOT_CONNECTED;
+ 
+     *width = get_bitmap_header(window)->biWidth;
+ 
+@@ -863,6 +865,8 @@ static HRESULT WINAPI basic_video_get_VideoHeight(IBasicVideo *iface, LONG *heig
+ 
+     if (!height)
+         return E_POINTER;
++    if (!window->pPin->peer)
++        return VFW_E_NOT_CONNECTED;
+ 
+     *height = abs(get_bitmap_header(window)->biHeight);
+ 
+diff --git a/dlls/shell32/shfldr_fs.c b/dlls/shell32/shfldr_fs.c
+index fabd27e..6125331 100644
+--- a/dlls/shell32/shfldr_fs.c
++++ b/dlls/shell32/shfldr_fs.c
+@@ -1232,7 +1232,7 @@ static WCHAR *build_paths_list(LPCWSTR wszBasePath, int cidl, const LPCITEMIDLIS
+     int i;
+     
+     iPathLen = lstrlenW(wszBasePath);
+-    wszPathsList = malloc(MAX_PATH * sizeof(WCHAR) * cidl + 1);
++    wszPathsList = malloc((MAX_PATH * cidl + 1) * sizeof(WCHAR));
+     wszListPos = wszPathsList;
+     
+     for (i = 0; i < cidl; i++) {
+diff --git a/dlls/tapi32/assisted.c b/dlls/tapi32/assisted.c
+index 2c19162..b464f64 100644
+--- a/dlls/tapi32/assisted.c
++++ b/dlls/tapi32/assisted.c
+@@ -89,21 +89,15 @@ DWORD WINAPI tapiGetLocationInfoW(LPWSTR countrycode, LPWSTR citycode)
+  */
+ DWORD WINAPI tapiGetLocationInfoA(LPSTR countrycode, LPSTR citycode)
+ {
+-    DWORD ret, len;
+-    LPWSTR country, city;
++    WCHAR countryW[8], cityW[8];
++    DWORD ret;
+ 
+-    len = MultiByteToWideChar( CP_ACP, 0, countrycode, -1, NULL, 0 );
+-    country = HeapAlloc( GetProcessHeap(), 0, len );
+-    MultiByteToWideChar( CP_ACP, 0, countrycode, -1, country, len );
+-
+-    len = MultiByteToWideChar( CP_ACP, 0, citycode, -1, NULL, 0 );
+-    city = HeapAlloc( GetProcessHeap(), 0, len );
+-    MultiByteToWideChar( CP_ACP, 0, citycode, -1, city, len );
+-
+-    ret = tapiGetLocationInfoW(country, city);
+-
+-    HeapFree( GetProcessHeap(), 0, city );
+-    HeapFree( GetProcessHeap(), 0, country );
++    ret = tapiGetLocationInfoW(countryW, cityW);
++    if(ret == 0)
++    {
++        WideCharToMultiByte(CP_ACP, 0, countryW, -1, countrycode, 8, NULL, NULL);
++        WideCharToMultiByte(CP_ACP, 0, cityW, -1, citycode, 8, NULL, NULL);
++    }
+     return ret;
+ }
+ 
+diff --git a/dlls/urlmon/session.c b/dlls/urlmon/session.c
+index 660fab5..b1518ce 100644
+--- a/dlls/urlmon/session.c
++++ b/dlls/urlmon/session.c
+@@ -278,13 +278,13 @@ IInternetProtocol *get_mime_filter(LPCWSTR mime)
+     }
+ 
+     res = RegOpenKeyW(hlist, mime, &hfilter);
+-    CloseHandle(hlist);
++    RegCloseKey(hlist);
+     if(res != ERROR_SUCCESS)
+         return NULL;
+ 
+     size = sizeof(clsidw);
+     res = RegQueryValueExW(hfilter, L"CLSID", NULL, &type, (BYTE*)clsidw, &size);
+-    CloseHandle(hfilter);
++    RegCloseKey(hfilter);
+     if(res!=ERROR_SUCCESS || type!=REG_SZ) {
+         WARN("Could not get filter CLSID for %s\n", debugstr_w(mime));
+         return NULL;
+diff --git a/dlls/windows.devices.enumeration/main.c b/dlls/windows.devices.enumeration/main.c
+index 081260d..552af14 100644
+--- a/dlls/windows.devices.enumeration/main.c
++++ b/dlls/windows.devices.enumeration/main.c
+@@ -60,7 +60,7 @@ static HRESULT WINAPI devquery_params_QueryInterface( IUnknown *iface, REFIID ii
+ 
+     *out = NULL;
+     FIXME( "%s not implemented, returning E_NOINTERFACE.\n", debugstr_guid( iid ) );
+-    return S_OK;
++    return E_NOINTERFACE;
+ }
+ 
+ static ULONG WINAPI devquery_params_AddRef( IUnknown *iface )
+diff --git a/dlls/windows.media.speech/vector.c b/dlls/windows.media.speech/vector.c
+index 05bbaf8..6a0104a 100644
+--- a/dlls/windows.media.speech/vector.c
++++ b/dlls/windows.media.speech/vector.c
+@@ -554,6 +554,7 @@ static HRESULT WINAPI vector_hstring_InsertAt( IVector_HSTRING *iface, UINT32 in
+         if (!(impl->elements = realloc(impl->elements, impl->capacity * sizeof(*impl->elements))))
+         {
+             impl->elements = tmp2;
++            WindowsDeleteString(tmp);
+             return E_OUTOFMEMORY;
+         }
+     }
+diff --git a/dlls/windowscodecs/ddsformat.c b/dlls/windowscodecs/ddsformat.c
+index a1ef19c..d523d3b 100644
+--- a/dlls/windowscodecs/ddsformat.c
++++ b/dlls/windowscodecs/ddsformat.c
+@@ -855,7 +855,7 @@ static HRESULT WINAPI DdsFrameDecode_CopyPixels(IWICBitmapFrameDecode *iface,
+     bpp = This->info.pixel_format_bpp;
+     if (!bpp) return WINCODEC_ERR_UNSUPPORTEDPIXELFORMAT;
+ 
+-    frame_stride = This->info.width * bpp / 8;
++    frame_stride = This->info.width * (bpp / 8);
+     frame_size = frame_stride * This->info.height;
+     if (!prc) {
+         if (cbStride < frame_stride) return E_INVALIDARG;
+@@ -870,7 +870,7 @@ static HRESULT WINAPI DdsFrameDecode_CopyPixels(IWICBitmapFrameDecode *iface,
+             y + height > This->info.height) {
+             return E_INVALIDARG;
+         }
+-        if (cbStride < width * bpp / 8) return E_INVALIDARG;
++        if (cbStride < width * (bpp / 8)) return E_INVALIDARG;
+         if (cbBufferSize < cbStride * height) return WINCODEC_ERR_INSUFFICIENTBUFFER;
+     }
+ 
+@@ -1431,6 +1431,10 @@ static HRESULT WINAPI DdsDecoder_Dds_GetFrame(IWICDdsDecoder *iface,
+         if (depth > 1) depth /= 2;
+     }
+ 
++    if (This->info.pixel_format_bpp && (frame_height == 0 || frame_width >= (UINT_MAX / (This->info.pixel_format_bpp / 8) / frame_height)))
++        /* Size calculation in CopyPixels may overflow */
++        return E_FAIL;
++
+     hr = DdsFrameDecode_CreateInstance(&frame_decode);
+     if (hr != S_OK) goto end;
+     frame_decode->info.width = frame_width;
+diff --git a/dlls/wmp/events.c b/dlls/wmp/events.c
+index 9f2b1cb..103dde8 100644
+--- a/dlls/wmp/events.c
++++ b/dlls/wmp/events.c
+@@ -172,10 +172,10 @@ static HRESULT WINAPI EnumConnections_Next(IEnumConnections *iface, ULONG cConne
+             break;
+ 
+         pgcd[cnt].pUnk = (IUnknown*)This->cp->sinks[This->iter];
++        IUnknown_AddRef(pgcd[cnt].pUnk);
+         pgcd[cnt].dwCookie = cnt+1;
+         This->iter++;
+         cnt++;
+-        IUnknown_AddRef(pgcd[cnt].pUnk);
+     }
+ 
+     if(pcFetched)
+diff --git a/dlls/ws2_32/protocol.c b/dlls/ws2_32/protocol.c
+index c0add6b..b005faf 100644
+--- a/dlls/ws2_32/protocol.c
++++ b/dlls/ws2_32/protocol.c
+@@ -1745,7 +1745,7 @@ int WINAPI WSAStringToAddressW( WCHAR *string, int family, WSAPROTOCOL_INFOW *pr
+ int WINAPI WSAAddressToStringA( struct sockaddr *addr, DWORD addr_len,
+                                 WSAPROTOCOL_INFOA *info, char *string, DWORD *string_len )
+ {
+-    char buffer[54]; /* 32 digits + 7':' + '[' + '%" + 5 digits + ']:' + 5 digits + '\0' */
++    char buffer[64];
+     DWORD size;
+ 
+     TRACE( "addr %s\n", debugstr_sockaddr(addr) );
+@@ -1836,7 +1836,7 @@ int WINAPI WSAAddressToStringW( struct sockaddr *addr, DWORD addr_len,
+                                 WSAPROTOCOL_INFOW *info, WCHAR *string, DWORD *string_len )
+ {
+     INT ret;
+-    char buf[54]; /* 32 digits + 7':' + '[' + '%" + 5 digits + ']:' + 5 digits + '\0' */
++    char buf[64];
+ 
+     TRACE( "(%p, %lu, %p, %p, %p)\n", addr, addr_len, info, string, string_len );
+ 
+diff --git a/include/winbase.h b/include/winbase.h
+index 0213b40..cbeefc8 100644
+--- a/include/winbase.h
++++ b/include/winbase.h
+@@ -906,6 +906,7 @@ typedef struct COPYFILE2_EXTENDED_PARAMETERS
+ 
+ #define REPLACEFILE_WRITE_THROUGH       0x00000001
+ #define REPLACEFILE_IGNORE_MERGE_ERRORS 0x00000002
++#define REPLACEFILE_IGNORE_ACL_ERRORS   0x00000004
+ 
+ #define FS_CASE_SENSITIVE               FILE_CASE_SENSITIVE_SEARCH
+ #define FS_CASE_IS_PRESERVED            FILE_CASE_PRESERVED_NAMES

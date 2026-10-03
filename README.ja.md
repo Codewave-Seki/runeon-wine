@@ -17,7 +17,7 @@ Runeon Wine は、Runeon の Steam Baseline runtime 用に公開されている�
 - 検証：`.14` は完全な x86_64/WoW64 ビルド、パッチセットとソースの検証、`tests/graphics-route-check.py`、クリーンな prefix でのルートあり/なしプロセスのモジュール識別プローブ（14 件すべて想定どおり）、署名、release readiness、および App `1.9 (1)` と `1.10 (0)` による認証付き Dev と Production の feed/ticket/全体ダウンロード確認に合格しました。ユーザーはインプレースアップグレードを含め Dev で問題が見つからなかったと報告し、2026-10-02 に Production を承認しました。この包括的な確認は、すべてのゲームや App 操作を個別に実測したことを意味しません。
 - 検証：`.13` は完全な x86_64/WoW64 ビルド、ポリシー無効/有効での上流 ntdll `unwind` と `exception` スイート、自己書き換えコードとマルチスレッド競合のプローブ、署名、release readiness、およびサポート対象 build による認証付き Dev と Production の feed/ticket/全体ダウンロード確認に合格しました。ユーザーは 2026-09-28 に Dev で問題が見つからなかったと報告し、Production を承認しました。この包括的な確認は、すべての Steam/CEF、ゲーム、App 操作を個別に実測したことを意味しません。
 - Production に保持する rollback ソース：seed `2026.09.26` の `cx26.3-wine11.0-runeon.11`、seed `2026.09.22` の `cx26.3-wine11.0-runeon.10`、seed `2026.09.13` の `cx26.3-wine11.0-runeon.9`、seed `2026.09.06` の `cx26.3-wine11.0-runeon.8`、seed `2026.08.11.1` の `cx26.3-wine11.0-runeon.6`、seed `2026.08.03.2` の `cx26.3-wine11.0-runeon.5`
-- 上流の監査済み範囲: `wine-11.15` まで（完全監査）。選別バックポートは `wine-11.18` まで
+- 上流の監査済み範囲: `wine-11.15` まで（完全監査）。選別バックポートは `wine-11.19` まで
 
 [`base/crossover-26.3-wine-11.0.json`](base/crossover-26.3-wine-11.0.json) は、ベースライン URL、SHA-256、およびソースルートに関する唯一の機械可読な情報源です。[`series`](series) がパッチの順序を定義し、[`patches/manifest.json`](patches/manifest.json) が出所、リスク、および完全な upstream commit ID を記録します。
 
