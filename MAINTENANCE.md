@@ -22,9 +22,9 @@ Runeon Wine accepts input from proactive upstream audits and diagnostics-driven 
 
 ## Current Wine 11.x review baseline
 
-Current Dev and Production source for App `>=1.10 (0)`: [`cx26.3-wine11.0-runeon.14`](patchsets/cx26.3-wine11.0-runeon.14/manifest.json) (stable/latest) for seed `2026.10.02`. It preserves `.13` and adds per-process graphics backend routing (`0109`). Build, `tests/graphics-route-check.py`, clean-prefix module identity probes, signing, readiness and Dev/Production distribution checks passed; the user reported no issues in Dev and authorized Production on 2026-10-02. Production promotes the exact signed Dev archive without rebuilding.
+Current Dev and Production source for App `>=1.10 (0)`: [`cx26.3-wine11.0-runeon.15`](patchsets/cx26.3-wine11.0-runeon.15/manifest.json) (stable/latest) for seed `2026.10.04`. It preserves `.14` and adds the dwrite emoji system fallback (`0110`) and targeted `wine-11.19` fixes (`0079`). Build, `tests/emoji-fallback-check.py`, signing, readiness and Dev/Production distribution checks passed; the user reported no issues in local and Dev acceptance and authorized Production on 2026-10-04. Production promotes the exact signed Dev archive without rebuilding.
 
-Current candidate: [`cx26.3-wine11.0-runeon.15`](patchsets/cx26.3-wine11.0-runeon.15/manifest.json) (Pre-release) preserves `.14` and adds the dwrite emoji system fallback (`0110`) and targeted `wine-11.19` fixes (`0079`); its seed, for App `>=1.10 (0)`, is in Dev validation and has not reached Production.
+`cx26.3-wine11.0-runeon.14` (stable) for seed `2026.10.02`, App `>=1.10 (0)`, is retained for rollback; it adds per-process graphics backend routing (`0109`) to `.13`.
 
 Earlier Apps (`>=1.8 (0)`) keep [`cx26.3-wine11.0-runeon.13`](patchsets/cx26.3-wine11.0-runeon.13/manifest.json) (stable) for seed `2026.09.28.1`. `.13` adds the upstream `RtlVirtualUnwind2` NULL-output fix, twelve further ntdll fixes and the opt-in Rosetta self-modifying code policy (`0107`, `0108`) to `.11`; the user authorized it for Production on 2026-09-28. Seed `2026.09.28.1` rebuilds the same `.13` source with SDL enabled and ships SDL2 `2.32.10`; real-controller acceptance is still pending. `.12` (seed `2026.09.27`) is a superseded Dev candidate, retained unchanged.
 
