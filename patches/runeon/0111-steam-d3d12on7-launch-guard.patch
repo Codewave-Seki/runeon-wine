@@ -1,0 +1,111 @@
+From: Runeon Contributors <dev@runeon.com>
+Subject: [PATCH] kernelbase: Add an opt-in Steam downlevel D3D12 launch gate.
+
+Extend the existing Steam middleware helper handoff with an independent
+session flag and a layout hint. Identity, effective OS version and registry
+policy remain the caller's responsibility. Unsupported creation semantics
+fall back to the original path. The existing NW.js selection has priority.
+No game identity or D3D12 loader behaviour is changed.
+
+--- a/dlls/kernelbase/process.c
++++ b/dlls/kernelbase/process.c
+@@ -43,10 +43,11 @@
+ 
+ /* Only the Steam middleware's own process creation is eligible. The App
+  * decides runtime versions and protection; Wine knows no game identifiers. */
+-static NTSTATUS runeon_nwjs_launch_command( RTL_USER_PROCESS_PARAMETERS *params, WCHAR **command )
++static NTSTATUS runeon_nwjs_launch_command( RTL_USER_PROCESS_PARAMETERS *params,
++                                            BOOL allow_guard, WCHAR **command )
+ {
+     static const WCHAR *files[] = { L"nw.dll", L"nw_elf.dll", L"package.json" };
+-    const WCHAR *argument, *end;
++    const WCHAR *argument, *end, *mode = NULL;
+     const WCHAR *parent = NtCurrentTeb()->Peb->ProcessParameters->ImagePathName.Buffer;
+     WCHAR enabled[2], grant[65], appid[32], path[32768], *name;
+     UNICODE_STRING key, value;
+@@ -56,7 +57,7 @@
+     NTSTATUS status;
+     size_t length, directory_length;
+     unsigned int i;
+-    BOOL nonzero = FALSE;
++    BOOL nonzero = FALSE, nwjs, guard;
+ 
+     *command = NULL;
+     if (!parent) return STATUS_SUCCESS;
+@@ -82,8 +83,12 @@
+     RtlInitUnicodeString( &key, L"RUNEON_NWJS_AUTO_V1" );
+     value.Buffer = enabled;
+     value.MaximumLength = sizeof(enabled);
+-    if (RtlQueryEnvironmentVariable_U( params->Environment, &key, &value )
+-        || value.Length != sizeof(WCHAR) || enabled[0] != '1') return STATUS_SUCCESS;
++    nwjs = !RtlQueryEnvironmentVariable_U( params->Environment, &key, &value )
++           && value.Length == sizeof(WCHAR) && enabled[0] == '1';
++    RtlInitUnicodeString( &key, L"RUNEON_D3D12ON7_GUARD_V1" );
++    guard = allow_guard && !RtlQueryEnvironmentVariable_U( params->Environment, &key, &value )
++            && value.Length == sizeof(WCHAR) && enabled[0] == '1';
++    if (!nwjs && !guard) return STATUS_SUCCESS;
+ 
+     RtlInitUnicodeString( &key, L"RUNEON_INPUT_SOURCE_GRANT" );
+     value.Buffer = grant;
+@@ -125,23 +130,36 @@
+     path[length] = 0;
+     if (!(name = wcsrchr( path, '\\' ))) return STATUS_SUCCESS;
+     directory_length = name + 1 - path;
+-    for (i = 0; i < ARRAY_SIZE(files); i++)
+-    {
+-        if (directory_length + wcslen(files[i]) >= ARRAY_SIZE(path)) return STATUS_SUCCESS;
+-        wcscpy( path + directory_length, files[i] );
++    if (nwjs)
++    {
++        for (i = 0; i < ARRAY_SIZE(files); i++)
++        {
++            if (directory_length + wcslen(files[i]) >= ARRAY_SIZE(path)) break;
++            wcscpy( path + directory_length, files[i] );
++            attributes = GetFileAttributesW( path );
++            if (attributes == INVALID_FILE_ATTRIBUTES || (attributes & FILE_ATTRIBUTE_DIRECTORY)) break;
++        }
++        if (i == ARRAY_SIZE(files)) mode = L"nwjs-auto";
++    }
++    /* This is only a layout hint. The helper must validate identity and
++     * the effective Windows version before changing a DLL override. */
++    if (!mode && guard && directory_length + wcslen(L"12on7\\d3d12.dll") < ARRAY_SIZE(path))
++    {
++        wcscpy( path + directory_length, L"12on7\\d3d12.dll" );
+         attributes = GetFileAttributesW( path );
+-        if (attributes == INVALID_FILE_ATTRIBUTES || (attributes & FILE_ATTRIBUTE_DIRECTORY))
+-            return STATUS_SUCCESS;
+-    }
++        if (attributes != INVALID_FILE_ATTRIBUTES && !(attributes & FILE_ATTRIBUTE_DIRECTORY))
++            mode = L"d3d12on7-guard";
++    }
++    if (!mode) return STATUS_SUCCESS;
+     attributes = GetFileAttributesW( runeon_nwjs_wrapperW );
+     if (attributes == INVALID_FILE_ATTRIBUTES || (attributes & FILE_ATTRIBUTE_DIRECTORY)) return STATUS_SUCCESS;
+ 
+     length = wcslen(runeon_nwjs_wrapperW) + params->CommandLine.Length / sizeof(WCHAR)
+-             + wcslen(L"\"\" --runtime nwjs-auto -- ") + 1;
++             + wcslen(L"\"\" --runtime  -- ") + wcslen(mode) + 1;
+     if (length >= 32767) return STATUS_SUCCESS;
+     if (!(*command = HeapAlloc( GetProcessHeap(), 0, length * sizeof(WCHAR) ))) return STATUS_SUCCESS;
+-    swprintf( *command, length, L"\"%s\" --runtime nwjs-auto -- %s",
+-              runeon_nwjs_wrapperW, params->CommandLine.Buffer );
++    swprintf( *command, length, L"\"%s\" --runtime %s -- %s",
++              runeon_nwjs_wrapperW, mode, params->CommandLine.Buffer );
+     return STATUS_SUCCESS;
+ }
+ 
+@@ -952,7 +970,13 @@
+ 
+     if (!(flags & (DEBUG_PROCESS | DEBUG_ONLY_THIS_PROCESS)))
+     {
+-        if ((status = runeon_nwjs_launch_command( params, &nwjs_cmdline ))) goto done;
++        /* The guard helper forwards ordinary launches. Do not wrap calls whose
++         * token, inherited handles or extended attributes cannot be forwarded. */
++        BOOL allow_guard = !token && !inherit && !process_attr && !thread_attr
++                           && !startup_info->dwFlags && !startup_info->cbReserved2
++                           && !startup_info->lpTitle
++                           && !(flags & ~CREATE_UNICODE_ENVIRONMENT);
++        if ((status = runeon_nwjs_launch_command( params, allow_guard, &nwjs_cmdline ))) goto done;
+         if (nwjs_cmdline)
+         {
+             RtlInitUnicodeString( &params->ImagePathName, runeon_nwjs_wrapperW );

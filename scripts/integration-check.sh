@@ -42,6 +42,12 @@ if grep -Fq 'L"Segoe UI Emoji"' "$candidate_root/dlls/dwrite/analyzer.c"; then
     || die "dwrite emoji fallback check failed"
 fi
 
+# The optional Steam downlevel selector is checked from the patched function.
+if grep -Fq 'RUNEON_D3D12ON7_GUARD_V1' "$candidate_root/dlls/kernelbase/process.c"; then
+  python3 "$script_dir/../tests/d3d12on7-launch-check.py" "$candidate_root" >/dev/null \
+    || die "Steam downlevel selector check failed"
+fi
+
 if "$script_dir/apply-series.sh" "$candidate_root" >"$temp_root/reapply.stdout" 2>"$temp_root/reapply.stderr"; then
   die "a second patch application unexpectedly succeeded"
 fi
