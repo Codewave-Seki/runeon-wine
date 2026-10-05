@@ -4,7 +4,7 @@ Subject: [PATCH] kernelbase: Prepare downlevel D3D12 before Steam child creation
 Add an opt-in layout hint to the existing Steam middleware selector. Run a
 fixed preparation-only helper synchronously, preserving the original child,
 creation flags and returned handles. Serialize preparation through creation
-by working directory. Identity, OS version and registry policy remain the
+by executable directory. Identity, OS version and registry policy remain the
 caller's responsibility. The existing NW.js handoff has priority.
 No game identity or D3D12 loader behaviour is changed.
 
@@ -100,7 +100,7 @@ No game identity or D3D12 loader behaviour is changed.
      return STATUS_SUCCESS;
  }
  
-@@ -827,6 +848,61 @@
+@@ -827,6 +848,64 @@
      return ret;
  }
  
@@ -113,6 +113,7 @@ No game identity or D3D12 loader behaviour is changed.
 +    RTL_USER_PROCESS_INFORMATION info = {0};
 +    STARTUPINFOW startup = { .cb = sizeof(startup) };
 +    const WCHAR *cwd = original->CurrentDirectory.DosPath.Buffer;
++    const WCHAR *image = original->ImagePathName.Buffer;
 +    WCHAR name[80];
 +    ULONGLONG scope = 14695981039346656037ULL;
 +    HANDLE mutex;
@@ -121,10 +122,12 @@ No game identity or D3D12 loader behaviour is changed.
 +    unsigned int i, length;
 +
 +    *lock = NULL;
-+    if (!cwd || !*cwd) return STATUS_SUCCESS;
-+    length = original->CurrentDirectory.DosPath.Length / sizeof(WCHAR);
-+    while (length > 3 && cwd[length - 1] == '\\') length--;
-+    for (i = 0; i < length; i++) { scope ^= RtlDowncaseUnicodeChar(cwd[i]); scope *= 1099511628211ULL; }
++    if (!image || !cwd || !*cwd) return STATUS_SUCCESS;
++    length = original->ImagePathName.Length / sizeof(WCHAR);
++    while (length && image[length - 1] != '\\') length--;
++    if (length < 3) return STATUS_SUCCESS;
++    while (length > 3 && image[length - 1] == '\\') length--;
++    for (i = 0; i < length; i++) { scope ^= RtlDowncaseUnicodeChar(image[i]); scope *= 1099511628211ULL; }
 +    swprintf( name, ARRAY_SIZE(name), L"Local\\RuneonD3D12On7GuardV1-%016llx", scope );
 +    if (!(mutex = CreateMutexW( NULL, FALSE, name ))) return STATUS_SUCCESS;
 +    acquired = WaitForSingleObject( mutex, INFINITE );
@@ -162,7 +165,7 @@ No game identity or D3D12 loader behaviour is changed.
  /**********************************************************************
   *           CreateProcessInternalW   (kernelbase.@)
   */
-@@ -842,7 +918,8 @@
+@@ -842,7 +921,8 @@
      WCHAR *p, *tidy_cmdline = cmd_line, *nwjs_cmdline = NULL;
      RTL_USER_PROCESS_PARAMETERS *params = NULL;
      RTL_USER_PROCESS_INFORMATION rtl_info = { 0 };
@@ -172,7 +175,7 @@ No game identity or D3D12 loader behaviour is changed.
      ULONG nt_flags = 0;
      USHORT machine = 0;
      NTSTATUS status;
-@@ -853,7 +930,8 @@
+@@ -853,7 +933,8 @@
  
      /* Process the AppName and/or CmdLine to get module name and path */
  
@@ -182,7 +185,7 @@ No game identity or D3D12 loader behaviour is changed.
  
      if (new_token) FIXME( "No support for returning created process token\n" );
  
-@@ -952,8 +1030,15 @@
+@@ -952,8 +1033,15 @@
  
      if (!(flags & (DEBUG_PROCESS | DEBUG_ONLY_THIS_PROCESS)))
      {
@@ -200,7 +203,7 @@ No game identity or D3D12 loader behaviour is changed.
          {
              RtlInitUnicodeString( &params->ImagePathName, runeon_nwjs_wrapperW );
              RtlInitUnicodeString( &params->CommandLine, nwjs_cmdline );
-@@ -1077,6 +1162,11 @@
+@@ -1077,6 +1165,11 @@
      }
  
   done:

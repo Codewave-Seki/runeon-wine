@@ -133,13 +133,14 @@ typedef struct { unsigned cb; } STARTUPINFOW;
 #define INFINITE (~0u)
 static int prepared, resumed, waited, lock_held, prepare_failure;
 static WCHAR lock_name[80];
+static const WCHAR *expected_cwd = L"C:\\Games\\Example";
 static WCHAR RtlDowncaseUnicodeChar(WCHAR c) { return towlower(c); }
 static RTL_USER_PROCESS_PARAMETERS helper_params;
 static HANDLE CreateMutexW(void *a,BOOL b,const WCHAR *name) { assert(wcsstr(name,L"RuneonD3D12On7GuardV1-")); wcscpy(lock_name,name); return prepare_failure==1 ? NULL : (HANDLE)3; }
 static DWORD WaitForSingleObject(HANDLE h,DWORD ms) { assert(ms==INFINITE); lock_held=1; return WAIT_OBJECT_0; }
 static RTL_USER_PROCESS_PARAMETERS *create_process_params(const WCHAR *exe,const WCHAR *command,const WCHAR *cwd,void *env,DWORD flags,STARTUPINFOW *startup) {
     assert(lock_held && !wcscmp(exe,runeon_nwjs_wrapperW));
-    assert(wcsstr(command,L"d3d12on7-prepare") && !wcsncmp(cwd,L"C:\\Games\\Example",16));
+    assert(wcsstr(command,L"d3d12on7-prepare") && !wcscmp(cwd,expected_cwd));
     assert(env==(void *)99 && flags==(CREATE_UNICODE_ENVIRONMENT|CREATE_NO_WINDOW));
     assert(startup->cb==sizeof(*startup));
     return prepare_failure==2 ? NULL : &helper_params;
@@ -179,8 +180,13 @@ static void check_preparation(void) {
     HANDLE mutex;
     WCHAR without_slash[80];
     assert(!runeon_d3d12on7_prepare(&p,command,&mutex)); wcscpy(without_slash,lock_name);
-    RtlInitUnicodeString(&p.CurrentDirectory.DosPath,L"C:\\Games\\Example\\");
+    expected_cwd=L"C:\\OtherWorkingDirectory\\";
+    RtlInitUnicodeString(&p.CurrentDirectory.DosPath,expected_cwd);
     assert(!runeon_d3d12on7_prepare(&p,command,&mutex) && !wcscmp(without_slash,lock_name));
+    RtlInitUnicodeString(&p.ImagePathName,L"c:\\games\\example\\other.exe");
+    assert(!runeon_d3d12on7_prepare(&p,command,&mutex) && !wcscmp(without_slash,lock_name));
+    RtlInitUnicodeString(&p.ImagePathName,L"C:\\Games\\Different\\game.exe");
+    assert(!runeon_d3d12on7_prepare(&p,command,&mutex) && wcscmp(without_slash,lock_name));
 }
 '''
 

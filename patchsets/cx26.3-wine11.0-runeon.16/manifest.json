@@ -1910,7 +1910,7 @@
     {
       "order": 129,
       "path": "patches/runeon/0111-steam-d3d12on7-launch-guard.patch",
-      "sha256": "77c146fa3ef49ad5c55d6440d5cd3a0b7eac416733fb1f981968255648ce585a",
+      "sha256": "b0e7e19e105b3a9e66f02a6b4aab0a34f80356fe66810ed7dc8f1775d07d0d96",
       "kind": "runeon-product",
       "status": "active",
       "risk": "medium",
