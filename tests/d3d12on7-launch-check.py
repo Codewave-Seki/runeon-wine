@@ -20,10 +20,11 @@ PRELUDE = r'''
 typedef wchar_t WCHAR; typedef int BOOL; typedef unsigned DWORD;
 typedef int NTSTATUS; typedef void *HANDLE;
 typedef struct { size_t Length, MaximumLength; WCHAR *Buffer; } UNICODE_STRING;
-typedef struct { UNICODE_STRING ImagePathName, CommandLine; void *Environment; } RTL_USER_PROCESS_PARAMETERS;
+typedef struct { UNICODE_STRING ImagePathName, CommandLine; void *Environment; struct { UNICODE_STRING DosPath; } CurrentDirectory; } RTL_USER_PROCESS_PARAMETERS;
 typedef struct { RTL_USER_PROCESS_PARAMETERS *ProcessParameters; } PEB;
 typedef struct { PEB *Peb; } TEB;
 typedef struct { int Machine, ImageCharacteristics; } SECTION_IMAGE_INFORMATION;
+#define TRACE(...)
 #define TRUE 1
 #define FALSE 0
 #define STATUS_SUCCESS 0
@@ -78,6 +79,7 @@ static void *HeapAlloc(void *h,int f,size_t n) { return fail==6 ? NULL : malloc(
 '''
 TEST = r'''
 #define CREATE_UNICODE_ENVIRONMENT 0x400
+#define EXTENDED_STARTUPINFO_PRESENT 0x80000
 struct startup { DWORD dwFlags; unsigned short cbReserved2; void *lpTitle; };
 static int gate(HANDLE token, BOOL inherit, void *process_attr, void *thread_attr,
                 DWORD flags, struct startup *startup_info) {
@@ -85,33 +87,32 @@ static int gate(HANDLE token, BOOL inherit, void *process_attr, void *thread_att
     return allow_guard;
 }
 static void check(RTL_USER_PROCESS_PARAMETERS *p, int allow, const WCHAR *mode) {
-    WCHAR *out=(void *)1;
-    assert(!runeon_nwjs_launch_command(p,allow,&out));
-    if(!mode) assert(!out);
-    else { assert(out && wcsstr(out,mode)); size_t n=wcslen(out), m=wcslen(p->CommandLine.Buffer);
+    WCHAR *out=(void *)1; BOOL prepare=TRUE;
+    assert(!runeon_nwjs_launch_command(p,allow,&out,&prepare));
+    if(!mode) assert(!out && !prepare);
+    else { assert(prepare == !wcscmp(mode,L"d3d12on7-prepare")); assert(out && wcsstr(out,mode)); size_t n=wcslen(out), m=wcslen(p->CommandLine.Buffer);
         assert(n>=m && !wcscmp(out+n-m,p->CommandLine.Buffer)); free(out); }
 }
 int main(void) {
     struct startup startup = {0};
     assert(gate(0,0,0,0,0,&startup)); assert(gate(0,0,0,0,CREATE_UNICODE_ENVIRONMENT,&startup));
-    for (unsigned bit=1;bit;bit<<=1) if(bit!=CREATE_UNICODE_ENVIRONMENT) assert(!gate(0,0,0,0,bit,&startup));
-    assert(!gate((HANDLE)1,0,0,0,0,&startup)); assert(!gate(0,1,0,0,0,&startup));
-    assert(!gate(0,0,(void *)1,0,0,&startup)); assert(!gate(0,0,0,(void *)1,0,&startup));
-    startup.dwFlags=1; assert(!gate(0,0,0,0,0,&startup)); startup.dwFlags=0;
-    startup.cbReserved2=4; assert(!gate(0,0,0,0,0,&startup)); startup.cbReserved2=0;
-    startup.lpTitle=(void *)1; assert(!gate(0,0,0,0,0,&startup));
+    assert(gate(0,1,(void *)1,(void *)1,4,&startup));
+    assert(!gate((HANDLE)1,0,0,0,0,&startup));
+    assert(!gate(0,0,0,0,EXTENDED_STARTUPINFO_PRESENT,&startup));
+    startup.dwFlags=1; startup.cbReserved2=4; startup.lpTitle=(void *)1;
+    assert(gate(0,1,(void *)1,(void *)1,4,&startup));
     RTL_USER_PROCESS_PARAMETERS p = {0};
     RtlInitUnicodeString(&parent.ImagePathName,L"C:\\Steam\\steam.exe");
     RtlInitUnicodeString(&p.ImagePathName,L"C:\\Games\\Example\\game.exe");
     RtlInitUnicodeString(&p.CommandLine,L"\"C:\\Games\\Example\\game.exe\" -x \"two words\"");
-    layout=1; check(&p,1,NULL); guard=1; check(&p,1,L"d3d12on7-guard"); check(&p,0,NULL);
+    layout=1; check(&p,1,NULL); guard=1; check(&p,1,L"d3d12on7-prepare"); check(&p,0,NULL);
     layout=0; check(&p,1,NULL); layout=1;
     grant_ok=0; check(&p,1,NULL); grant_ok=1; app_ok=0; check(&p,1,NULL); app_ok=1;
     RtlInitUnicodeString(&parent.ImagePathName,L"C:\\not-steam.exe"); check(&p,1,NULL);
-    RtlInitUnicodeString(&parent.ImagePathName,L"C:\\Steam\\STEAM.EXE"); check(&p,1,L"d3d12on7-guard");
+    RtlInitUnicodeString(&parent.ImagePathName,L"C:\\Steam\\STEAM.EXE"); check(&p,1,L"d3d12on7-prepare");
     for(fail=1;fail<=6;fail++) check(&p,1,NULL); fail=0;
     nwjs=1; layout=3; check(&p,1,L"nwjs-auto"); guard=0; check(&p,1,L"nwjs-auto");
-    layout=1; check(&p,1,NULL); guard=1; check(&p,1,L"d3d12on7-guard");
+    layout=1; check(&p,1,NULL); guard=1; check(&p,1,L"d3d12on7-prepare");
     RtlInitUnicodeString(&p.CommandLine,L"\"C:\\other.exe\""); check(&p,1,NULL);
     RtlInitUnicodeString(&p.CommandLine,L"\"C:\\Games\\Example\\game.exe\"suffix"); check(&p,1,NULL);
     RtlInitUnicodeString(&p.CommandLine,L"\"C:\\Games\\Example\\game.exe\"\n"); check(&p,1,NULL);
@@ -121,6 +122,68 @@ int main(void) {
     puts("Steam layout selector: selector and actual creation gate passed; no runtime execution");
 }
 '''
+PREPARE_PRELUDE = r'''
+typedef unsigned long long ULONGLONG;
+typedef struct { HANDLE Process, Thread; } RTL_USER_PROCESS_INFORMATION;
+typedef struct { unsigned cb; } STARTUPINFOW;
+#define CREATE_NO_WINDOW 0x8000000
+#define CREATE_UNICODE_ENVIRONMENT 0x400
+#define WAIT_OBJECT_0 0
+#define WAIT_ABANDONED 128
+#define INFINITE (~0u)
+static int prepared, resumed, waited, lock_held, prepare_failure;
+static WCHAR lock_name[80];
+static WCHAR RtlDowncaseUnicodeChar(WCHAR c) { return towlower(c); }
+static RTL_USER_PROCESS_PARAMETERS helper_params;
+static HANDLE CreateMutexW(void *a,BOOL b,const WCHAR *name) { assert(wcsstr(name,L"RuneonD3D12On7GuardV1-")); wcscpy(lock_name,name); return prepare_failure==1 ? NULL : (HANDLE)3; }
+static DWORD WaitForSingleObject(HANDLE h,DWORD ms) { assert(ms==INFINITE); lock_held=1; return WAIT_OBJECT_0; }
+static RTL_USER_PROCESS_PARAMETERS *create_process_params(const WCHAR *exe,const WCHAR *command,const WCHAR *cwd,void *env,DWORD flags,STARTUPINFOW *startup) {
+    assert(lock_held && !wcscmp(exe,runeon_nwjs_wrapperW));
+    assert(wcsstr(command,L"d3d12on7-prepare") && !wcsncmp(cwd,L"C:\\Games\\Example",16));
+    assert(env==(void *)99 && flags==(CREATE_UNICODE_ENVIRONMENT|CREATE_NO_WINDOW));
+    assert(startup->cb==sizeof(*startup));
+    return prepare_failure==2 ? NULL : &helper_params;
+}
+static NTSTATUS create_nt_process(HANDLE token,HANDLE debug,void *psa,void *tsa,DWORD flags,RTL_USER_PROCESS_PARAMETERS *p,RTL_USER_PROCESS_INFORMATION *out,HANDLE parent,unsigned short machine,void *handles,void *jobs) {
+    assert(lock_held && !token && !debug && !psa && !tsa && !flags && p==&helper_params && !parent && !machine && !handles && !jobs);
+    if(prepare_failure==3) return -1;
+    ++prepared; out->Process=(HANDLE)4; out->Thread=(HANDLE)5; return 0;
+}
+static void RtlDestroyProcessParameters(RTL_USER_PROCESS_PARAMETERS *p) { assert(p==&helper_params); }
+static NTSTATUS NtResumeThread(HANDLE h,void *n) { assert(h==(HANDLE)5 && lock_held); ++resumed; return prepare_failure==4 || prepare_failure==5 ? -2 : 0; }
+static NTSTATUS NtWaitForSingleObject(HANDLE h,BOOL alertable,void *timeout) { assert(h==(HANDLE)4 && !alertable && !timeout && lock_held); ++waited; return prepare_failure>=6 && (waited==1 || prepare_failure==8) ? -3 : 0; }
+static NTSTATUS NtTerminateProcess(HANDLE h,NTSTATUS s) { assert(h==(HANDLE)4); return prepare_failure==5 || prepare_failure==7 ? -4 : 0; }
+static void NtClose(HANDLE h) { assert(h==(HANDLE)4 || h==(HANDLE)5); }
+'''
+PREPARE_TEST = r'''
+static void check_preparation(void) {
+    RTL_USER_PROCESS_PARAMETERS p={0};
+    RtlInitUnicodeString(&p.ImagePathName,L"C:\\Games\\Example\\game.exe");
+    RtlInitUnicodeString(&p.CurrentDirectory.DosPath,L"C:\\Games\\Example");
+    p.Environment=(void *)99;
+    RTL_USER_PROCESS_PARAMETERS before=p;
+    WCHAR command[]=L"helper --runtime d3d12on7-prepare -- original";
+    for(prepare_failure=0;prepare_failure<9;prepare_failure++) {
+        prepared=resumed=waited=lock_held=0;
+        HANDLE mutex;
+        NTSTATUS status=runeon_d3d12on7_prepare(&p,command,&mutex);
+        assert((status!=0)==(prepare_failure==5 || prepare_failure==7 || prepare_failure==8));
+        assert(!memcmp(&p,&before,sizeof(p)));
+        assert((mutex!=NULL)==(prepare_failure!=1));
+        if(!prepare_failure || prepare_failure>=4) assert(prepared==1 && resumed==1);
+        else assert(!prepared && !resumed && !waited);
+        /* The caller retains the mutex through original creation. */
+        assert(lock_held==(prepare_failure!=1));
+    }
+    prepare_failure=0;
+    HANDLE mutex;
+    WCHAR without_slash[80];
+    assert(!runeon_d3d12on7_prepare(&p,command,&mutex)); wcscpy(without_slash,lock_name);
+    RtlInitUnicodeString(&p.CurrentDirectory.DosPath,L"C:\\Games\\Example\\");
+    assert(!runeon_d3d12on7_prepare(&p,command,&mutex) && !wcscmp(without_slash,lock_name));
+}
+'''
+
 def main():
     source = (Path(sys.argv[1])/'dlls/kernelbase/process.c').read_text()
     begin=source.index('static const WCHAR runeon_nwjs_wrapperW')
@@ -132,7 +195,11 @@ def main():
         c=Path(directory)/'check.c'; binary=Path(directory)/'check'
         gate_begin=source.index('BOOL allow_guard =')
         gate=source[gate_begin:source.index(';',gate_begin)+1]
-        c.write_text(PRELUDE+function+TEST.replace('GATE_EXPRESSION',gate))
+        prep_start=source.index('static NTSTATUS runeon_d3d12on7_prepare(')
+        prep_end=source.index('\n/**********************************************************************',prep_start)
+        preparation=source[prep_start:prep_end]
+        test=TEST.replace('GATE_EXPRESSION',gate).replace('    struct startup startup = {0};','    check_preparation();\n    struct startup startup = {0};')
+        c.write_text(PRELUDE+function+PREPARE_PRELUDE+preparation+PREPARE_TEST+test)
         subprocess.run(['cc','-std=c11','-Wall','-Wextra','-Werror','-Wno-unused-parameter',str(c),'-o',str(binary)],check=True)
         subprocess.run([str(binary)],check=True)
 if __name__ == '__main__': main()

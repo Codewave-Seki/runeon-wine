@@ -1020,7 +1020,7 @@
       "verification": [
         {
           "path": "dlls/kernelbase/process.c",
-          "contains": "runeon_nwjs_launch_command( params, allow_guard, &nwjs_cmdline )"
+          "contains": "runeon_nwjs_launch_command( params, allow_guard, &nwjs_cmdline, &prepare_only )"
         },
         {
           "path": "dlls/kernelbase/process.c",
@@ -1910,11 +1910,11 @@
     {
       "order": 129,
       "path": "patches/runeon/0111-steam-d3d12on7-launch-guard.patch",
-      "sha256": "da516ebe26f6db6ee252a47a9fe8e65c0fbf62f73a8c06b3b7949194b6a8f9fa",
+      "sha256": "77c146fa3ef49ad5c55d6440d5cd3a0b7eac416733fb1f981968255648ce585a",
       "kind": "runeon-product",
       "status": "active",
       "risk": "medium",
-      "summary": "Opt-in Steam launch handoff for adjacent downlevel D3D12 layouts, with caller-owned identity and registry policy.",
+      "summary": "Opt-in synchronous preparation for adjacent downlevel D3D12 layouts, preserving Steam child process semantics and caller-owned policy.",
       "testStrategy": "Run the extracted launch-selector fixture and a complete i386/x86_64 WoW64 build; validate the local helper protocol and actual Steam launch separately.",
       "verification": [
         {
