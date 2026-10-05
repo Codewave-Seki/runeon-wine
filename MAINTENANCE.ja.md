@@ -22,6 +22,8 @@ Runeon Wine は、能動的な上流監査と diagnostics 主導の調査とい�
 
 ## 現在の Wine 11.x レビューベースライン
 
+リリース候補：[`cx26.3-wine11.0-runeon.16`](patchsets/cx26.3-wine11.0-runeon.16/manifest.json) は `.15` を保持し、明示的なオプトインによる Steam downlevel D3D12 起動準備入口 `0111` を追加します。呼び出し側の helper は元のプロセス作成前に動作し、子プロセスのハンドル、作成フラグ、環境、作業ディレクトリを維持します。直列化の範囲は EXE ディレクトリです。完全な x86_64/WoW64 ビルド、対象チェック、両アーキテクチャの親プロセス、ローカルアプリケーションの受け入れ確認は合格しました。同一セッションで実際にダウンロードした直後の起動は未検証です。このプレリリースは Production の正式ソースを置き換えません。不変の添付ファイルは[リリース manifest](release-manifests/cx26.3-wine11.0-runeon.16.source-archive.json)に記録されています。
+
 現在の Dev と Production ソース（App `>=1.10 (0)`）：[`cx26.3-wine11.0-runeon.15`](patchsets/cx26.3-wine11.0-runeon.15/manifest.json)（正式版/latest）。seed `2026.10.04` に対応します。`.14` を保持し、dwrite の絵文字システムフォールバック（`0110`）と `wine-11.19` の選別修正（`0079`）を追加します。ビルド、`tests/emoji-fallback-check.py`、署名、readiness、Dev/Production 配布の確認は合格しました。ユーザーはローカルと Dev の受け入れで問題がなかったと報告し、2026-10-04 に Production を承認しました。Production は同一の署名済み Dev archive を再ビルドせずに昇格します。
 
 seed `2026.10.02`（App `>=1.10 (0)`）用の `cx26.3-wine11.0-runeon.14`（正式版）はロールバック用に保持しています。`.13` にプロセスごとのグラフィックスバックエンド選択（`0109`）を追加したものです。

@@ -22,6 +22,8 @@ Runeon Wine accepts input from proactive upstream audits and diagnostics-driven 
 
 ## Current Wine 11.x review baseline
 
+Release candidate: [`cx26.3-wine11.0-runeon.16`](patchsets/cx26.3-wine11.0-runeon.16/manifest.json) preserves `.15` and adds `0111`, an opt-in Steam downlevel D3D12 preparation gate. The caller-provided helper runs before the original process creation; child handles, creation flags, environment and working directory are preserved, with serialization scoped to the executable directory. Complete x86_64/WoW64 build, targeted checks, both parent architectures and local application acceptance passed. Real same-session download-then-immediate-launch coverage remains pending. This Pre-release does not replace the stable Production source. Immutable assets are recorded in [the release manifest](release-manifests/cx26.3-wine11.0-runeon.16.source-archive.json).
+
 Current Dev and Production source for App `>=1.10 (0)`: [`cx26.3-wine11.0-runeon.15`](patchsets/cx26.3-wine11.0-runeon.15/manifest.json) (stable/latest) for seed `2026.10.04`. It preserves `.14` and adds the dwrite emoji system fallback (`0110`) and targeted `wine-11.19` fixes (`0079`). Build, `tests/emoji-fallback-check.py`, signing, readiness and Dev/Production distribution checks passed; the user reported no issues in local and Dev acceptance and authorized Production on 2026-10-04. Production promotes the exact signed Dev archive without rebuilding.
 
 `cx26.3-wine11.0-runeon.14` (stable) for seed `2026.10.02`, App `>=1.10 (0)`, is retained for rollback; it adds per-process graphics backend routing (`0109`) to `.13`.
