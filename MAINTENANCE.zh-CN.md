@@ -22,9 +22,9 @@ Runeon Wine 同时接受主动上游审计和 diagnostics 驱动调查两类输�
 
 ## 当前 Wine 11.x 审查基线
 
-发布候选：[`cx26.3-wine11.0-runeon.16`](patchsets/cx26.3-wine11.0-runeon.16/manifest.json) 保留 `.15`，新增 `0111`，提供显式 opt-in 的 Steam downlevel D3D12 启动准备入口。调用方提供的 helper 在原始进程创建之前运行，保留子进程句柄、创建标记、环境和工作目录，并按 EXE 目录串行。完整 x86_64/WoW64 构建、定向检查、双架构父进程及本机应用验收已通过；同一会话内真实下载完成立即启动尚待验证。此预发布不替换 Production 的正式源码。不可变附件记录见[发布 manifest](release-manifests/cx26.3-wine11.0-runeon.16.source-archive.json)。
+当前正式源码：[`cx26.3-wine11.0-runeon.16`](patchsets/cx26.3-wine11.0-runeon.16/manifest.json)（正式版/latest），搭配 seed `2026.10.06`、MoltenVK `1.4.2` 与 SDL2 `2.32.10`。保留 `.15`，新增 `0111`，提供显式 opt-in 的 Steam downlevel D3D12 启动准备入口。调用方提供的 helper 在原始进程创建之前运行，保留子进程句柄、创建标记、环境和工作目录，并按 EXE 目录串行。完整 x86_64/WoW64 构建、定向检查、双架构父进程及本机应用验收已通过。维护者另反馈跨 Steam 会话、非候选游戏、同一 Steam 会话内下载完成立即启动三项验收通过；这些反馈不构成普遍游戏兼容承诺。转为正式版保留相同 tag、源码提交与附件字节。不可变附件记录见[发布 manifest](release-manifests/cx26.3-wine11.0-runeon.16.source-archive.json)。
 
-当前 Production 源码（App `>=1.10 (0)`）：[`cx26.3-wine11.0-runeon.15`](patchsets/cx26.3-wine11.0-runeon.15/manifest.json)（正式版/latest），对应 seed `2026.10.04`。保留 `.14` 并新增 dwrite emoji 系统回退（`0110`）与 `wine-11.19` 定向修复（`0079`）。构建、`tests/emoji-fallback-check.py`、签名、readiness 与 Dev/Production 分发检查已通过；用户反馈本机与 Dev 验收未发现问题，并于 2026-10-04 授权 Production。Production promote 同一份签名 Dev 归档，不重新构建。
+上一正式源码，保留用于回滚（App `>=1.10 (0)`）：[`cx26.3-wine11.0-runeon.15`](patchsets/cx26.3-wine11.0-runeon.15/manifest.json)（正式版），对应 seed `2026.10.04`。保留 `.14` 并新增 dwrite emoji 系统回退（`0110`）与 `wine-11.19` 定向修复（`0079`）。构建、`tests/emoji-fallback-check.py`、签名、readiness 与 Dev/Production 分发检查已通过；用户反馈本机与 Dev 验收未发现问题，并于 2026-10-04 授权 Production。Production promote 同一份签名 Dev 归档，不重新构建。
 
 `cx26.3-wine11.0-runeon.14`（正式版）对应 seed `2026.10.02`（App `>=1.10 (0)`），保留用于回滚；它在 `.13` 之上新增按进程选择图形后端（`0109`）。
 
