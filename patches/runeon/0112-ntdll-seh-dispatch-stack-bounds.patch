@@ -1,0 +1,66 @@
+From: Runeon Contributors <dev@runeon.com>
+Subject: [PATCH] ntdll: Do not unwind past StackBase in the x64 handler search.
+
+call_seh_handlers() checks the establisher frame of each unwound frame
+against the stack limits and marks the exception EXCEPTION_STACK_INVALID
+when it falls outside, which corresponds to what Windows reports for a
+frame outside the stack. That check runs only after the unwind, and
+unwinding a leaf frame already reads the return address at Rsp. When an
+earlier frame was misread, for example by the host unwinder, and left Rsp
+less than one slot below StackBase or above it, that read went past the
+thread stack. The resulting access violation was dispatched through the
+same frames and failed the same way, so the process died in
+RtlVirtualUnwind2() instead of reporting the original exception.
+
+Before each unwind, check that the return address slot at Rsp lies below
+StackBase, and otherwise end the search with EXCEPTION_STACK_INVALID as
+the establisher frame check would. A walk that ends exactly at StackBase
+still stops as before, and the lower stack limit is left to the existing
+establisher frame check, so behaviour only changes where the unwind would
+have read past StackBase.
+
+The change is not opt-in: it only replaces a fault inside ntdll with the
+stack-invalid result the existing check already produces. RtlUnwindEx() is
+left unchanged; it runs after a handler was found on a validated chain,
+may already have called unwind handlers, and reports a bad stack
+differently, so it needs a separate change.
+
+diff --git a/dlls/ntdll/signal_x86_64.c b/dlls/ntdll/signal_x86_64.c
+index 8ac6c53..ce263e3 100644
+--- a/dlls/ntdll/signal_x86_64.c
++++ b/dlls/ntdll/signal_x86_64.c
+@@ -227,6 +227,19 @@ static DWORD call_seh_handler( EXCEPTION_RECORD *rec, ULONG_PTR frame,
+ #endif
+ 
+ 
++/**********************************************************************
++ *           is_valid_unwind_rsp
++ *
++ * Unwinding a leaf frame reads the return address at Rsp before the
++ * establisher frame can be checked against the stack limits, so make sure
++ * that slot still lies below StackBase.
++ */
++static inline BOOL is_valid_unwind_rsp( ULONG64 rsp )
++{
++    return rsp <= (ULONG64)NtCurrentTeb()->Tib.StackBase - sizeof(ULONG64);
++}
++
++
+ /**********************************************************************
+  *           call_seh_handlers
+  *
+@@ -251,6 +264,14 @@ NTSTATUS call_seh_handlers( EXCEPTION_RECORD *rec, CONTEXT *orig_context )
+     nested_frame = 0;
+     for (;;)
+     {
++        if (!is_valid_unwind_rsp( context.Rsp ))
++        {
++            ERR( "invalid stack pointer %p (%p-%p)\n", (void *)context.Rsp,
++                 NtCurrentTeb()->Tib.StackLimit, NtCurrentTeb()->Tib.StackBase );
++            rec->ExceptionFlags |= EXCEPTION_STACK_INVALID;
++            break;
++        }
++
+         status = virtual_unwind( UNW_FLAG_EHANDLER, &dispatch, &context );
+         if (status != STATUS_SUCCESS) return status;
+ 

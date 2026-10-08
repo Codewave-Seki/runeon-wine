@@ -48,6 +48,13 @@ if grep -Fq 'RUNEON_D3D12ON7_GUARD_V1' "$candidate_root/dlls/kernelbase/process.
     || die "Steam downlevel selector check failed"
 fi
 
+# The x64 handler search bound is checked from the patched dispatcher. Gate on
+# the series entry so a renamed helper fails the check instead of skipping it.
+if grep -Fqx 'patches/runeon/0112-ntdll-seh-dispatch-stack-bounds.patch' "$series_file"; then
+  python3 "$script_dir/../tests/seh-dispatch-stack-bounds-check.py" "$candidate_root" >/dev/null \
+    || die "x64 SEH dispatch stack bounds check failed"
+fi
+
 if "$script_dir/apply-series.sh" "$candidate_root" >"$temp_root/reapply.stdout" 2>"$temp_root/reapply.stderr"; then
   die "a second patch application unexpectedly succeeded"
 fi
