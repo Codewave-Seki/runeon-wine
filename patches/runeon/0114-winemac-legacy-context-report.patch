@@ -1,0 +1,48 @@
+From: Runeon Contributors <dev@runeon.com>
+Subject: [PATCH] winemac.drv: Report legacy OpenGL contexts when an alternative is offered.
+
+A legacy context is OpenGL 2.1 on macOS. An application that needs a newer
+compatibility profile fails soon after creating one, often without any
+error Wine can see. When RUNEON_GFX_DIR_MESAGL is set, report once per
+process that a legacy context was requested, and once that a core context
+was requested, as loaders that bootstrap with a legacy context then do. A
+launcher can then tell a start that failed on the legacy context from other
+failures. The lines are reported on request, not on success, after the
+existing attribute and version checks; requests those checks refuse report
+nothing. win32u's internal pbuffer contexts also count as legacy. The
+lines are diagnostics only: without the variable nothing is printed, and
+context creation is unchanged either way.
+
+diff --git a/dlls/winemac.drv/opengl.c b/dlls/winemac.drv/opengl.c
+index 8f24ef5..9b7a8b9 100644
+--- a/dlls/winemac.drv/opengl.c
++++ b/dlls/winemac.drv/opengl.c
+@@ -2216,6 +2216,28 @@ static BOOL macdrv_context_create(int format, void *shared, const int *attrib_li
+         return FALSE;
+     }
+ 
++    /* Runeon: a legacy context is OpenGL 2.1 on macOS, which applications
++     * that need a newer compatibility profile cannot use. When the launcher
++     * offers an alternative, say once per process that one was created, and
++     * once that a core context followed (as loaders that bootstrap with a
++     * legacy context do), so a failed start can be attributed. Reported on
++     * request, not on success; win32u's internal pbuffer contexts also count
++     * as legacy. */
++    if (getenv("RUNEON_GFX_DIR_MESAGL"))
++    {
++        static BOOL legacy_reported, core_reported;
++        if (!core && !legacy_reported)
++        {
++            legacy_reported = TRUE;
++            FIXME("runeon-gl-legacy-context: legacy context limited to OpenGL 2.1\n");
++        }
++        else if (core && !core_reported)
++        {
++            core_reported = TRUE;
++            FIXME("runeon-gl-core-context: core context %d.%d\n", major, minor);
++        }
++    }
++
+     if (!(context = calloc(1, sizeof(*context)))) return FALSE;
+ 
+     context->format = format;

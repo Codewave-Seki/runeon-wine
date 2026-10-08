@@ -1,0 +1,79 @@
+From: Runeon Contributors <dev@runeon.com>
+Subject: [PATCH] ntdll: Add a mesagl graphics route for a replacement OpenGL.
+
+macOS offers legacy OpenGL contexts only as OpenGL 2.1, so applications
+that need a newer compatibility profile cannot run on the host driver. A
+launcher may ship a Mesa opengl32 for them, but it must reach only the
+processes that need it.
+
+Add a "mesagl" backend id to the per-process route table. A process whose
+image is inside a directory routed to mesagl, including child processes
+started from there, gets RUNEON_GFX_DIR_MESAGL prepended to its builtin
+search path. opengl32 then resolves there, and so does any other module
+of that directory whose name is also found on the normal DLL search path;
+like the other backends, a launcher provides a prefix placeholder for a
+helper module that the base does not ship. The directory's modules must
+carry the Wine builtin mark. Direct3D modules stay with plain Wine, whose
+wined3d then uses the replacement opengl32 too, so the route suits
+OpenGL-only applications.
+
+A mesagl route without RUNEON_GFX_DIR_MESAGL loads plain Wine, and the
+variable alone enables the table, as the other backend variables do.
+Without that variable and without a mesagl table entry, behaviour is
+unchanged.
+
+diff --git a/dlls/ntdll/unix/loadorder.c b/dlls/ntdll/unix/loadorder.c
+index 70793e3..7b77e8c 100644
+--- a/dlls/ntdll/unix/loadorder.c
++++ b/dlls/ntdll/unix/loadorder.c
+@@ -387,7 +387,7 @@ void set_load_order_app_name( const WCHAR *app_name )
+ 
+ 
+ /* Runeon graphics backend ids; the launcher supplies each directory. */
+-enum graphics_backend { GRAPHICS_DEFAULT, GRAPHICS_D3DMETAL, GRAPHICS_DXMT, GRAPHICS_WINE };
++enum graphics_backend { GRAPHICS_DEFAULT, GRAPHICS_D3DMETAL, GRAPHICS_DXMT, GRAPHICS_WINE, GRAPHICS_MESAGL };
+ 
+ /* One route table is at most a few hundred games; a value whose query buffer
+  * would exceed this is not ours. */
+@@ -411,6 +411,7 @@ static enum graphics_backend parse_graphics_route( const WCHAR *entry, unsigned
+     static const WCHAR d3dmetalW[] = {'d','3','d','m','e','t','a','l'};
+     static const WCHAR dxmtW[] = {'d','x','m','t'};
+     static const WCHAR wineW[] = {'w','i','n','e'};
++    static const WCHAR mesaglW[] = {'m','e','s','a','g','l'};
+     unsigned int i, sep = 0, id_len;
+     const WCHAR *id;
+ 
+@@ -435,6 +436,7 @@ static enum graphics_backend parse_graphics_route( const WCHAR *entry, unsigned
+         return GRAPHICS_D3DMETAL;
+     if (id_len == ARRAY_SIZE(dxmtW) && !memcmp( id, dxmtW, sizeof(dxmtW) )) return GRAPHICS_DXMT;
+     if (id_len == ARRAY_SIZE(wineW) && !memcmp( id, wineW, sizeof(wineW) )) return GRAPHICS_WINE;
++    if (id_len == ARRAY_SIZE(mesaglW) && !memcmp( id, mesaglW, sizeof(mesaglW) )) return GRAPHICS_MESAGL;
+     return GRAPHICS_DEFAULT;
+ }
+ 
+@@ -468,7 +470,8 @@ void init_graphics_route( const UNICODE_STRING *image )
+     NTSTATUS status = STATUS_NO_MEMORY;
+     HANDLE key;
+ 
+-    if (!getenv( "RUNEON_GFX_DIR_D3DMETAL" ) && !getenv( "RUNEON_GFX_DIR_DXMT" )) return;
++    if (!getenv( "RUNEON_GFX_DIR_D3DMETAL" ) && !getenv( "RUNEON_GFX_DIR_DXMT" ) &&
++        !getenv( "RUNEON_GFX_DIR_MESAGL" )) return;
+ 
+     if (!open_hkcu_key( "Software\\Runeon\\GraphicsRoutes", &key ))
+     {
+@@ -529,11 +532,13 @@ void init_graphics_route( const UNICODE_STRING *image )
+     {
+     case GRAPHICS_D3DMETAL: dir = getenv( "RUNEON_GFX_DIR_D3DMETAL" ); break;
+     case GRAPHICS_DXMT: dir = getenv( "RUNEON_GFX_DIR_DXMT" ); break;
++    /* Mesa replaces opengl32 only; Direct3D modules stay with plain Wine. */
++    case GRAPHICS_MESAGL: dir = getenv( "RUNEON_GFX_DIR_MESAGL" ); break;
+     default: break;
+     }
+     /* a routed backend without a directory loads plain Wine, never another backend */
+-    if (chosen == GRAPHICS_DXMT && !dir)
+-        WARN( "no directory for graphics backend dxmt, using plain Wine\n" );
++    if ((chosen == GRAPHICS_DXMT || chosen == GRAPHICS_MESAGL) && !dir)
++        WARN( "no directory for graphics backend %u, using plain Wine\n", chosen );
+     TRACE( GRAPHICS_ROUTES_PROTOCOL ": graphics backend %u dir %s for %s\n",
+            chosen, debugstr_a(dir), debugstr_us(image) );
+     if (dir && *dir) prepend_dll_path( dir );

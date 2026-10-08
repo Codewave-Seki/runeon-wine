@@ -1968,6 +1968,46 @@
           "contains": "what a forward-compatible one would be; the flag is not required."
         }
       ]
+    },
+    {
+      "order": 132,
+      "path": "patches/runeon/0113-graphics-route-mesagl.patch",
+      "sha256": "04527f4de2fb547236da5b3e1f88ab6f484ec0d24a6c8281685b98777fa01108",
+      "kind": "runeon-product",
+      "status": "active",
+      "risk": "medium",
+      "summary": "Adds a mesagl backend id to the per-process graphics route table: a process whose image is inside a routed directory, including its child processes, gets RUNEON_GFX_DIR_MESAGL prepended to its builtin search path, so a builtin-marked Mesa opengl32 resolves there, as does any helper module for which a launcher provides a prefix placeholder. Direct3D modules stay with plain Wine, whose wined3d then also uses that opengl32, so the route suits OpenGL-only applications. Without the variable and without a mesagl table entry behaviour is unchanged; a mesagl route without the variable loads plain Wine.",
+      "testStrategy": "tests/graphics-route-check.py compiles the patched route parser and, when the mesagl backend is present, checks the mesagl route, malformed ids, overlap, the missing-directory fallback and that the variable alone enables the table. A complete WoW64 build and an application run with a Mesa directory are still required before tagging.",
+      "verification": [
+        {
+          "path": "dlls/ntdll/unix/loadorder.c",
+          "contains": "    case GRAPHICS_MESAGL: dir = getenv( \"RUNEON_GFX_DIR_MESAGL\" ); break;"
+        },
+        {
+          "path": "dlls/ntdll/unix/loadorder.c",
+          "contains": "static const WCHAR mesaglW[] = {'m','e','s','a','g','l'};"
+        }
+      ]
+    },
+    {
+      "order": 133,
+      "path": "patches/runeon/0114-winemac-legacy-context-report.patch",
+      "sha256": "8120e6c70f935e6eb56d3d9d9bb553f36cde70f97fc2cf1f4b497b32b1ad9dec",
+      "kind": "runeon-product",
+      "status": "active",
+      "risk": "low",
+      "summary": "When RUNEON_GFX_DIR_MESAGL is set, winemac.drv reports once per process that a legacy (OpenGL 2.1) context was requested and once that a core context was requested, after the existing checks, so a launcher can attribute a failed start to the legacy context limit. Lines are reported on request, not on success; win32u's internal pbuffer contexts also count as legacy, and requests refused by the checks (for example 3.0/3.1 or compatibility 3.2+) report nothing. Diagnostics only; context creation is unchanged.",
+      "testStrategy": "tests/macdrv-context-attribs-check.py compiles the patched macdrv_context_create() and, when the diagnostic is present, checks that nothing is reported without the variable, that the legacy and core lines appear once each with it, and that a refused request reports nothing; disabling the core line fails it.",
+      "verification": [
+        {
+          "path": "dlls/winemac.drv/opengl.c",
+          "contains": "runeon-gl-legacy-context: legacy context limited to OpenGL 2.1"
+        },
+        {
+          "path": "dlls/winemac.drv/opengl.c",
+          "contains": "runeon-gl-core-context: core context %d.%d"
+        }
+      ]
     }
   ],
   "targetedReview": {

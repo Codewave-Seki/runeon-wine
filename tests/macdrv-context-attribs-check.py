@@ -7,8 +7,12 @@ WGL_CONTEXT_OPENGL_NO_ERROR_ARB and no forward-compatible flag (as SDL 2.0.16
 sends it) is accepted, each half is also checked on its own, and
 compatibility profiles, 3.0/3.1, versions above the host maximum and unknown
 attributes are still refused with the same errors. CX_FWD_COMPAT_GL_CTX is
-cleared so the CrossOver hack cannot supply the flag, then checked set. It
-does not run Wine, share contexts or create a real OpenGL context.
+cleared so the CrossOver hack cannot supply the flag, then checked set. When
+the source carries the Runeon legacy-context diagnostic, it also checks that
+the legacy and core lines appear only with RUNEON_GFX_DIR_MESAGL set and once
+each per process. It does not run Wine, share contexts or create a real
+OpenGL context. Feature cases are gated on the feature being present in the
+source; the manifest verification anchors catch a feature that disappears.
 """
 from pathlib import Path
 import subprocess
@@ -19,11 +23,19 @@ PRELUDE = r'''
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 typedef int BOOL; typedef int GLint; typedef void *CGLContextObj;
 #define TRUE 1
 #define FALSE 0
 #define TRACE(...)
 #define WARN(...)
+#ifdef HAS_LEGACY_DIAG
+static char fixmes[512];
+#define FIXME(...) do { char line_[128]; snprintf(line_, sizeof(line_), __VA_ARGS__); \
+    strncat(fixmes, line_, sizeof(fixmes) - strlen(fixmes) - 1); } while (0)
+#else
+#define FIXME(...)
+#endif
 #define WGL_CONTEXT_MAJOR_VERSION_ARB 0x2091
 #define WGL_CONTEXT_MINOR_VERSION_ARB 0x2092
 #define WGL_CONTEXT_LAYER_PLANE_ARB 0x2093
@@ -94,6 +106,21 @@ int main(void)
     assert(create(NULL) && created_major == 1);
     setenv("CX_FWD_COMPAT_GL_CTX", "1", 1);
     assert(create(sdl_core) && created_major == 3);
+    unsetenv("CX_FWD_COMPAT_GL_CTX");
+#ifdef HAS_LEGACY_DIAG
+    /* Nothing above set RUNEON_GFX_DIR_MESAGL, so nothing was reported. */
+    assert(!fixmes[0]);
+    setenv("RUNEON_GFX_DIR_MESAGL", "mesa", 1);
+    assert(create(NULL));
+    assert(create(NULL));
+    assert(!strcmp(fixmes, "runeon-gl-legacy-context: legacy context limited to OpenGL 2.1\n"));
+    fixmes[0] = 0;
+    assert(create(sdl_core));
+    assert(create(no_error_on));
+    assert(!strcmp(fixmes, "runeon-gl-core-context: core context 3.2\n"));
+    fixmes[0] = 0;
+    assert(!create(compat) && !fixmes[0]);
+#endif
     puts("PASS");
     return 0;
 }
@@ -114,12 +141,13 @@ def main() -> int:
     root = Path(sys.argv[1])
     source = (root / 'dlls/winemac.drv/opengl.c').read_text()
     function = extract(source, 'static BOOL macdrv_context_create(')
+    diag = '#define HAS_LEGACY_DIAG 1\n' if 'runeon-gl-legacy-context' in function else ''
     if 'WGL_CONTEXT_OPENGL_NO_ERROR_ARB' not in function:
         raise SystemExit('patched attribute handling is missing')
     with tempfile.TemporaryDirectory(prefix='runeon-macdrv-context.') as temp:
         c_file = Path(temp) / 'check.c'
         binary = Path(temp) / 'check'
-        c_file.write_text(PRELUDE + function + MAIN)
+        c_file.write_text(diag + PRELUDE + function + MAIN)
         subprocess.run(['cc', '-std=c11', '-D_POSIX_C_SOURCE=200112L', '-Wall', '-Werror', '-Wno-unused-function',
                         '-o', str(binary), str(c_file)], check=True)
         result = subprocess.run([str(binary)], capture_output=True, text=True)

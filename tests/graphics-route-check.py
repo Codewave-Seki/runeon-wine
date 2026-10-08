@@ -3,7 +3,9 @@
 
 Checks how init_graphics_route() in dlls/ntdll/unix/loadorder.c reads and parses
 the route table: value type, length and terminator checks, per-entry validation,
-directory boundaries, overlap handling, buffer growth and the size limit. It does
+directory boundaries, overlap handling, buffer growth and the size limit. When
+the source carries the mesagl backend, it also checks that route, that it alone
+enables the table, and that it falls back to plain Wine without a directory. It does
 not start Wine, load any module or touch a prefix. Temporary C source and
 executable are removed when the check finishes.
 
@@ -190,6 +192,27 @@ int main(void)
     opens = 0;
     check("capability off: nothing prepended", exe, "none");
     if (opens) { printf("FAIL capability off still read the registry\n"); failures++; }
+#ifdef HAS_MESAGL
+    setenv("RUNEON_GFX_DIR_D3DMETAL", "apple", 1);
+    setenv("RUNEON_GFX_DIR_DXMT", "dxmt", 1);
+    setenv("RUNEON_GFX_DIR_MESAGL", "mesa", 1);
+    set_table("C:\\Game=mesagl");
+    check("mesagl route", exe, "mesa");
+    check("mesagl boundary Game vs Game2", "C:\\Game2\\game.exe", "apple");
+    set_table("C:\\Game=MESAGL|C:\\Game=mesag|C:\\Game=mesagl ");
+    check("malformed mesagl ids are skipped", exe, "apple");
+    set_table("C:\\Game=mesagl|C:\\Game\\Sub=dxmt");
+    check("mesagl overlap -> default", exe, "apple");
+    set_table("C:\\Game=mesagl");
+    unsetenv("RUNEON_GFX_DIR_MESAGL");
+    check("mesagl route without mesagl dir loads plain Wine", exe, "none");
+    unsetenv("RUNEON_GFX_DIR_D3DMETAL");
+    unsetenv("RUNEON_GFX_DIR_DXMT");
+    setenv("RUNEON_GFX_DIR_MESAGL", "mesa", 1);
+    opens = 0;
+    check("mesagl dir alone enables the table", exe, "mesa");
+    if (!opens) { printf("FAIL mesagl dir alone did not read the registry\n"); failures++; }
+#endif
     return failures != 0;
 }
 '''
@@ -210,7 +233,8 @@ def main():
     if len(sys.argv) != 2:
         raise SystemExit(f'usage: {sys.argv[0]} SOURCE_ROOT')
     path = Path(sys.argv[1]).resolve(strict=True) / 'dlls/ntdll/unix/loadorder.c'
-    code = HARNESS + extract(path.read_text()) + MAIN
+    source = extract(path.read_text())
+    code = ('#define HAS_MESAGL 1\n' if 'GRAPHICS_MESAGL' in source else '') + HARNESS + source + MAIN
     with tempfile.TemporaryDirectory(prefix='graphics-route-check-') as tmp:
         c = Path(tmp) / 'check.c'
         binary = Path(tmp) / 'check'
