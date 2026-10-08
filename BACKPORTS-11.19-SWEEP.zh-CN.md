@@ -10,7 +10,7 @@
 
 按[上一次回移](BACKPORTS-11.16-11.18-SWEEP.zh-CN.md)的规则审查了 `wine-11.18..wine-11.19` 的全部 353 个提交：
 
-- 100 个提交改动了 `ntdll`、`server`、`win32u`、`winemac.drv`、`wow64`、`loader`、`configure`、`tools`、`libs` 或其他宿主驱动，主要是 OpenGL/EGL 上下文重构，以及 `winemac.drv` 的头文件与日志整理，一个都不纳入。其中的小修复逐个核对过：IPv6 `IPV6_MTU_DISCOVER` 层级修复（`fc5dd34cc3`）所在分支在 macOS 上不会编译，因为 macOS 有 `IPV6_DONTFRAG`；EGL pbuffer 返回值（`802d3d49fb`）不在 macOS 路径上；零线程组亲和性（`0998bfa77a`）只会让一个很少用的调用失败；别名 HKL 的 IME 判断（`a07e981c59`）会改动 `winemac.drv` 的键盘处理，需要单独验证；`NtReleaseSemaphore` 的有符号改动（`f89a7ca541`、`3e182735ea`）改变了系统调用签名。
+- 100 个提交改动了 `ntdll`、`server`、`win32u`、`winemac.drv`、`wow64`、`loader`、`configure`、`tools`、`libs` 或其他宿主驱动，主要是 OpenGL/EGL 上下文重构，以及 `winemac.drv` 的头文件与日志整理，一个都不纳入。其中的小修复逐个核对过：IPv6 `IPV6_MTU_DISCOVER` 层级修复（`fc5dd34cc3`）所在分支在 macOS 上不会编译，因为 macOS 有 `IPV6_DONTFRAG`；EGL pbuffer 返回值（`802d3d49fb`）不在 macOS 路径上；零线程组亲和性（`0998bfa77a`）只会让一个很少用的调用失败；别名 HKL 的 IME 判断（`a07e981c59`）会改动 `winemac.drv` 的键盘处理，需要单独验证；`NtReleaseSemaphore` 的有符号改动（`f89a7ca541`、`3e182735ea`）改变了系统调用签名。之后，`cx26.3-wine11.0-runeon.17` 以范围更小的补丁 `0080` 带入了其中两个上下文提交 `632068bd35` 与 `af79eeb0d0` 在 macOS 驱动上的效果，不包含重构本身；纳入与未纳入的部分见其 manifest 的 `adaptation`。
 - 29 个提交只改测试。
 - 在 224 个用户态候选中，选取 Steam、启动器、安装程序或游戏会加载的 DLL 里的崩溃、内存安全、泄漏与错误路径修复。未纳入：手柄设备身份（`winebus.sys`、`hidclass.sys`、`xinput1_3`）、`mountmgr.sys` 的光驱与 SCSI IOCTL，以及功能性改动，例如 D3D12 支持的 Media Foundation 缓冲、GDI+ 竖排文字、DNS 缓存与 hosts 文件、VBScript 解析器改动、`RoResolveNamespace`、D2D1 色彩管理桩和 `GetNextAsyncId`。
 

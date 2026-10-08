@@ -10,7 +10,7 @@
 
 [前回のバックポート](BACKPORTS-11.16-11.18-SWEEP.ja.md)と同じ基準で、`wine-11.18..wine-11.19` の 353 コミットすべてを確認しました。
 
-- 100 コミットは `ntdll`、`server`、`win32u`、`winemac.drv`、`wow64`、`loader`、`configure`、`tools`、`libs` またはその他のホストドライバーを変更します。大半は OpenGL/EGL コンテキストのリファクタリングと、`winemac.drv` のヘッダーおよびログの整理で、いずれも採用しません。その中の小さな修正は個別に確認しました。IPv6 `IPV6_MTU_DISCOVER` のレベル修正（`fc5dd34cc3`）は、macOS には `IPV6_DONTFRAG` があるためビルドされない分岐にあります。EGL pbuffer の戻り値（`802d3d49fb`）は macOS の経路にありません。ゼロのグループアフィニティ（`0998bfa77a`）は、ほとんど使われない呼び出しが失敗するだけです。エイリアス HKL の IME 判定（`a07e981c59`）は `winemac.drv` のキーボード処理を変えるため、別途検証が必要です。`NtReleaseSemaphore` の符号付き化（`f89a7ca541`、`3e182735ea`）はシステムコールのシグネチャを変えます。
+- 100 コミットは `ntdll`、`server`、`win32u`、`winemac.drv`、`wow64`、`loader`、`configure`、`tools`、`libs` またはその他のホストドライバーを変更します。大半は OpenGL/EGL コンテキストのリファクタリングと、`winemac.drv` のヘッダーおよびログの整理で、いずれも採用しません。その中の小さな修正は個別に確認しました。IPv6 `IPV6_MTU_DISCOVER` のレベル修正（`fc5dd34cc3`）は、macOS には `IPV6_DONTFRAG` があるためビルドされない分岐にあります。EGL pbuffer の戻り値（`802d3d49fb`）は macOS の経路にありません。ゼロのグループアフィニティ（`0998bfa77a`）は、ほとんど使われない呼び出しが失敗するだけです。エイリアス HKL の IME 判定（`a07e981c59`）は `winemac.drv` のキーボード処理を変えるため、別途検証が必要です。`NtReleaseSemaphore` の符号付き化（`f89a7ca541`、`3e182735ea`）はシステムコールのシグネチャを変えます。その後、`cx26.3-wine11.0-runeon.17` は、これらのコンテキストコミットのうち `632068bd35` と `af79eeb0d0` の macOS ドライバーへの効果だけを、より範囲の狭いパッチ `0080` として取り込みました。リファクタリング自体は含みません。採用した部分としなかった部分は manifest の `adaptation` に記載しています。
 - 29 コミットはテストのみの変更です。
 - 224 のユーザーモード候補からは、Steam、ランチャー、インストーラー、ゲームが読み込む DLL のクラッシュ、メモリ安全性、リーク、エラー経路の修正を選びました。採用しなかったもの：コントローラーの識別情報（`winebus.sys`、`hidclass.sys`、`xinput1_3`）、`mountmgr.sys` の CD/DVD と SCSI の IOCTL、および機能追加。たとえば D3D12 ベースの Media Foundation バッファー、GDI+ の縦書き、DNS キャッシュと hosts ファイル、VBScript パーサーの変更、`RoResolveNamespace`、D2D1 カラーマネジメントのスタブ、`GetNextAsyncId` です。
 

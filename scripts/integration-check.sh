@@ -55,6 +55,12 @@ if grep -Fqx 'patches/runeon/0112-ntdll-seh-dispatch-stack-bounds.patch' "$serie
     || die "x64 SEH dispatch stack bounds check failed"
 fi
 
+# The winemac context attribute backport is checked from the patched function.
+if grep -Fqx 'patches/upstream/0080-wine-11.19-winemac-context-attribs.patch' "$series_file"; then
+  python3 "$script_dir/../tests/macdrv-context-attribs-check.py" "$candidate_root" >/dev/null \
+    || die "winemac context attribute check failed"
+fi
+
 if "$script_dir/apply-series.sh" "$candidate_root" >"$temp_root/reapply.stdout" 2>"$temp_root/reapply.stderr"; then
   die "a second patch application unexpectedly succeeded"
 fi

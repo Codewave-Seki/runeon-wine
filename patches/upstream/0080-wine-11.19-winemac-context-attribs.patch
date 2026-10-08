@@ -1,0 +1,59 @@
+From: Wine upstream contributors (see commit list)
+Subject: [PATCH] winemac.drv: Accept no-error and non-forward-compatible core context requests.
+
+Behaviour adapted from WineHQ commits 632068bd35 and af79eeb0d0 (wine-11.19,
+both by Rémi Bernon), which move wglCreateContextAttribsARB parsing into
+win32u. That refactor does not apply to this base; Runeon contributors
+carried only its effect on these two checks into the base's attribute loop.
+
+win32u advertises WGL_ARB_create_context_no_error for every driver, and an
+SDL 2.0.16 application was observed adding WGL_CONTEXT_OPENGL_NO_ERROR_ARB
+to its 3.2 core request when it saw that extension. macdrv_context_create()
+treated the attribute as unknown and failed with ERROR_INVALID_PARAMETER.
+CGL has no no-error mode, so the attribute is now accepted and ignored, as
+upstream does.
+
+macdrv_context_create() also refused 3.2-4.1 core requests that did not set
+WGL_CONTEXT_FORWARD_COMPATIBLE_BIT_ARB. macOS core contexts have no
+deprecated functionality, so the result is what a forward-compatible request
+gets; macOS cannot offer the wider non-forward-compatible core context that
+Windows drivers may. Upstream no longer requires the flag either.
+
+Not taken from upstream: its handling of legacy versions (3.0 without flags,
+3.1, and 1.x/2.x with the forward-compatible bit), of an explicit zero
+profile mask and of 3.2+ compatibility profiles, and its error code for a
+version above the host maximum. Those requests keep their base results.
+
+diff --git a/dlls/winemac.drv/opengl.c b/dlls/winemac.drv/opengl.c
+index 8c7b3fe..8f24ef5 100644
+--- a/dlls/winemac.drv/opengl.c
++++ b/dlls/winemac.drv/opengl.c
+@@ -2152,6 +2152,13 @@ static BOOL macdrv_context_create(int format, void *shared, const int *attrib_li
+                 profile = value;
+                 break;
+ 
++            case WGL_CONTEXT_OPENGL_NO_ERROR_ARB:
++                /* CGL has no no-error mode, and a context that still reports
++                 * errors is a valid answer to the request. */
++                if (value)
++                    WARN("WGL_CONTEXT_OPENGL_NO_ERROR_ARB ignored\n");
++                break;
++
+             default:
+                 WARN("Unknown attribute %s.\n", debugstr_attrib(attr, value));
+                 RtlSetLastWin32Error(ERROR_INVALID_PARAMETER);
+@@ -2171,12 +2178,8 @@ static BOOL macdrv_context_create(int format, void *shared, const int *attrib_li
+                 flags |= WGL_CONTEXT_FORWARD_COMPATIBLE_BIT_ARB;
+         }
+ 
+-        if (!(flags & WGL_CONTEXT_FORWARD_COMPATIBLE_BIT_ARB))
+-        {
+-            WARN("OS X only supports forward-compatible 3.2+ contexts\n");
+-            RtlSetLastWin32Error(ERROR_INVALID_VERSION_ARB);
+-            return FALSE;
+-        }
++        /* A core profile context has no deprecated functionality, so it is
++         * what a forward-compatible one would be; the flag is not required. */
+         if (profile != WGL_CONTEXT_CORE_PROFILE_BIT_ARB)
+         {
+             WARN("Compatibility profiles for GL version >= 3.2 not supported\n");

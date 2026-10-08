@@ -1942,6 +1942,32 @@
           "contains": "ERR( \"invalid stack pointer %p (%p-%p)"
         }
       ]
+    },
+    {
+      "order": 131,
+      "path": "patches/upstream/0080-wine-11.19-winemac-context-attribs.patch",
+      "sha256": "7cecbaf0376185c81de86db11e5edece04df152cf4360c691cd4247b95934c34",
+      "kind": "upstream-backport",
+      "status": "active",
+      "risk": "medium",
+      "firstWineRelease": "wine-11.19",
+      "upstreamCommits": [
+        "632068bd355d85dbdbaa760f41a47c2a4857853d",
+        "af79eeb0d050a5462f0e0fb3652a4aec47bf7ef2"
+      ],
+      "adaptation": "Upstream moves wglCreateContextAttribsARB parsing into win32u as part of an OpenGL context refactor that the 11.19 sweep did not take. This patch carries only the resulting winemac.drv behaviour for two checks in the base's own attribute loop: WGL_CONTEXT_OPENGL_NO_ERROR_ARB is accepted and ignored, and 3.2-4.1 core requests no longer need the forward-compatible flag. Not taken: upstream's handling of legacy versions (3.0 without flags, 3.1, and 1.x/2.x with the forward-compatible bit, which upstream accepts), of an explicit zero profile mask (upstream defaults it to core), of 3.2+ compatibility profiles, and its ERROR_INVALID_VERSION_ARB for a 3.2-4.1 request above the host maximum (the base returns ERROR_INVALID_PROFILE_ARB). Those requests keep their base results.",
+      "summary": "Let winemac.drv create OpenGL 3.2-4.1 core contexts requested with WGL_CONTEXT_OPENGL_NO_ERROR_ARB and without the forward-compatible flag, as SDL 2 requests them, instead of failing with ERROR_INVALID_PARAMETER.",
+      "testStrategy": "tests/macdrv-context-attribs-check.py compiles the patched macdrv_context_create() with a stubbed CGL context and CX_FWD_COMPAT_GL_CTX unset: the SDL 2.0.16 3.2 core request (major 3, minor 2, core profile, no-error 0, no flags), a 3.2 core request without no-error, a 2.1 request with no-error 1 and a 4.1 request with no-error 1 succeed, and the 3.2 request still succeeds with CX_FWD_COMPAT_GL_CTX=1; a 3.2 compatibility profile, 3.0 and 3.1 requests, a 4.3 request, an unknown attribute and a forward-compatible 2.1 request are refused with their previous errors. Reverting either half fails it. scripts/integration-check.sh runs it for patch sets carrying this patch. It does not cover CGL context creation; a complete WoW64 build and an application run are still required before tagging.",
+      "verification": [
+        {
+          "path": "dlls/winemac.drv/opengl.c",
+          "contains": "            case WGL_CONTEXT_OPENGL_NO_ERROR_ARB:"
+        },
+        {
+          "path": "dlls/winemac.drv/opengl.c",
+          "contains": "what a forward-compatible one would be; the flag is not required."
+        }
+      ]
     }
   ],
   "targetedReview": {

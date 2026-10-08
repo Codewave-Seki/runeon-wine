@@ -83,3 +83,4 @@ patches/runeon/0110-dwrite-emoji-system-fallback.patch
 patches/upstream/0079-wine-11.19-targeted-fixes.patch
 patches/runeon/0111-steam-d3d12on7-launch-guard.patch
 patches/runeon/0112-ntdll-seh-dispatch-stack-bounds.patch
+patches/upstream/0080-wine-11.19-winemac-context-attribs.patch
