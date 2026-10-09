@@ -6,15 +6,16 @@ that need a newer compatibility profile cannot run on the host driver. A
 launcher may ship a Mesa opengl32 for them, but it must reach only the
 processes that need it.
 
-Add a "mesagl" backend id to the per-process route table. A process whose
-own image is inside a directory routed to mesagl gets
+Add a "mesagl" backend id to the per-process route table. A process
+whose own image is inside a directory routed to mesagl gets
 RUNEON_GFX_DIR_MESAGL prepended to its builtin search path; each process
-is matched by its own image, so a child started from elsewhere is not. opengl32 then resolves there, and so does any other module
-of that directory whose name is also found on the normal DLL search path;
-like the other backends, a launcher provides a prefix placeholder for a
+is matched by its own image, so a child started from elsewhere is not.
+opengl32 then resolves there, and so does any other module of that
+directory whose name is also found on the normal DLL search path; like
+the other backends, a launcher provides a prefix placeholder for a
 helper module that the base does not ship. The directory's modules must
-carry the Wine builtin mark. Direct3D modules stay with plain Wine, whose
-wined3d then uses the replacement opengl32 too, so the route suits
+carry the Wine builtin mark. Direct3D modules stay with plain Wine,
+whose wined3d then uses the replacement opengl32 too, so the route suits
 OpenGL-only applications.
 
 A mesagl route without RUNEON_GFX_DIR_MESAGL loads plain Wine, and the
