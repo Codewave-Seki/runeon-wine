@@ -1,0 +1,40 @@
+From: Runeon Contributors <dev@runeon.com>
+Subject: [PATCH] msvcrt: Keep refusing code page 54936 for locales and _setmbcp().
+
+setlocale() and _setmbcp() accept any code page IsValidCodePage() and
+GetCPInfo() accept, and then build the CRT's character tables assuming at
+most two bytes per character. Code page 54936 (GB18030) was rejected
+there only because kernelbase did not know it; now that it does, the CRT
+would build a locale whose lead-byte, case and multibyte tables are wrong
+for four-byte sequences.
+
+Microsoft documents that the CRT supports no multibyte code page beyond
+two bytes except UTF-8, so refuse 54936 explicitly in both places. Programs
+that fell back to another locale when this failed keep doing so.
+
+--- a/dlls/msvcrt/locale.c
++++ b/dlls/msvcrt/locale.c
+@@ -431,6 +431,11 @@
+     }
+     if (!IsValidCodePage(locale_cp))
+         return FALSE;
++    /* The CRT tables only describe code pages of up to two bytes per
++     * character, and UTF-8 separately; GB18030 is valid but has four-byte
++     * sequences, so it is refused as it was before kernelbase knew it. */
++    if (locale_cp == 54936)
++        return FALSE;
+ 
+     if (!locale_cp)
+         return FALSE;
+--- a/dlls/msvcrt/mbcs.c
++++ b/dlls/msvcrt/mbcs.c
+@@ -275,7 +275,8 @@
+     mbcinfo->mblcid = 0;
+   }
+ 
+-  if (!GetCPInfo(newcp, &cpi))
++  /* see locale_to_sname(): GB18030 does not fit the two-byte tables */
++  if (newcp == 54936 || !GetCPInfo(newcp, &cpi))
+   {
+     WARN("Codepage %d not found\n", newcp);
+     free(mbcinfo);

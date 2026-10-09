@@ -7,9 +7,9 @@ launcher may ship a Mesa opengl32 for them, but it must reach only the
 processes that need it.
 
 Add a "mesagl" backend id to the per-process route table. A process whose
-image is inside a directory routed to mesagl, including child processes
-started from there, gets RUNEON_GFX_DIR_MESAGL prepended to its builtin
-search path. opengl32 then resolves there, and so does any other module
+own image is inside a directory routed to mesagl gets
+RUNEON_GFX_DIR_MESAGL prepended to its builtin search path; each process
+is matched by its own image, so a child started from elsewhere is not. opengl32 then resolves there, and so does any other module
 of that directory whose name is also found on the normal DLL search path;
 like the other backends, a launcher provides a prefix placeholder for a
 helper module that the base does not ship. The directory's modules must

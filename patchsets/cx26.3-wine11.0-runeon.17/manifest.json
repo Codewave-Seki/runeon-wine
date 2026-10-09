@@ -1930,7 +1930,7 @@
       "kind": "runeon-product",
       "status": "active",
       "risk": "medium",
-      "summary": "Before each unwind in the x64 handler search, checks that the return address slot at Rsp lies below StackBase and otherwise ends the search with EXCEPTION_STACK_INVALID, the result the existing establisher frame check gives for a frame outside the stack. This replaces a recursive fault in RtlVirtualUnwind2() when a misread frame leaves Rsp at the top of or above the stack; behaviour is unchanged elsewhere. Not opt-in; intended for upstream submission. RtlUnwindEx() is unchanged.",
+      "summary": "Before each unwind in the x64 handler search, checks that the return address slot at Rsp lies below StackBase and otherwise ends the search with EXCEPTION_STACK_INVALID, the result the existing establisher frame check gives for a frame outside the stack. This replaces a recursive fault in RtlVirtualUnwind2() when a misread frame leaves Rsp at the top of or above the stack; behaviour is unchanged elsewhere. Not opt-in; intended for upstream submission. RtlUnwindEx() is unchanged. The collided-unwind branch, which skips straight to the unwind, is not covered.",
       "testStrategy": "tests/seh-dispatch-stack-bounds-check.py compiles the patched call_seh_handlers() with a stub unwinder against a stack that ends at an inaccessible page: an aligned leaf walk and a frame unwinding exactly to StackBase end as before, while a frame unwinding within one slot below StackBase or above it is marked EXCEPTION_STACK_INVALID without reading past the stack; with the check removed the probe faults. scripts/integration-check.sh runs it for patch sets carrying this patch. It does not cover real unwind data, language handlers, fibers or guard-page growth. A complete i386/x86_64 WoW64 build is still required before tagging; the original application crash has not been reproduced locally.",
       "verification": [
         {
@@ -1956,7 +1956,7 @@
         "af79eeb0d050a5462f0e0fb3652a4aec47bf7ef2"
       ],
       "adaptation": "Upstream moves wglCreateContextAttribsARB parsing into win32u as part of an OpenGL context refactor that the 11.19 sweep did not take. This patch carries only the resulting winemac.drv behaviour for two checks in the base's own attribute loop: WGL_CONTEXT_OPENGL_NO_ERROR_ARB is accepted and ignored, and 3.2-4.1 core requests no longer need the forward-compatible flag. Not taken: upstream's handling of legacy versions (3.0 without flags, 3.1, and 1.x/2.x with the forward-compatible bit, which upstream accepts), of an explicit zero profile mask (upstream defaults it to core), of 3.2+ compatibility profiles, and its ERROR_INVALID_VERSION_ARB for a 3.2-4.1 request above the host maximum (the base returns ERROR_INVALID_PROFILE_ARB). Those requests keep their base results.",
-      "summary": "Let winemac.drv create OpenGL 3.2-4.1 core contexts requested with WGL_CONTEXT_OPENGL_NO_ERROR_ARB and without the forward-compatible flag, as SDL 2 requests them, instead of failing with ERROR_INVALID_PARAMETER.",
+      "summary": "Let winemac.drv create OpenGL 3.2-4.1 core contexts requested with WGL_CONTEXT_OPENGL_NO_ERROR_ARB and without the forward-compatible flag, as SDL 2 requests them, instead of failing (ERROR_INVALID_PARAMETER for the no-error attribute, ERROR_INVALID_VERSION_ARB without the forward-compatible flag). A program that probed for a core context and fell back to a legacy one now gets the core context, as on upstream Wine 11.19.",
       "testStrategy": "tests/macdrv-context-attribs-check.py compiles the patched macdrv_context_create() with a stubbed CGL context and CX_FWD_COMPAT_GL_CTX unset: the SDL 2.0.16 3.2 core request (major 3, minor 2, core profile, no-error 0, no flags), a 3.2 core request without no-error, a 2.1 request with no-error 1 and a 4.1 request with no-error 1 succeed, and the 3.2 request still succeeds with CX_FWD_COMPAT_GL_CTX=1; a 3.2 compatibility profile, 3.0 and 3.1 requests, a 4.3 request, an unknown attribute and a forward-compatible 2.1 request are refused with their previous errors. Reverting either half fails it. scripts/integration-check.sh runs it for patch sets carrying this patch. It does not cover CGL context creation; a complete WoW64 build and an application run are still required before tagging.",
       "verification": [
         {
@@ -1972,11 +1972,11 @@
     {
       "order": 132,
       "path": "patches/runeon/0113-graphics-route-mesagl.patch",
-      "sha256": "04527f4de2fb547236da5b3e1f88ab6f484ec0d24a6c8281685b98777fa01108",
+      "sha256": "bc679092ac40239d53445363baa41952ab6da9aedc4f2188dbf66edab5b6ef0a",
       "kind": "runeon-product",
       "status": "active",
       "risk": "medium",
-      "summary": "Adds a mesagl backend id to the per-process graphics route table: a process whose image is inside a routed directory, including its child processes, gets RUNEON_GFX_DIR_MESAGL prepended to its builtin search path, so a builtin-marked Mesa opengl32 resolves there, as does any helper module for which a launcher provides a prefix placeholder. Direct3D modules stay with plain Wine, whose wined3d then also uses that opengl32, so the route suits OpenGL-only applications. Without the variable and without a mesagl table entry behaviour is unchanged; a mesagl route without the variable loads plain Wine.",
+      "summary": "Adds a mesagl backend id to the per-process graphics route table: a process whose own image is inside a routed directory gets RUNEON_GFX_DIR_MESAGL prepended to its builtin search path, so a builtin-marked Mesa opengl32 resolves there, as does any helper module for which a launcher provides a prefix placeholder. Direct3D modules stay with plain Wine, whose wined3d then also uses that opengl32, so the route suits OpenGL-only applications. Without the variable and without a mesagl table entry behaviour is unchanged; a mesagl route without the variable loads plain Wine.",
       "testStrategy": "tests/graphics-route-check.py compiles the patched route parser and, when the mesagl backend is present, checks the mesagl route, malformed ids, overlap, the missing-directory fallback and that the variable alone enables the table. A complete WoW64 build and an application run with a Mesa directory are still required before tagging.",
       "verification": [
         {
@@ -2026,6 +2026,26 @@
         {
           "path": "dlls/kernelbase/locale.c",
           "contains": "{ 54936, L\"54936 (GB18030)\" },"
+        }
+      ]
+    },
+    {
+      "order": 135,
+      "path": "patches/runeon/0116-msvcrt-refuse-gb18030-locale.patch",
+      "sha256": "81f8dd26e8515798f61251150f51aca7fbc5391f08eec20b8e98d07a4a84f5eb",
+      "kind": "runeon-product",
+      "status": "active",
+      "risk": "low",
+      "summary": "msvcrt keeps refusing code page 54936 in setlocale() and _setmbcp(), as it did before 0115 made kernelbase accept it: the CRT's character tables assume at most two bytes per character, and Microsoft documents no multibyte CRT code page beyond two bytes except UTF-8. Programs that fall back to another locale when this fails keep doing so.",
+      "testStrategy": "Verified by the anchors below and a syntax-only compile of both files for i686 and x86_64 with Wine's headers; there is no function-level check. A complete WoW64 build is still required before tagging.",
+      "verification": [
+        {
+          "path": "dlls/msvcrt/locale.c",
+          "contains": "sequences, so it is refused as it was before kernelbase knew it."
+        },
+        {
+          "path": "dlls/msvcrt/mbcs.c",
+          "contains": "if (newcp == 54936 || !GetCPInfo(newcp, &cpi))"
         }
       ]
     }

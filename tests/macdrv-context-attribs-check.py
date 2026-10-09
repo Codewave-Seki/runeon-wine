@@ -76,7 +76,7 @@ static BOOL create(const int *attribs)
 
 int main(void)
 {
-    /* What SDL 2.0.16 sends for a 3.2 core request (Rune Factory 4 Special). */
+    /* What SDL 2.0.16 sends for a 3.2 core request. */
     static const int sdl_core[] = { 0x2091, 3, 0x2092, 2, 0x9126, 1, 0x31B3, 0, 0 };
     static const int no_error_on[] = { 0x2091, 4, 0x2092, 1, 0x9126, 1, 0x31B3, 1, 0 };
     static const int forward[] = { 0x2091, 3, 0x2092, 3, 0x2094, 2, 0 };
