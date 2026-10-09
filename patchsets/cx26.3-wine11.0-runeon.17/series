@@ -86,3 +86,4 @@ patches/runeon/0112-ntdll-seh-dispatch-stack-bounds.patch
 patches/upstream/0080-wine-11.19-winemac-context-attribs.patch
 patches/runeon/0113-graphics-route-mesagl.patch
 patches/runeon/0114-winemac-legacy-context-report.patch
+patches/runeon/0115-kernelbase-gb18030-codepage.patch

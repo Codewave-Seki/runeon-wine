@@ -2008,6 +2008,26 @@
           "contains": "runeon-gl-core-context: core context %d.%d"
         }
       ]
+    },
+    {
+      "order": 134,
+      "path": "patches/runeon/0115-kernelbase-gb18030-codepage.patch",
+      "sha256": "cbfedabe90cd84d537a7767deb3099aa533271d90f1cbaea67ec6652bdf50577",
+      "kind": "runeon-product",
+      "status": "active",
+      "risk": "low",
+      "summary": "kernelbase supports code page 54936 (GB18030), which Windows implements in code and Wine lacks (WineHQ bug 45339): IsValidCodePage(), GetCPInfo(), GetCPInfoExW(), MultiByteToWideChar() and WideCharToMultiByte() accept it, mapped as GB18030-2000. Two-byte codes reuse the code page 936 table with 81 overrides; four-byte codes use 206 BMP ranges and a linear mapping for the supplementary planes. Flags are validated as for UTF-8 so a default MB_PRECOMPOSED is not rejected; invalid input decodes to U+FFFD and lone surrogates to the default character unless the strict flags ask for an error. Other code pages are unchanged.",
+      "testStrategy": "tests/gb18030-codepage-check.py compiles the patched conversion helpers against the tree's nls/c_936.nls and compares every BMP character, supplementary samples and every two-byte code with Python's GB18030-2000 codec in both directions, pins the codes where the 2000 and 2005 editions differ, and covers invalid, truncated and unassigned input, lone surrogates, the strict flags and short buffers in both directions; changing an override, a range, the supplementary base or the replacement character fails it. A complete WoW64 build and an application run are still required before tagging.",
+      "verification": [
+        {
+          "path": "dlls/kernelbase/locale.c",
+          "contains": "static int mbstowcs_gb18030( DWORD flags, const unsigned char *src, int srclen, WCHAR *dst, int dstlen )"
+        },
+        {
+          "path": "dlls/kernelbase/locale.c",
+          "contains": "{ 54936, L\"54936 (GB18030)\" },"
+        }
+      ]
     }
   ],
   "targetedReview": {

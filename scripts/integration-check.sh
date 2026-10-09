@@ -61,6 +61,12 @@ if grep -Fqx 'patches/upstream/0080-wine-11.19-winemac-context-attribs.patch' "$
     || die "winemac context attribute check failed"
 fi
 
+# Code page 54936 is checked from the patched conversion helpers.
+if grep -Fqx 'patches/runeon/0115-kernelbase-gb18030-codepage.patch' "$series_file"; then
+  python3 "$script_dir/../tests/gb18030-codepage-check.py" "$candidate_root" >/dev/null \
+    || die "GB18030 code page check failed"
+fi
+
 if "$script_dir/apply-series.sh" "$candidate_root" >"$temp_root/reapply.stdout" 2>"$temp_root/reapply.stderr"; then
   die "a second patch application unexpectedly succeeded"
 fi
