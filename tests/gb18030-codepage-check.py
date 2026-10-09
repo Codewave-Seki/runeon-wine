@@ -38,9 +38,9 @@ typedef int BOOL;
 #define WC_ERR_INVALID_CHARS 0x80
 #define ERROR_INSUFFICIENT_BUFFER 122
 #define ERROR_NO_UNICODE_TRANSLATION 1113
+/* only what include/winnls.h defines, so a missing macro fails to compile */
 #define IS_HIGH_SURROGATE(ch) ((ch) >= 0xd800 && (ch) <= 0xdbff)
 #define IS_LOW_SURROGATE(ch) ((ch) >= 0xdc00 && (ch) <= 0xdfff)
-#define IS_SURROGATE(ch) ((ch) >= 0xd800 && (ch) <= 0xdfff)
 typedef struct
 {
     USHORT CodePage, MaximumCharacterSize, DefaultChar, UniDefaultChar, TransDefaultChar, TransUniDefaultChar;

@@ -20,11 +20,13 @@ Flags are validated as for UTF-8, by the existing checks: Windows
 documents only MB_ERR_INVALID_CHARS and WC_ERR_INVALID_CHARS for this code
 page, but rejecting the default MB_PRECOMPOSED that callers commonly pass
 would bring back the empty strings, so other accepted flags are ignored.
-Invalid input decodes to U+FFFD and a lone surrogate encodes to the
-default character, unless MB_ERR_INVALID_CHARS or WC_ERR_INVALID_CHARS
-asks for an error. GetCPInfo() reports a maximum character size of 4 and
-no lead bytes. These error and GetCPInfo() details follow the UTF-8 path
-and were not compared with Windows.
+Invalid input decodes to U+FFFD, unless MB_ERR_INVALID_CHARS asks for an
+error. A lone surrogate encodes to the first byte of the caller's default
+character, or '?', and sets the used flag, unless WC_ERR_INVALID_CHARS asks
+for an error; Windows documents that both must be NULL for this code page,
+so they are accepted rather than refused. GetCPInfo() reports a maximum
+character size of 4 and no lead bytes, as for UTF-8. These error and
+GetCPInfo() details were not compared with Windows.
 
 The change is not opt-in: it only makes calls that always failed succeed,
 and every other code page takes the same path as before.
@@ -216,8 +218,8 @@ and every other code page takes the same path as before.
 +static int mbstowcs_gb18030( DWORD flags, const unsigned char *src, int srclen, WCHAR *dst, int dstlen )
 +{
 +    const CPTABLEINFO *gbk = get_codepage_table( 936 );
-+    unsigned int linear, min, max, pos;
-+    int len = 0, used, count;
++    unsigned int linear;
++    int len = 0, used, count, min, max, pos;
 +    WCHAR wch[2];
 +
 +    if (!gbk) return 0;
@@ -241,7 +243,7 @@ and every other code page takes the same path as before.
 +            {
 +                min = 0;
 +                max = ARRAY_SIZE(gb18030_ranges) - 1;
-+                while (min <= max && max < ARRAY_SIZE(gb18030_ranges))
++                while (min <= max)
 +                {
 +                    pos = (min + max) / 2;
 +                    if (linear < gb18030_ranges[pos].linear) max = pos - 1;
@@ -314,7 +316,7 @@ and every other code page takes the same path as before.
 +            consumed = 2;
 +            count = 4;
 +        }
-+        else if (!IS_SURROGATE( wch ))
++        else if (wch < 0xd800 || wch > 0xdfff)
 +        {
 +            if ((code = gb18030_wchar_to_dbcs( gbk, wch )))
 +            {
