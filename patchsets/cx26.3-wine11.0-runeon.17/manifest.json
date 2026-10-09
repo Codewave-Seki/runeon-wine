@@ -2048,6 +2048,30 @@
           "contains": "if (newcp == 54936 || !GetCPInfo(newcp, &cpi))"
         }
       ]
+    },
+    {
+      "order": 136,
+      "path": "patches/runeon/0117-winemac-bptc-2d-decode.patch",
+      "sha256": "78131ae3b26a4ea22d7935220e6e84f2ea5da059b43c5853f3a51ccd8590a300",
+      "kind": "runeon-product",
+      "status": "active",
+      "risk": "low",
+      "summary": "When RUNEON_GL_BPTC_DECODE=1 and macOS OpenGL lacks GL_ARB_texture_compression_bptc, winemac.drv decodes two-dimensional BPTC_UNORM and SRGB_ALPHA_BPTC_UNORM uploads (glCompressedTexImage2D/glCompressedTexSubImage2D and their ARB names) to RGBA8 or SRGB8_ALPHA8 with the bundled bcdec decoder and uploads them uncompressed, resetting and restoring the unpack layout. Edge blocks are clipped for sizes that are not a multiple of four. Other formats, uploads from a pixel unpack buffer and short input go to the host unchanged; the extension is not advertised. A decoded texture reports an uncompressed format and uses four times the memory; widths or heights above 16384 are passed through for the host to reject. Without the variable the host functions are returned as before.",
+      "testStrategy": "tests/bptc-2d-decode-check.py compiles the patched decode_bptc_2d() under AddressSanitizer and compares it with a cropped block-by-block decode for whole, partial-edge and 1x1/2x2/3x3 sizes, and checks that invalid input returns NULL; removing the edge clipping fails it with a heap overflow. The GL wrappers and the gate were checked by a syntax-only compile; a complete WoW64 build and an application run are still required.",
+      "verification": [
+        {
+          "path": "dlls/winemac.drv/opengl.c",
+          "contains": "getenv(\"RUNEON_GL_BPTC_DECODE\")"
+        },
+        {
+          "path": "dlls/winemac.drv/opengl.c",
+          "contains": "static BYTE *decode_bptc_2d(const void *data, GLsizei width, GLsizei height, GLsizei image_size)"
+        },
+        {
+          "path": "dlls/winemac.drv/opengl.c",
+          "contains": "return macdrv_glCompressedTexSubImage2D;"
+        }
+      ]
     }
   ],
   "targetedReview": {

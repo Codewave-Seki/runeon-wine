@@ -88,3 +88,4 @@ patches/runeon/0113-graphics-route-mesagl.patch
 patches/runeon/0114-winemac-legacy-context-report.patch
 patches/runeon/0115-kernelbase-gb18030-codepage.patch
 patches/runeon/0116-msvcrt-refuse-gb18030-locale.patch
+patches/runeon/0117-winemac-bptc-2d-decode.patch

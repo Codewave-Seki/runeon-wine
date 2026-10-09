@@ -67,6 +67,12 @@ if grep -Fqx 'patches/runeon/0115-kernelbase-gb18030-codepage.patch' "$series_fi
     || die "GB18030 code page check failed"
 fi
 
+# Two-dimensional BPTC decoding is checked from the patched helper.
+if grep -Fqx 'patches/runeon/0117-winemac-bptc-2d-decode.patch' "$series_file"; then
+  python3 "$script_dir/../tests/bptc-2d-decode-check.py" "$candidate_root" >/dev/null \
+    || die "BPTC decode check failed"
+fi
+
 if "$script_dir/apply-series.sh" "$candidate_root" >"$temp_root/reapply.stdout" 2>"$temp_root/reapply.stderr"; then
   die "a second patch application unexpectedly succeeded"
 fi

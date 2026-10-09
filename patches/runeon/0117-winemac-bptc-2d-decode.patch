@@ -1,0 +1,215 @@
+From: Runeon Contributors <dev@runeon.com>
+Subject: [PATCH] winemac.drv: Decode two-dimensional BPTC uploads when the host lacks them.
+
+macOS OpenGL offers no BPTC formats, which every Windows driver with
+OpenGL 4.2 supports. A BC7 upload through glCompressedTexImage2D() or
+glCompressedTexSubImage2D() then fails and the texture stays empty, so an
+application can draw a blank screen without any error Wine sees. When
+RUNEON_GL_BPTC_DECODE=1 and the host does not report
+GL_ARB_texture_compression_bptc, decode BPTC_UNORM and SRGB_ALPHA_BPTC_UNORM
+uploads to RGBA8 (SRGB8_ALPHA8) and upload them uncompressed, with the
+unpack layout reset for the packed image and restored afterwards. Edge
+blocks are clipped, so small mipmap levels stay in bounds. Other formats,
+uploads from a pixel unpack buffer and input too short for the image go to
+the host function unchanged. The extension is not advertised. A decoded
+texture reports an uncompressed format and uses four times the memory.
+Without the variable the host functions are returned exactly as before.
+
+diff --git a/dlls/winemac.drv/opengl.c b/dlls/winemac.drv/opengl.c
+index 9b7a8b9..edaf677 100644
+--- a/dlls/winemac.drv/opengl.c
++++ b/dlls/winemac.drv/opengl.c
+@@ -2664,6 +2664,173 @@ static void macdrv_glCompressedTexSubImage3D(GLenum target, GLint level, GLint x
+ 
+ /* CX HACK 23422 - END */
+ 
++/* Runeon: macOS OpenGL has no BPTC formats, which every Windows driver
++ * offering OpenGL 4.2 supports, so a two-dimensional BC7 upload fails and the
++ * texture stays empty. When RUNEON_GL_BPTC_DECODE=1 and the host lacks
++ * GL_ARB_texture_compression_bptc, decode such uploads to RGBA8 and upload
++ * them uncompressed. Every other format and upload goes to the host function
++ * unchanged. The texture then reports an uncompressed format and uses four
++ * times the memory, and BPTC calls the host would reject for their target,
++ * offset alignment or an oversized imageSize succeed; such calls always failed
++ * before. GL_UNPACK_CLIENT_STORAGE_APPLE is left alone: Windows applications
++ * cannot set it, and querying it in a core context would raise an error the
++ * application could see. */
++static void (*pglCompressedTexImage2D)(GLenum target, GLint level, GLenum internalformat,
++                                       GLsizei width, GLsizei height, GLint border,
++                                       GLsizei imageSize, const void *data);
++static void (*pglCompressedTexSubImage2D)(GLenum target, GLint level, GLint xoffset, GLint yoffset,
++                                          GLsizei width, GLsizei height, GLenum format,
++                                          GLsizei imageSize, const void *data);
++static void (*pglTexImage2D)(GLenum target, GLint level, GLint internalformat, GLsizei width,
++                             GLsizei height, GLint border, GLenum format, GLenum type,
++                             const void *pixels);
++static void (*pglTexSubImage2D)(GLenum target, GLint level, GLint xoffset, GLint yoffset,
++                                GLsizei width, GLsizei height, GLenum format, GLenum type,
++                                const void *pixels);
++static void (*pglPixelStorei)(GLenum pname, GLint param);
++
++/* The decoded image is tightly packed, so the application's unpack layout,
++ * which compressed uploads ignore, must not apply to it. */
++static const GLenum bptc_unpack_state[] =
++{
++    GL_UNPACK_ROW_LENGTH, GL_UNPACK_SKIP_ROWS, GL_UNPACK_SKIP_PIXELS, GL_UNPACK_ALIGNMENT,
++};
++static const GLint bptc_unpack_packed[] = { 0, 0, 0, 1 };
++
++static BOOL is_bptc_unorm(GLenum format)
++{
++    return format == GL_COMPRESSED_RGBA_BPTC_UNORM_ARB || format == GL_COMPRESSED_SRGB_ALPHA_BPTC_UNORM_ARB;
++}
++
++/* Decodes a BC7 image into tightly packed RGBA8. Edge blocks are clipped, so
++ * sizes that are not a multiple of four, as small mipmap levels are, stay in
++ * bounds. Returns NULL when the input cannot hold the image. */
++static BYTE *decode_bptc_2d(const void *data, GLsizei width, GLsizei height, GLsizei image_size)
++{
++    size_t blocks_x, blocks_y, x, y, row, columns;
++    BYTE block[4 * 4 * 4], *pixels;
++    const BYTE *src = data;
++
++    /* 16384 is the largest texture macOS OpenGL accepts; larger requests go
++     * to the host to be rejected instead of being decoded first. */
++    if (!data || width <= 0 || height <= 0 || width > 16384 || height > 16384 || image_size < 0)
++        return NULL;
++    blocks_x = (width + 3) / 4;
++    blocks_y = (height + 3) / 4;
++    if ((size_t)image_size < blocks_x * blocks_y * BCDEC_BC7_BLOCK_SIZE) return NULL;
++    if (!(pixels = malloc((size_t)width * height * 4))) return NULL;
++
++    for (y = 0; y < blocks_y; y++)
++    {
++        for (x = 0; x < blocks_x; x++)
++        {
++            bcdec_bc7(src + (y * blocks_x + x) * BCDEC_BC7_BLOCK_SIZE, block, 4 * 4);
++            columns = width - x * 4 < 4 ? width - x * 4 : 4;
++            for (row = 0; row < 4 && y * 4 + row < height; row++)
++                memcpy(pixels + ((y * 4 + row) * width + x * 4) * 4, block + row * 4 * 4, columns * 4);
++        }
++    }
++    return pixels;
++}
++
++/* Decodes into *pixels; NULL data only allocates storage. Fails, so the
++ * caller passes the upload through, when a pixel unpack buffer is bound or the
++ * input cannot hold the image. */
++static BOOL prepare_bptc_upload(const void *data, GLsizei width, GLsizei height, GLsizei image_size,
++                                BYTE **pixels)
++{
++    GLint buffer = 0;
++
++    *pixels = NULL;
++    pglGetIntegerv(GL_PIXEL_UNPACK_BUFFER_BINDING, &buffer);
++    if (buffer)
++    {
++        static int once;
++        if (!once++) FIXME("BPTC upload from a pixel unpack buffer is not decoded\n");
++        return FALSE;
++    }
++    if (!data) return TRUE;
++    return (*pixels = decode_bptc_2d(data, width, height, image_size)) != NULL;
++}
++
++static void set_bptc_unpack_state(GLint *saved)
++{
++    unsigned int i;
++
++    for (i = 0; i < ARRAY_SIZE(bptc_unpack_state); i++)
++    {
++        pglGetIntegerv(bptc_unpack_state[i], &saved[i]);
++        pglPixelStorei(bptc_unpack_state[i], bptc_unpack_packed[i]);
++    }
++}
++
++static void restore_bptc_unpack_state(const GLint *saved)
++{
++    unsigned int i;
++
++    for (i = 0; i < ARRAY_SIZE(bptc_unpack_state); i++)
++        pglPixelStorei(bptc_unpack_state[i], saved[i]);
++}
++
++static void macdrv_glCompressedTexImage2D(GLenum target, GLint level, GLenum internalformat,
++                                          GLsizei width, GLsizei height, GLint border,
++                                          GLsizei imageSize, const void *data)
++{
++    GLint saved[ARRAY_SIZE(bptc_unpack_state)];
++    BYTE *pixels;
++
++    if (!is_bptc_unorm(internalformat) || !prepare_bptc_upload(data, width, height, imageSize, &pixels))
++    {
++        pglCompressedTexImage2D(target, level, internalformat, width, height, border, imageSize, data);
++        return;
++    }
++    set_bptc_unpack_state(saved);
++    pglTexImage2D(target, level, internalformat == GL_COMPRESSED_SRGB_ALPHA_BPTC_UNORM_ARB ? GL_SRGB8_ALPHA8 : GL_RGBA8,
++                  width, height, border, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
++    restore_bptc_unpack_state(saved);
++    free(pixels);
++}
++
++static void macdrv_glCompressedTexSubImage2D(GLenum target, GLint level, GLint xoffset, GLint yoffset,
++                                             GLsizei width, GLsizei height, GLenum format,
++                                             GLsizei imageSize, const void *data)
++{
++    GLint saved[ARRAY_SIZE(bptc_unpack_state)];
++    BYTE *pixels;
++
++    /* Sub-image updates need data; NULL is passed through for the host to reject. */
++    if (!is_bptc_unorm(format) || !data || !prepare_bptc_upload(data, width, height, imageSize, &pixels))
++    {
++        pglCompressedTexSubImage2D(target, level, xoffset, yoffset, width, height, format, imageSize, data);
++        return;
++    }
++    set_bptc_unpack_state(saved);
++    pglTexSubImage2D(target, level, xoffset, yoffset, width, height, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
++    restore_bptc_unpack_state(saved);
++    free(pixels);
++}
++
++static BOOL bptc_decode;
++
++/* Called once from macdrv_OpenGLInit(); any failure leaves the host functions
++ * in place. */
++static BOOL check_bptc_decode(void)
++{
++    const char *env;
++
++    if (!(env = getenv("RUNEON_GL_BPTC_DECODE")) || strcmp(env, "1")) return FALSE;
++    if (gluCheckExtension((const GLubyte *)"GL_ARB_texture_compression_bptc", (const GLubyte *)gl_info.glExtensions))
++        return FALSE;
++    if (!(pglCompressedTexImage2D = dlsym(opengl_handle, "glCompressedTexImage2D")) ||
++        !(pglCompressedTexSubImage2D = dlsym(opengl_handle, "glCompressedTexSubImage2D")) ||
++        !(pglTexImage2D = dlsym(opengl_handle, "glTexImage2D")) ||
++        !(pglTexSubImage2D = dlsym(opengl_handle, "glTexSubImage2D")) ||
++        !(pglPixelStorei = dlsym(opengl_handle, "glPixelStorei")))
++        return FALSE;
++    TRACE("decoding two-dimensional BPTC uploads\n");
++    return TRUE;
++}
++
+ static void register_extension(const char *ext)
+ {
+     if (gl_info.wglExtensions[0])
+@@ -2760,6 +2927,7 @@ UINT macdrv_OpenGLInit(UINT version, const struct opengl_funcs *opengl_funcs, co
+ 
+     if (!init_gl_info())
+         goto failed;
++    bptc_decode = check_bptc_decode();
+ 
+ #undef LOAD_FUNCPTR
+ 
+@@ -2885,6 +3053,11 @@ static void *macdrv_get_proc_address(const char *name)
+     /* CX HACK 23422 */
+     if (!strcmp(name, "glCompressedTexImage3D")) return macdrv_glCompressedTexImage3D;
+     if (!strcmp(name, "glCompressedTexSubImage3D")) return macdrv_glCompressedTexSubImage3D;
++    /* Runeon: see macdrv_glCompressedTexImage2D */
++    if ((!strcmp(name, "glCompressedTexImage2D") || !strcmp(name, "glCompressedTexImage2DARB")) && bptc_decode)
++        return macdrv_glCompressedTexImage2D;
++    if ((!strcmp(name, "glCompressedTexSubImage2D") || !strcmp(name, "glCompressedTexSubImage2DARB")) && bptc_decode)
++        return macdrv_glCompressedTexSubImage2D;
+     return dlsym(opengl_handle, name);
+ }
+ 
