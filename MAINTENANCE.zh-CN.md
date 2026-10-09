@@ -22,9 +22,11 @@ Runeon Wine 同时接受主动上游审计和 diagnostics 驱动调查两类输�
 
 ## 当前 Wine 11.x 审查基线
 
-当前正式源码：[`cx26.3-wine11.0-runeon.16`](patchsets/cx26.3-wine11.0-runeon.16/manifest.json)（正式版/latest），搭配 seed `2026.10.06`、MoltenVK `1.4.2` 与 SDL2 `2.32.10`。保留 `.15`，新增 `0111`，提供显式 opt-in 的 Steam downlevel D3D12 启动准备入口。调用方提供的 helper 在原始进程创建之前运行，保留子进程句柄、创建标记、环境和工作目录，并按 EXE 目录串行。完整 x86_64/WoW64 构建、定向检查、双架构父进程及本机应用验收已通过。维护者另反馈跨 Steam 会话、非候选游戏、同一 Steam 会话内下载完成立即启动三项验收通过；这些反馈不构成普遍游戏兼容承诺。转为正式版保留相同 tag、源码提交与附件字节。不可变附件记录见[发布 manifest](release-manifests/cx26.3-wine11.0-runeon.16.source-archive.json)。
+当前正式源码：[`cx26.3-wine11.0-runeon.17`](patchsets/cx26.3-wine11.0-runeon.17/manifest.json)（正式版/latest），搭配 seed `2026.10.10`（App `>=1.10 (3)`）、MoltenVK `1.4.2` 与 SDL2 `2.32.10`。保留 `.16` 全部补丁，并新增 x64 SEH 栈边界检查（`0112`）、按目录路由的 Mesa OpenGL 与可选的上下文诊断（`0113`、`0114`）、kernelbase 的代码页 54936（GB18030，msvcrt 仍拒绝该代码页，`0115`、`0116`）以及 macOS OpenGL 上可选的二维 BPTC 解码（`0117`）；`0080` 不再转发 `WGL_CONTEXT_OPENGL_NO_ERROR_ARB`。新行为只在调用方显式设置的值下启用。已通过完整 x86_64/WoW64 构建、静态与集成检查、GB18030 与 BPTC 的函数级检查，以及本地与 Dev 验收；Production 直接使用 Dev 验证过的签名归档。这些结果不代表所有游戏都能兼容。不可变附件记录在[发布清单](release-manifests/cx26.3-wine11.0-runeon.17.source-archive.json)。
 
-上一正式源码，保留用于回滚（App `>=1.10 (0)`）：[`cx26.3-wine11.0-runeon.15`](patchsets/cx26.3-wine11.0-runeon.15/manifest.json)（正式版），对应 seed `2026.10.04`。保留 `.14` 并新增 dwrite emoji 系统回退（`0110`）与 `wine-11.19` 定向修复（`0079`）。构建、`tests/emoji-fallback-check.py`、签名、readiness 与 Dev/Production 分发检查已通过；用户反馈本机与 Dev 验收未发现问题，并于 2026-10-04 授权 Production。Production promote 同一份签名 Dev 归档，不重新构建。
+上一正式源码，保留用于回滚（App `>=1.10 (0)`）：[`cx26.3-wine11.0-runeon.16`](patchsets/cx26.3-wine11.0-runeon.16/manifest.json)（正式版），对应 seed `2026.10.06`。保留 `.15` 并新增可选的 Steam downlevel D3D12 准备入口（`0111`）。不可变附件记录在[发布清单](release-manifests/cx26.3-wine11.0-runeon.16.source-archive.json)。
+
+`cx26.3-wine11.0-runeon.15`（正式版）对应 seed `2026.10.04`（App `>=1.10 (0)`），保留用于回滚；它在 `.14` 之上新增 dwrite emoji 系统回退（`0110`）与 `wine-11.19` 定向修复（`0079`）。
 
 `cx26.3-wine11.0-runeon.14`（正式版）对应 seed `2026.10.02`（App `>=1.10 (0)`），保留用于回滚；它在 `.13` 之上新增按进程选择图形后端（`0109`）。
 
