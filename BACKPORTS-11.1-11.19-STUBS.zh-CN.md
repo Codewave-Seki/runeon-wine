@@ -37,7 +37,7 @@
 | 提交 | 原因 |
 | --- | --- |
 | `3f65f20cc2` ntdll，`339be36e64`、`94e5bbeb6f`、`2be7717684` win32u，`5b5e95719d` mountmgr.sys | ABI 敏感模块，这类审查不改动。 |
-| `8571f65844` ucrtbase，`5c281ca2b2` powrprof | 本系列较早的补丁（`0063`）已包含。 |
+| `8571f65844` ucrtbase，`5c281ca2b2` powrprof | 本系列较早的补丁已包含（`8571f65844` 在 `0079`，`5c281ca2b2` 在 `0063`）。 |
 | `a33fbd48a0` wminet_utils | 底版本没有 `wminet_utils` 模块。 |
 | `043bc5a0d4` windows.web | 新的 `JsonArray` 类，没有写明使用者；解析在之后的功能提交中才加入。 |
 | `fff6090795` webservices | 由远程调试器需要，不是本运行时面向的应用。 |

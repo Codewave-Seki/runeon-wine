@@ -37,7 +37,7 @@ Two groups in `wine-11.0..wine-11.19` were reviewed one commit at a time against
 | Commits | Reason |
 | --- | --- |
 | `3f65f20cc2` ntdll, `339be36e64`, `94e5bbeb6f`, `2be7717684` win32u, `5b5e95719d` mountmgr.sys | ABI-sensitive modules, which these reviews do not change. |
-| `8571f65844` ucrtbase, `5c281ca2b2` powrprof | Already carried by an earlier patch in this series (`0063`). |
+| `8571f65844` ucrtbase, `5c281ca2b2` powrprof | Already carried by earlier patches in this series (`8571f65844` by `0079`, `5c281ca2b2` by `0063`). |
 | `a33fbd48a0` wminet_utils | The base has no `wminet_utils` module. |
 | `043bc5a0d4` windows.web | A new `JsonArray` class with no stated consumer; parsing arrived in later feature commits. |
 | `fff6090795` webservices | Needed by a remote debugger, not by applications this runtime targets. |

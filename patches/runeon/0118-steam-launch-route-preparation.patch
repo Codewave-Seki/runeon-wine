@@ -18,14 +18,17 @@ Wine still knows no game identity: the selector looks only at the
 parent process, the opt-in, the session grant and a nonzero SteamAppId.
 Creation flags, handles and the command line of the original child are
 unchanged, and any failure to prepare falls back to creating it as is.
+Every helper gives up on its own within 75 s; Wine waits at most 120 s
+and then ends it. Only a helper that can be neither waited for nor ended
+fails the creation, so a live writer is never passed.
 
 diff --git a/dlls/kernelbase/process.c b/dlls/kernelbase/process.c
 --- a/dlls/kernelbase/process.c
 +++ b/dlls/kernelbase/process.c
-@@ -43,8 +43,23 @@ static const WCHAR runeon_nwjs_wrapperW[] = L"C:\\runeon-input-source\\runeon-in
+@@ -41,10 +41,25 @@ static DWORD shutdown_priority = 0x280;
  
- /* Only the Steam middleware's own process creation is eligible. The App
-  * decides runtime versions and protection; Wine knows no game identifiers. */
+ static const WCHAR runeon_nwjs_wrapperW[] = L"C:\\runeon-input-source\\runeon-input-source-launch.exe";
+ 
 +/* The helper sees Steam's untouched command after "--". */
 +static WCHAR *runeon_helper_command( const WCHAR *mode, const RTL_USER_PROCESS_PARAMETERS *params )
 +{
@@ -40,6 +43,8 @@ diff --git a/dlls/kernelbase/process.c b/dlls/kernelbase/process.c
 +    return command;
 +}
 +
+ /* Only the Steam middleware's own process creation is eligible. The App
+  * decides runtime versions and protection; Wine knows no game identifiers. */
  static NTSTATUS runeon_nwjs_launch_command( RTL_USER_PROCESS_PARAMETERS *params,
 -                                            BOOL allow_guard, WCHAR **command, BOOL *prepare_only )
 +                                            BOOL allow_guard, WCHAR **command, BOOL *prepare_only,
@@ -114,7 +119,7 @@ diff --git a/dlls/kernelbase/process.c b/dlls/kernelbase/process.c
      return STATUS_SUCCESS;
  }
  
-@@ -849,38 +871,48 @@ done:
+@@ -849,38 +871,49 @@ done:
  }
  
  
@@ -168,13 +173,14 @@ diff --git a/dlls/kernelbase/process.c b/dlls/kernelbase/process.c
 +    RTL_USER_PROCESS_INFORMATION info = {0};
 +    STARTUPINFOW startup = { .cb = sizeof(startup) };
 +    const WCHAR *cwd = original->CurrentDirectory.DosPath.Buffer;
++    LARGE_INTEGER timeout;
 +    NTSTATUS status;
 +
 +    if (!lock) return STATUS_SUCCESS;
      params = create_process_params( runeon_nwjs_wrapperW, command, cwd, original->Environment,
                                      CREATE_UNICODE_ENVIRONMENT | CREATE_NO_WINDOW, &startup );
      if (!params) return STATUS_SUCCESS;
-@@ -889,7 +921,7 @@ static NTSTATUS runeon_d3d12on7_prepare( RTL_USER_PROCESS_PARAMETERS *original,
+@@ -889,19 +922,21 @@ static NTSTATUS runeon_d3d12on7_prepare( RTL_USER_PROCESS_PARAMETERS *original,
      RtlDestroyProcessParameters( params );
      if (status)
      {
@@ -183,7 +189,15 @@ diff --git a/dlls/kernelbase/process.c b/dlls/kernelbase/process.c
          return STATUS_SUCCESS;
      }
      status = NtResumeThread( info.Thread, NULL );
-@@ -901,7 +933,7 @@ static NTSTATUS runeon_d3d12on7_prepare( RTL_USER_PROCESS_PARAMETERS *original,
+     if (status && (status = NtTerminateProcess( info.Process, status ))) goto done;
+-    /* Authorization has a helper-side deadline. Never pass a live writer. */
+-    status = NtWaitForSingleObject( info.Process, FALSE, NULL );
++    /* Every helper gives up within 75 s; this bound only catches one that
++     * never reached its own deadline. Never pass a live writer. */
++    timeout.QuadPart = -120 * (LONGLONG)10000000;
++    status = NtWaitForSingleObject( info.Process, FALSE, &timeout );
+     if (status && !NtTerminateProcess( info.Process, status ))
+         status = NtWaitForSingleObject( info.Process, FALSE, NULL );
   done:
      NtClose( info.Thread );
      NtClose( info.Process );
@@ -192,7 +206,7 @@ diff --git a/dlls/kernelbase/process.c b/dlls/kernelbase/process.c
      return status;
  }
  
-@@ -918,7 +950,7 @@ BOOL WINAPI DECLSPEC_HOTPATCH CreateProcessInternalW( HANDLE token, const WCHAR
+@@ -918,7 +953,7 @@ BOOL WINAPI DECLSPEC_HOTPATCH CreateProcessInternalW( HANDLE token, const WCHAR
  {
      const struct proc_thread_attr *handle_list = NULL, *job_list = NULL;
      WCHAR name[MAX_PATH];
@@ -201,7 +215,7 @@ diff --git a/dlls/kernelbase/process.c b/dlls/kernelbase/process.c
      RTL_USER_PROCESS_PARAMETERS *params = NULL;
      RTL_USER_PROCESS_INFORMATION rtl_info = { 0 };
      HANDLE parent = 0, debug = 0, guard_mutex = NULL;
-@@ -1036,10 +1068,16 @@ BOOL WINAPI DECLSPEC_HOTPATCH CreateProcessInternalW( HANDLE token, const WCHAR
+@@ -1036,10 +1071,16 @@ BOOL WINAPI DECLSPEC_HOTPATCH CreateProcessInternalW( HANDLE token, const WCHAR
          /* Preparation does not replace the child. Security-context changes still
           * require a separate design; ordinary flags and handles remain untouched. */
          BOOL allow_guard = !token && !(flags & EXTENDED_STARTUPINFO_PRESENT);
@@ -221,7 +235,7 @@ diff --git a/dlls/kernelbase/process.c b/dlls/kernelbase/process.c
          }
          else if (nwjs_cmdline)
          {
-@@ -1175,6 +1213,7 @@ BOOL WINAPI DECLSPEC_HOTPATCH CreateProcessInternalW( HANDLE token, const WCHAR
+@@ -1175,6 +1216,7 @@ BOOL WINAPI DECLSPEC_HOTPATCH CreateProcessInternalW( HANDLE token, const WCHAR
  
      RtlDestroyProcessParameters( params );
      HeapFree( GetProcessHeap(), 0, nwjs_cmdline );

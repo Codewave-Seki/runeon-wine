@@ -17,6 +17,7 @@
 - NW.js 与 D3D12on7 两项仍只针对 x64。
 - 未开启、父进程不是 `steam.exe`、缺少 grant 或 `SteamAppId`、传入了 token 或扩展启动信息、映像既不是 x64 也不是 i386，或 helper 不存在时，创建过程不变。无法启动的 helper 会被跳过。
 - Wine 不读取任何游戏名、AppID 或可执行文件名。
+- helper 运行期间，Steam 发起创建的线程会等待：调用方未接手请求时最多 3 秒，接手后最多到 helper 自己的 75 秒截止。这对 `steam.exe` 以 `SteamAppId` 创建的每个子进程都生效，不只是游戏主程序。helper 超过 120 秒仍在运行时由 Wine 结束；只有既等不到又结束不了的 helper 才会让创建失败，从而绝不放过仍在写入的 helper。
 
 ## 验证
 

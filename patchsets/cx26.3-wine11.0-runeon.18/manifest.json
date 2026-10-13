@@ -2225,16 +2225,23 @@
     {
       "order": 144,
       "path": "patches/runeon/0118-steam-launch-route-preparation.patch",
-      "sha256": "1567078010f824483a7c5f30a7982a66c0ed0fed998b43cc324143be203941cf",
+      "sha256": "b56f98cd3af0da516559576bfc82ef4d7ffb0eebade1ee42822098a81ad75544",
       "kind": "runeon-product",
       "status": "active",
       "risk": "medium",
+      "runeonTasks": [
+        "T880"
+      ],
       "summary": "Opt-in synchronous preparation of every x64 or i386 executable Steam creates, through the existing preparation helper and directory lock, before the original child is created; no game identity in Wine.",
       "testStrategy": "Run tests/launch-prepare-check.py on the patched selector and preparation, and a complete i386/x86_64 WoW64 build; validate the helper protocol and actual Steam launches separately.",
       "verification": [
         {
           "path": "dlls/kernelbase/process.c",
           "contains": "    RtlInitUnicodeString( &key, L\"RUNEON_LAUNCH_PREPARE_V1\" );"
+        },
+        {
+          "path": "dlls/kernelbase/process.c",
+          "contains": "    status = NtWaitForSingleObject( info.Process, FALSE, &timeout );"
         }
       ]
     }

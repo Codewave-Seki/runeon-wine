@@ -17,6 +17,7 @@ The caller uses the step to settle state that a child reads when it starts, such
 - The NW.js and D3D12on7 gates stay x64-only.
 - Without the opt-in, or when the parent is not `steam.exe`, the grant or `SteamAppId` is missing, a token or extended startup information is passed, the image is neither x64 nor i386, or the helper is missing, creation is unchanged. A helper that cannot be started is skipped.
 - Wine reads no game names, AppIDs or executable names.
+- Steam's creating thread waits while the helper runs: up to 3 s when the caller does not take the request up, and up to the helper's own 75 s deadline when it does. This applies to every child `steam.exe` creates with a `SteamAppId`, not only a game's main executable. Wine ends a helper still running after 120 s; only a helper that can be neither waited for nor ended fails the creation, so a live writer is never passed.
 
 ## Validation
 

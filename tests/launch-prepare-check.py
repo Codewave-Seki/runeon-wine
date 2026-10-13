@@ -151,6 +151,8 @@ int main(void) {
 '''
 PREPARE_PRELUDE = r'''
 typedef unsigned long long ULONGLONG;
+typedef long long LONGLONG;
+typedef struct { LONGLONG QuadPart; } LARGE_INTEGER;
 typedef struct { HANDLE Process, Thread; } RTL_USER_PROCESS_INFORMATION;
 typedef struct { unsigned cb; } STARTUPINFOW;
 #define CREATE_NO_WINDOW 0x8000000
@@ -180,7 +182,11 @@ static NTSTATUS create_nt_process(HANDLE token,HANDLE debug,void *psa,void *tsa,
 }
 static void RtlDestroyProcessParameters(RTL_USER_PROCESS_PARAMETERS *p) { assert(p==&helper_params); }
 static NTSTATUS NtResumeThread(HANDLE h,void *n) { assert(h==(HANDLE)5 && lock_held); ++resumed; return prepare_failure==4 || prepare_failure==5 ? -2 : 0; }
-static NTSTATUS NtWaitForSingleObject(HANDLE h,BOOL alertable,void *timeout) { assert(h==(HANDLE)4 && !alertable && !timeout && lock_held); ++waited; return prepare_failure>=6 && (waited==1 || prepare_failure==8) ? -3 : 0; }
+static NTSTATUS NtWaitForSingleObject(HANDLE h,BOOL alertable,LARGE_INTEGER *timeout) {
+    assert(h==(HANDLE)4 && !alertable && lock_held);
+    /* The first wait is bounded at 120 s; the one after terminating is not. */
+    assert(waited ? !timeout : timeout && timeout->QuadPart==-1200000000LL);
+    ++waited; return prepare_failure>=6 && (waited==1 || prepare_failure==8) ? -3 : 0; }
 static NTSTATUS NtTerminateProcess(HANDLE h,NTSTATUS s) { assert(h==(HANDLE)4); return prepare_failure==5 || prepare_failure==7 ? -4 : 0; }
 static void NtClose(HANDLE h) { assert(h==(HANDLE)4 || h==(HANDLE)5); }
 '''
