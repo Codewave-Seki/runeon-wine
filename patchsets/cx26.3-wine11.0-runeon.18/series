@@ -91,3 +91,8 @@ patches/runeon/0116-msvcrt-refuse-gb18030-locale.patch
 patches/runeon/0117-winemac-bptc-2d-decode.patch
 patches/upstream/0081-wine-11.1-windows-ui-text-scale-factor.patch
 patches/upstream/0082-wine-11.14-windows-ui-text-scale-factor-changed.patch
+patches/upstream/0083-wine-11.9-wbemprox-diskdrive-properties.patch
+patches/upstream/0084-wine-11.5-vbscript-named-item-call.patch
+patches/upstream/0085-wine-11.14-pdh-formatted-counter-array.patch
+patches/upstream/0086-wine-11.16-jscript-unicode-identifiers.patch
+patches/upstream/0087-wine-11.15-winhttp-option-stubs.patch

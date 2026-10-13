@@ -1,0 +1,27 @@
+From: Francis De Brabandere <francisdb@gmail.com>
+Subject: [PATCH] vbscript: Support calling named item objects with arguments.
+
+Backported from WineHQ commit 2873b4d077 (wine-11.5) without code
+changes (Wine-Bug 53889).
+
+When a named item object is called with arguments, invoke its default
+property (DISPID_VALUE) instead of failing with E_NOTIMPL, as in
+PlayerScores(0).SetValue(1000).
+
+diff --git a/dlls/vbscript/interp.c b/dlls/vbscript/interp.c
+--- a/dlls/vbscript/interp.c
++++ b/dlls/vbscript/interp.c
+@@ -650,8 +650,11 @@ static HRESULT do_icall(exec_ctx_t *ctx, VARIANT *res, BSTR identifier, unsigned
+         break;
+     case REF_OBJ:
+         if(arg_cnt) {
+-            FIXME("arguments on object\n");
+-            return E_NOTIMPL;
++            vbstack_to_dp(ctx, arg_cnt, FALSE, &dp);
++            hres = disp_call(ctx->script, ref.u.obj, DISPID_VALUE, &dp, res);
++            if(FAILED(hres))
++                return hres;
++            break;
+         }
+ 
+         if(res) {

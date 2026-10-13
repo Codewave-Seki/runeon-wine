@@ -2111,6 +2111,116 @@
           "occurrences": 4
         }
       ]
+    },
+    {
+      "order": 139,
+      "path": "patches/upstream/0083-wine-11.9-wbemprox-diskdrive-properties.patch",
+      "sha256": "f637fd2a0cbd688bbf8db903b0195ec614f7e39f096cd6eeafafd59f60b1b643",
+      "kind": "upstream-backport",
+      "status": "active",
+      "risk": "low",
+      "firstWineRelease": "wine-11.9",
+      "upstreamCommits": [
+        "caba5e68e2a9556b6b818f3a7bef5e6738323db9"
+      ],
+      "summary": "Add the Win32_DiskDrive Signature (0) and TotalHeads (255) properties so WMI queries that select them no longer fail.",
+      "verification": [
+        {
+          "path": "dlls/wbemprox/builtin.c",
+          "contains": "    { L\"TotalHeads\",    CIM_UINT32 },"
+        }
+      ]
+    },
+    {
+      "order": 140,
+      "path": "patches/upstream/0084-wine-11.5-vbscript-named-item-call.patch",
+      "sha256": "4b5a04d47b00be03b70af99325f728032f6b9f3c9638a9405d8e1c835968c237",
+      "kind": "upstream-backport",
+      "status": "active",
+      "risk": "low",
+      "firstWineRelease": "wine-11.5",
+      "upstreamCommits": [
+        "2873b4d077096eb9e411b4753df34c2846d19c0d"
+      ],
+      "summary": "Invoke a named item object's default property when it is called with arguments instead of failing with E_NOTIMPL (Wine-Bug 53889).",
+      "verification": [
+        {
+          "path": "dlls/vbscript/interp.c",
+          "contains": "            hres = disp_call(ctx->script, ref.u.obj, DISPID_VALUE, &dp, res);"
+        }
+      ]
+    },
+    {
+      "order": 141,
+      "path": "patches/upstream/0085-wine-11.14-pdh-formatted-counter-array.patch",
+      "sha256": "ce37caf990758c423925eb3e38527125503ea90f4450894dddc6fced0d9235b0",
+      "kind": "upstream-backport",
+      "status": "active",
+      "risk": "low",
+      "firstWineRelease": "wine-11.14",
+      "upstreamCommits": [
+        "d30dcd75bc9f24277f13ae3605c8a4bb506885e4"
+      ],
+      "summary": "Implement PdhGetFormattedCounterArrayA/W, which were spec stubs.",
+      "verification": [
+        {
+          "path": "dlls/pdh/pdh.spec",
+          "contains": "@ stdcall PdhGetFormattedCounterArrayW(ptr long ptr ptr ptr)"
+        }
+      ]
+    },
+    {
+      "order": 142,
+      "path": "patches/upstream/0086-wine-11.16-jscript-unicode-identifiers.patch",
+      "sha256": "a995932f46e5c79de2b80911275abb724beeb17720be4bcdfd3b6fc0d2118dfd",
+      "kind": "upstream-backport",
+      "status": "active",
+      "risk": "low",
+      "firstWineRelease": "wine-11.16",
+      "upstreamCommits": [
+        "fbd19baa4f40a77ce4ca3239941a99e261981e7b",
+        "20e2458ab3e1067ba1cdb5806a06f1a6eb61bbd0"
+      ],
+      "summary": "Accept Unicode letters and the other ECMA-262 identifier characters in JScript identifiers, so scripts using characters such as U+3001 parse.",
+      "verification": [
+        {
+          "path": "dlls/jscript/lex.c",
+          "contains": "static BOOL is_identifier_first_char(WCHAR c)"
+        },
+        {
+          "path": "dlls/jscript/lex.c",
+          "contains": "static const struct keyword * find_keyword(parser_ctx_t *ctx, const WCHAR *ptr, const WCHAR *end)"
+        }
+      ]
+    },
+    {
+      "order": 143,
+      "path": "patches/upstream/0087-wine-11.15-winhttp-option-stubs.patch",
+      "sha256": "b4f8261478814917dcafc1800e2cc0efc9f564930eba5143be96a97fe22b5787",
+      "kind": "upstream-backport",
+      "status": "active",
+      "risk": "low",
+      "firstWineRelease": "wine-11.15",
+      "upstreamCommits": [
+        "22aedfab35d1f4ef0e9bbaf2418d8ae0eeb787d3",
+        "3864ce7fcbc6d210a5a900b249b5caa0d4f8f64a",
+        "cefdd9ebe60188f3f021d9eb85b0fe7df01ad13a",
+        "d95e15dfe8cca635ea814a648e7c7548188db245",
+        "44b0da29ad91c0010dc5147239ffc7ff6b7c4a7e",
+        "88ceeada6dfb91df0294d2339b069bb7c4882a77"
+      ],
+      "adaptation": "The session options are placed after the WebSocket buffer options because the base lacks the upstream ENABLE_HTTP_PROTOCOL session case. WINHTTP_OPTION_HTTP_VERSION validates and reports sizeof(HTTP_VERSION_INFO) rather than the pointer size upstream uses, which lets a 32-bit caller pass a 4-byte buffer that then receives 8 bytes. DECOMPRESSION and ENABLE_HTTP2_PLUS_CLIENT_CERT check the buffer length before reading it. The base has no decompression support, so DECOMPRESSION does not request compressed responses.",
+      "summary": "Accept WINHTTP_OPTION_DECOMPRESSION, IPV6_FAST_FALLBACK, ASSURED_NON_BLOCKING_CALLBACKS and ENABLE_HTTP2_PLUS_CLIENT_CERT, and answer HTTP_VERSION (1.1) and CONNECT_RETRIES (0) queries, instead of ERROR_WINHTTP_INVALID_OPTION.",
+      "verification": [
+        {
+          "path": "dlls/winhttp/session.c",
+          "contains": "        FIXME( \"WINHTTP_OPTION_HTTP_VERSION"
+        },
+        {
+          "path": "dlls/winhttp/session.c",
+          "contains": "        FIXME( \"WINHTTP_OPTION_DECOMPRESSION, %#lx stub."
+        }
+      ]
     }
   ],
   "targetedReview": {

@@ -1,0 +1,109 @@
+From: Hans Leidekker <hans@codeweavers.com>
+Subject: [PATCH] winhttp: Stub newer WinHttpSetOption and WinHttpQueryOption options.
+
+Adapted from WineHQ commits 22aedfab35 (wine-11.4, Paul Gofman),
+3864ce7fcb, cefdd9ebe6, d95e15dfe8 (wine-11.7), 44b0da29ad and
+88ceeada6d (wine-11.15), all by Hans Leidekker unless noted.
+
+Applications that set or query these options treated the
+ERROR_WINHTTP_INVALID_OPTION failure as fatal. Like upstream, the
+options are accepted and logged, and the queries report HTTP/1.1 and
+zero connect retries.
+
+Adaptations for this base:
+- The session options go into session_set_option() after the WebSocket
+  buffer options, because the base lacks the upstream
+  WINHTTP_OPTION_ENABLE_HTTP_PROTOCOL session case they follow.
+- WINHTTP_OPTION_HTTP_VERSION validates and reports
+  sizeof(HTTP_VERSION_INFO). Upstream uses the size of the pointer,
+  which in a 32-bit process accepts a 4-byte buffer and then writes
+  8 bytes into it.
+- WINHTTP_OPTION_DECOMPRESSION and
+  WINHTTP_OPTION_ENABLE_HTTP2_PLUS_CLIENT_CERT check the buffer length
+  before reading it, as the other boolean options do; upstream reads a
+  NULL buffer passed with a zero length.
+
+The base has no decompression support, so WINHTTP_OPTION_DECOMPRESSION
+does not request compressed responses and the data stays uncompressed.
+
+diff --git a/dlls/winhttp/session.c b/dlls/winhttp/session.c
+--- a/dlls/winhttp/session.c
++++ b/dlls/winhttp/session.c
+@@ -279,6 +279,33 @@ static BOOL session_set_option( struct object_header *hdr, DWORD option, void *b
+         return TRUE;
+     }
+ 
++    case WINHTTP_OPTION_IPV6_FAST_FALLBACK:
++        if (buflen != sizeof(BOOL))
++        {
++            SetLastError( ERROR_INSUFFICIENT_BUFFER );
++            return FALSE;
++        }
++        FIXME( "WINHTTP_OPTION_IPV6_FAST_FALLBACK: %d\n", *(BOOL *)buffer );
++        return TRUE;
++
++    case WINHTTP_OPTION_ASSURED_NON_BLOCKING_CALLBACKS:
++        if (buflen != sizeof(BOOL))
++        {
++            SetLastError( ERROR_INSUFFICIENT_BUFFER );
++            return FALSE;
++        }
++        FIXME( "WINHTTP_OPTION_ASSURED_NON_BLOCKING_CALLBACKS: %d\n", *(BOOL *)buffer );
++        return TRUE;
++
++    case WINHTTP_OPTION_ENABLE_HTTP2_PLUS_CLIENT_CERT:
++        if (buflen != sizeof(BOOL))
++        {
++            SetLastError( ERROR_INSUFFICIENT_BUFFER );
++            return FALSE;
++        }
++        FIXME( "WINHTTP_OPTION_ENABLE_HTTP2_PLUS_CLIENT_CERT: %d\n", *(BOOL *)buffer );
++        return TRUE;
++
+     default:
+         FIXME( "unimplemented option %lu\n", option );
+         SetLastError( ERROR_WINHTTP_INVALID_OPTION );
+@@ -1393,6 +1420,26 @@ static BOOL query_option( struct object_header *hdr, DWORD option, void *buffer,
+         *buflen = sizeof(DWORD_PTR);
+         return TRUE;
+     }
++    case WINHTTP_OPTION_HTTP_VERSION:
++    {
++        HTTP_VERSION_INFO *info = buffer;
++
++        FIXME( "WINHTTP_OPTION_HTTP_VERSION\n" );
++        if (!validate_buffer( buffer, buflen, sizeof(*info) )) return FALSE;
++        info->dwMajorVersion = 1;
++        info->dwMinorVersion = 1;
++        *buflen = sizeof(*info);
++        return TRUE;
++    }
++    case WINHTTP_OPTION_CONNECT_RETRIES:
++    {
++        FIXME( "WINHTTP_OPTION_CONNECT_RETRIES\n" );
++        if (!validate_buffer( buffer, buflen, sizeof(DWORD) )) return FALSE;
++
++        *(DWORD *)buffer = 0;
++        *buflen = sizeof(DWORD);
++        return TRUE;
++    }
+     default:
+         if (hdr->vtbl->query_option) ret = hdr->vtbl->query_option( hdr, option, buffer, buflen );
+         else
+@@ -1452,6 +1499,16 @@ static BOOL set_option( struct object_header *hdr, DWORD option, void *buffer, D
+         hdr->context = *(DWORD_PTR *)buffer;
+         return TRUE;
+     }
++
++    case WINHTTP_OPTION_DECOMPRESSION:
++        if (buflen != sizeof(DWORD))
++        {
++            SetLastError( ERROR_INSUFFICIENT_BUFFER );
++            return FALSE;
++        }
++        FIXME( "WINHTTP_OPTION_DECOMPRESSION, %#lx stub.\n", *(DWORD *)buffer );
++        return TRUE;
++
+     default:
+         if (hdr->vtbl->set_option) ret = hdr->vtbl->set_option( hdr, option, buffer, buflen );
+         else
