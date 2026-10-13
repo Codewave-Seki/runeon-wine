@@ -45,4 +45,4 @@ Two groups in `wine-11.0..wine-11.19` were reviewed one commit at a time against
 
 ## Validation
 
-`scripts/static-check.sh` and `scripts/integration-check.sh` pass for `.18`, and the default definition still passes `scripts/static-check.sh`. Those checks prove that the series applies; `.18` has not been built yet, so compilation for i386 and x86_64 is still to be shown.
+`scripts/static-check.sh` and `scripts/integration-check.sh` pass for `.18`, and the default definition still passes `scripts/static-check.sh`. Those checks prove that the series applies. A complete local i386/x86_64 WoW64 build of `.18` at this revision finished without errors on 2026-10-14; it has not been released.

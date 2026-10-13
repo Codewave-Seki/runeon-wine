@@ -45,4 +45,4 @@
 
 ## 検証
 
-`.18` は `scripts/static-check.sh` と `scripts/integration-check.sh` に合格し、既定の定義も引き続き `scripts/static-check.sh` に合格します。これらの確認はシリーズが適用できることを示すだけです。`.18` はまだビルドしていないため、i386 と x86_64 でのコンパイルは未確認です。
+`.18` は `scripts/static-check.sh` と `scripts/integration-check.sh` に合格し、既定の定義も引き続き `scripts/static-check.sh` に合格します。これらの確認はシリーズが適用できることを示します。2026-10-14 に現在のリビジョンで `.18` の i386/x86_64 WoW64 完全ビルドをローカルで行い、エラーなく完了しました。未リリースです。

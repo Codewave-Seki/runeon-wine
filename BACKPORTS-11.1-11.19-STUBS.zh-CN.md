@@ -45,4 +45,4 @@
 
 ## 验证
 
-`.18` 通过 `scripts/static-check.sh` 与 `scripts/integration-check.sh`，默认定义仍通过 `scripts/static-check.sh`。这些检查证明补丁序列可以应用；`.18` 尚未构建，i386 与 x86_64 的编译仍待证明。
+`.18` 通过 `scripts/static-check.sh` 与 `scripts/integration-check.sh`，默认定义仍通过 `scripts/static-check.sh`。这些检查证明补丁序列可以应用。2026-10-14 已在本地以当前版本完整编译 `.18`（i386/x86_64 WoW64），无错误；尚未发布。
