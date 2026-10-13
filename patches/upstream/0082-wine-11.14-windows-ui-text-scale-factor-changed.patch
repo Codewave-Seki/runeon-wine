@@ -1,0 +1,24 @@
+From: Shaun Ren <sren@codeweavers.com>
+Subject: [PATCH] windows.ui: Stub IUISettings2::add_TextScaleFactorChanged().
+
+Backported from WineHQ commit 0b0bef31ea (wine-11.14) without code
+changes.
+
+Callers that read the text scale factor usually also subscribe to its
+change event. Return the same dummy registration cookie the other
+UISettings event stubs in this file already return, instead of
+E_NOTIMPL.
+
+diff --git a/dlls/windows.ui/uisettings.c b/dlls/windows.ui/uisettings.c
+--- a/dlls/windows.ui/uisettings.c
++++ b/dlls/windows.ui/uisettings.c
+@@ -243,7 +243,8 @@
+         EventRegistrationToken *cookie )
+ {
+     FIXME( "iface %p, handler %p, cookie %p stub!\n", iface, handler, cookie );
+-    return E_NOTIMPL;
++    *cookie = dummy_cookie;
++    return S_OK;
+ }
+ 
+ static HRESULT WINAPI uisettings2_remove_TextScaleFactorChanged( IUISettings2 *iface, EventRegistrationToken cookie )
