@@ -2195,12 +2195,12 @@
     },
     {
       "order": 143,
-      "path": "patches/upstream/0087-wine-11.15-winhttp-option-stubs.patch",
+      "path": "patches/upstream/0087-wine-11.4-winhttp-option-stubs.patch",
       "sha256": "b4f8261478814917dcafc1800e2cc0efc9f564930eba5143be96a97fe22b5787",
       "kind": "upstream-backport",
       "status": "active",
       "risk": "low",
-      "firstWineRelease": "wine-11.15",
+      "firstWineRelease": "wine-11.4",
       "upstreamCommits": [
         "22aedfab35d1f4ef0e9bbaf2418d8ae0eeb787d3",
         "3864ce7fcbc6d210a5a900b249b5caa0d4f8f64a",
