@@ -1020,7 +1020,7 @@
       "verification": [
         {
           "path": "dlls/kernelbase/process.c",
-          "contains": "runeon_nwjs_launch_command( params, allow_guard, &nwjs_cmdline, &prepare_only )"
+          "contains": "runeon_nwjs_launch_command( params, allow_guard, &nwjs_cmdline, &prepare_only,"
         },
         {
           "path": "dlls/kernelbase/process.c",
@@ -2219,6 +2219,22 @@
         {
           "path": "dlls/winhttp/session.c",
           "contains": "        FIXME( \"WINHTTP_OPTION_DECOMPRESSION, %#lx stub."
+        }
+      ]
+    },
+    {
+      "order": 144,
+      "path": "patches/runeon/0118-steam-launch-route-preparation.patch",
+      "sha256": "1567078010f824483a7c5f30a7982a66c0ed0fed998b43cc324143be203941cf",
+      "kind": "runeon-product",
+      "status": "active",
+      "risk": "medium",
+      "summary": "Opt-in synchronous preparation of every x64 or i386 executable Steam creates, through the existing preparation helper and directory lock, before the original child is created; no game identity in Wine.",
+      "testStrategy": "Run tests/launch-prepare-check.py on the patched selector and preparation, and a complete i386/x86_64 WoW64 build; validate the helper protocol and actual Steam launches separately.",
+      "verification": [
+        {
+          "path": "dlls/kernelbase/process.c",
+          "contains": "    RtlInitUnicodeString( &key, L\"RUNEON_LAUNCH_PREPARE_V1\" );"
         }
       ]
     }

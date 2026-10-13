@@ -96,3 +96,4 @@ patches/upstream/0084-wine-11.5-vbscript-named-item-call.patch
 patches/upstream/0085-wine-11.14-pdh-formatted-counter-array.patch
 patches/upstream/0086-wine-11.16-jscript-unicode-identifiers.patch
 patches/upstream/0087-wine-11.4-winhttp-option-stubs.patch
+patches/runeon/0118-steam-launch-route-preparation.patch

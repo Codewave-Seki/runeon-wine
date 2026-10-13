@@ -1,0 +1,231 @@
+From: Runeon Contributors <dev@runeon.com>
+Subject: [PATCH] kernelbase: Let the caller prepare every Steam game launch.
+
+Add a separate opt-in, RUNEON_LAUNCH_PREPARE_V1, to the existing Steam
+middleware selector. When it is set, every x64 or i386 executable that
+steam.exe creates runs the fixed preparation-only helper in
+"launch-prepare" mode before the original child is created. The caller
+uses it to settle state the child reads at start-up, such as its
+graphics route, so the first process of a game already sees it.
+
+The D3D12on7 preparation is split into a directory lock and a helper
+run. One lock now covers both preparations and the original creation;
+route preparation runs first. The managed NW.js hand-off replaces the
+child and keeps priority, so it gets no route preparation. The other
+gates stay x64-only.
+
+Wine still knows no game identity: the selector looks only at the
+parent process, the opt-in, the session grant and a nonzero SteamAppId.
+Creation flags, handles and the command line of the original child are
+unchanged, and any failure to prepare falls back to creating it as is.
+
+diff --git a/dlls/kernelbase/process.c b/dlls/kernelbase/process.c
+--- a/dlls/kernelbase/process.c
++++ b/dlls/kernelbase/process.c
+@@ -43,8 +43,23 @@ static const WCHAR runeon_nwjs_wrapperW[] = L"C:\\runeon-input-source\\runeon-in
+ 
+ /* Only the Steam middleware's own process creation is eligible. The App
+  * decides runtime versions and protection; Wine knows no game identifiers. */
++/* The helper sees Steam's untouched command after "--". */
++static WCHAR *runeon_helper_command( const WCHAR *mode, const RTL_USER_PROCESS_PARAMETERS *params )
++{
++    WCHAR *command;
++    size_t length = wcslen(runeon_nwjs_wrapperW) + params->CommandLine.Length / sizeof(WCHAR)
++                    + wcslen(L"\"\" --runtime  -- ") + wcslen(mode) + 1;
++
++    if (length >= 32767) return NULL;
++    if (!(command = HeapAlloc( GetProcessHeap(), 0, length * sizeof(WCHAR) ))) return NULL;
++    swprintf( command, length, L"\"%s\" --runtime %s -- %s",
++              runeon_nwjs_wrapperW, mode, params->CommandLine.Buffer );
++    return command;
++}
++
+ static NTSTATUS runeon_nwjs_launch_command( RTL_USER_PROCESS_PARAMETERS *params,
+-                                            BOOL allow_guard, WCHAR **command, BOOL *prepare_only )
++                                            BOOL allow_guard, WCHAR **command, BOOL *prepare_only,
++                                            WCHAR **launch_command )
+ {
+     static const WCHAR *files[] = { L"nw.dll", L"nw_elf.dll", L"package.json" };
+     const WCHAR *argument, *end, *mode = NULL;
+@@ -57,10 +72,11 @@ static NTSTATUS runeon_nwjs_launch_command( RTL_USER_PROCESS_PARAMETERS *params,
+     NTSTATUS status;
+     size_t length, directory_length;
+     unsigned int i;
+-    BOOL nonzero = FALSE, nwjs, guard;
++    BOOL nonzero = FALSE, nwjs, guard, launch;
+ 
+     *command = NULL;
+     *prepare_only = FALSE;
++    *launch_command = NULL;
+     if (!parent) return STATUS_SUCCESS;
+     if ((name = wcsrchr( parent, '\\' ))) parent = name + 1;
+     if (wcsicmp( parent, L"steam.exe" )) return STATUS_SUCCESS;
+@@ -89,8 +105,13 @@ static NTSTATUS runeon_nwjs_launch_command( RTL_USER_PROCESS_PARAMETERS *params,
+     RtlInitUnicodeString( &key, L"RUNEON_D3D12ON7_GUARD_V1" );
+     guard = allow_guard && !RtlQueryEnvironmentVariable_U( params->Environment, &key, &value )
+             && value.Length == sizeof(WCHAR) && enabled[0] == '1';
+-    TRACE( "Steam launch gates nwjs %u d3d12on7 %u allowed %u\n", nwjs, guard, allow_guard );
+-    if (!nwjs && !guard) return STATUS_SUCCESS;
++    /* Every Steam-created game may need its graphics route settled before its
++     * first process exists. The App decides; Wine only waits for it. */
++    RtlInitUnicodeString( &key, L"RUNEON_LAUNCH_PREPARE_V1" );
++    launch = allow_guard && !RtlQueryEnvironmentVariable_U( params->Environment, &key, &value )
++             && value.Length == sizeof(WCHAR) && enabled[0] == '1';
++    TRACE( "Steam launch gates nwjs %u d3d12on7 %u launch %u allowed %u\n", nwjs, guard, launch, allow_guard );
++    if (!nwjs && !guard && !launch) return STATUS_SUCCESS;
+ 
+     RtlInitUnicodeString( &key, L"RUNEON_INPUT_SOURCE_GRANT" );
+     value.Buffer = grant;
+@@ -124,8 +145,11 @@ static NTSTATUS runeon_nwjs_launch_command( RTL_USER_PROCESS_PARAMETERS *params,
+     if (status) return STATUS_SUCCESS;
+     status = NtQuerySection( section, SectionImageInformation, &image, sizeof(image), NULL );
+     CloseHandle( section );
+-    if (status || image.Machine != IMAGE_FILE_MACHINE_AMD64
+-        || (image.ImageCharacteristics & IMAGE_FILE_DLL)) return STATUS_SUCCESS;
++    if (status || (image.ImageCharacteristics & IMAGE_FILE_DLL)) return STATUS_SUCCESS;
++    /* Route preparation covers 32-bit games too; the other gates stay x64-only. */
++    if (image.Machine != IMAGE_FILE_MACHINE_AMD64) nwjs = guard = FALSE;
++    if (image.Machine != IMAGE_FILE_MACHINE_AMD64 && image.Machine != IMAGE_FILE_MACHINE_I386) launch = FALSE;
++    if (!nwjs && !guard && !launch) return STATUS_SUCCESS;
+     length = params->ImagePathName.Length / sizeof(WCHAR);
+     if (!length || length >= ARRAY_SIZE(path)) return STATUS_SUCCESS;
+     memcpy( path, params->ImagePathName.Buffer, length * sizeof(WCHAR) );
+@@ -152,17 +176,15 @@ static NTSTATUS runeon_nwjs_launch_command( RTL_USER_PROCESS_PARAMETERS *params,
+         if (attributes != INVALID_FILE_ATTRIBUTES && !(attributes & FILE_ATTRIBUTE_DIRECTORY))
+             mode = L"d3d12on7-prepare";
+     }
+-    if (!mode) return STATUS_SUCCESS;
++    /* The managed NW.js runtime replaces the child, so there is no route to settle. */
++    if (mode && !wcscmp( mode, L"nwjs-auto" )) launch = FALSE;
++    if (!mode && !launch) return STATUS_SUCCESS;
+     attributes = GetFileAttributesW( runeon_nwjs_wrapperW );
+     if (attributes == INVALID_FILE_ATTRIBUTES || (attributes & FILE_ATTRIBUTE_DIRECTORY)) return STATUS_SUCCESS;
+ 
+-    length = wcslen(runeon_nwjs_wrapperW) + params->CommandLine.Length / sizeof(WCHAR)
+-             + wcslen(L"\"\" --runtime  -- ") + wcslen(mode) + 1;
+-    if (length >= 32767) return STATUS_SUCCESS;
+-    if (!(*command = HeapAlloc( GetProcessHeap(), 0, length * sizeof(WCHAR) ))) return STATUS_SUCCESS;
+-    swprintf( *command, length, L"\"%s\" --runtime %s -- %s",
+-              runeon_nwjs_wrapperW, mode, params->CommandLine.Buffer );
+-    *prepare_only = !wcscmp( mode, L"d3d12on7-prepare" );
++    if (launch) *launch_command = runeon_helper_command( L"launch-prepare", params );
++    if (mode && (*command = runeon_helper_command( mode, params )))
++        *prepare_only = !wcscmp( mode, L"d3d12on7-prepare" );
+     return STATUS_SUCCESS;
+ }
+ 
+@@ -849,38 +871,48 @@ done:
+ }
+ 
+ 
+-/* Keep the directory locked until the original child exists. The helper only
+- * prepares; Steam must receive the real child's handles and creation semantics. */
+-static NTSTATUS runeon_d3d12on7_prepare( RTL_USER_PROCESS_PARAMETERS *original, WCHAR *command, HANDLE *lock )
++/* Keep the directory locked until the original child exists. The helpers only
++ * prepare; Steam must receive the real child's handles and creation semantics.
++ * One lock covers every preparation of the same child. */
++static void runeon_prepare_lock( RTL_USER_PROCESS_PARAMETERS *original, HANDLE *lock )
+ {
+-    RTL_USER_PROCESS_PARAMETERS *params;
+-    RTL_USER_PROCESS_INFORMATION info = {0};
+-    STARTUPINFOW startup = { .cb = sizeof(startup) };
+     const WCHAR *cwd = original->CurrentDirectory.DosPath.Buffer;
+     const WCHAR *image = original->ImagePathName.Buffer;
+     WCHAR name[80];
+     ULONGLONG scope = 14695981039346656037ULL;
+     HANDLE mutex;
+     DWORD acquired;
+-    NTSTATUS status;
+     unsigned int i, length;
+ 
+     *lock = NULL;
+-    if (!image || !cwd || !*cwd) return STATUS_SUCCESS;
++    if (!image || !cwd || !*cwd) return;
+     length = original->ImagePathName.Length / sizeof(WCHAR);
+     while (length && image[length - 1] != '\\') length--;
+-    if (length < 3) return STATUS_SUCCESS;
++    if (length < 3) return;
+     while (length > 3 && image[length - 1] == '\\') length--;
+     for (i = 0; i < length; i++) { scope ^= RtlDowncaseUnicodeChar(image[i]); scope *= 1099511628211ULL; }
+     swprintf( name, ARRAY_SIZE(name), L"Local\\RuneonD3D12On7GuardV1-%016llx", scope );
+-    if (!(mutex = CreateMutexW( NULL, FALSE, name ))) return STATUS_SUCCESS;
++    if (!(mutex = CreateMutexW( NULL, FALSE, name ))) return;
+     acquired = WaitForSingleObject( mutex, INFINITE );
+     if (acquired != WAIT_OBJECT_0 && acquired != WAIT_ABANDONED)
+     {
+         CloseHandle( mutex );
+-        return STATUS_SUCCESS;
++        return;
+     }
+     *lock = mutex;
++}
++
++/* Run one preparation helper to completion. Without the lock nothing runs, so
++ * a preparation can never race the child it prepares for. */
++static NTSTATUS runeon_run_prepare_helper( RTL_USER_PROCESS_PARAMETERS *original, WCHAR *command, HANDLE lock )
++{
++    RTL_USER_PROCESS_PARAMETERS *params;
++    RTL_USER_PROCESS_INFORMATION info = {0};
++    STARTUPINFOW startup = { .cb = sizeof(startup) };
++    const WCHAR *cwd = original->CurrentDirectory.DosPath.Buffer;
++    NTSTATUS status;
++
++    if (!lock) return STATUS_SUCCESS;
+     params = create_process_params( runeon_nwjs_wrapperW, command, cwd, original->Environment,
+                                     CREATE_UNICODE_ENVIRONMENT | CREATE_NO_WINDOW, &startup );
+     if (!params) return STATUS_SUCCESS;
+@@ -889,7 +921,7 @@ static NTSTATUS runeon_d3d12on7_prepare( RTL_USER_PROCESS_PARAMETERS *original,
+     RtlDestroyProcessParameters( params );
+     if (status)
+     {
+-        TRACE( "D3D12on7 helper creation failed, status %#lx\n", status );
++        TRACE( "Preparation helper creation failed, status %#lx\n", status );
+         return STATUS_SUCCESS;
+     }
+     status = NtResumeThread( info.Thread, NULL );
+@@ -901,7 +933,7 @@ static NTSTATUS runeon_d3d12on7_prepare( RTL_USER_PROCESS_PARAMETERS *original,
+  done:
+     NtClose( info.Thread );
+     NtClose( info.Process );
+-    TRACE( "D3D12on7 synchronous preparation complete, status %#lx\n", status );
++    TRACE( "Synchronous preparation complete, status %#lx\n", status );
+     return status;
+ }
+ 
+@@ -918,7 +950,7 @@ BOOL WINAPI DECLSPEC_HOTPATCH CreateProcessInternalW( HANDLE token, const WCHAR
+ {
+     const struct proc_thread_attr *handle_list = NULL, *job_list = NULL;
+     WCHAR name[MAX_PATH];
+-    WCHAR *p, *tidy_cmdline = cmd_line, *nwjs_cmdline = NULL;
++    WCHAR *p, *tidy_cmdline = cmd_line, *nwjs_cmdline = NULL, *launch_cmdline = NULL;
+     RTL_USER_PROCESS_PARAMETERS *params = NULL;
+     RTL_USER_PROCESS_INFORMATION rtl_info = { 0 };
+     HANDLE parent = 0, debug = 0, guard_mutex = NULL;
+@@ -1036,10 +1068,16 @@ BOOL WINAPI DECLSPEC_HOTPATCH CreateProcessInternalW( HANDLE token, const WCHAR
+         /* Preparation does not replace the child. Security-context changes still
+          * require a separate design; ordinary flags and handles remain untouched. */
+         BOOL allow_guard = !token && !(flags & EXTENDED_STARTUPINFO_PRESENT);
+-        if ((status = runeon_nwjs_launch_command( params, allow_guard, &nwjs_cmdline, &prepare_only ))) goto done;
+-        if (nwjs_cmdline && prepare_only)
++        if ((status = runeon_nwjs_launch_command( params, allow_guard, &nwjs_cmdline, &prepare_only,
++                                                  &launch_cmdline ))) goto done;
++        if (launch_cmdline || (nwjs_cmdline && prepare_only))
+         {
+-            if ((status = runeon_d3d12on7_prepare( params, nwjs_cmdline, &guard_mutex ))) goto done;
++            runeon_prepare_lock( params, &guard_mutex );
++            /* Routes first: the D3D12on7 helper then sees the same layout either way. */
++            if (launch_cmdline && (status = runeon_run_prepare_helper( params, launch_cmdline, guard_mutex )))
++                goto done;
++            if (nwjs_cmdline && prepare_only
++                && (status = runeon_run_prepare_helper( params, nwjs_cmdline, guard_mutex ))) goto done;
+         }
+         else if (nwjs_cmdline)
+         {
+@@ -1175,6 +1213,7 @@ BOOL WINAPI DECLSPEC_HOTPATCH CreateProcessInternalW( HANDLE token, const WCHAR
+ 
+     RtlDestroyProcessParameters( params );
+     HeapFree( GetProcessHeap(), 0, nwjs_cmdline );
++    HeapFree( GetProcessHeap(), 0, launch_cmdline );
+     if (tidy_cmdline != cmd_line) HeapFree( GetProcessHeap(), 0, tidy_cmdline );
+     return set_ntstatus( status );
+ }
