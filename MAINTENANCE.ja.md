@@ -22,11 +22,11 @@ Runeon Wine は、能動的な上流監査と diagnostics 主導の調査とい�
 
 ## 現在の Wine 11.x レビューベースライン
 
-現在の Dev 候補：[`cx26.3-wine11.0-runeon.18`](patchsets/cx26.3-wine11.0-runeon.18/manifest.json)（Pre-release）。Dev seed `2026.10.14`（App `>=1.12 (6)`）に対応します。`.17` を保持し、`wine-11.1` から `wine-11.16` の上流 stub バックポート（`0081`–`0087`、[BACKPORTS-11.1-11.19-STUBS.ja.md](BACKPORTS-11.1-11.19-STUBS.ja.md) 参照）と、待機に上限のあるオプトインの Steam ゲーム起動同期準備（`0118`、[LAUNCH-PREPARE.ja.md](LAUNCH-PREPARE.ja.md) 参照）を追加します。x86_64/WoW64 の完全ビルド、静的・統合チェック、ローカルおよび Dev での受け入れ確認に合格しています。Production はまだ承認されていません。不変のアセットは [release manifest](release-manifests/cx26.3-wine11.0-runeon.18.source-archive.json) に記録しています。
+現在の正式ソース：[`cx26.3-wine11.0-runeon.18`](patchsets/cx26.3-wine11.0-runeon.18/manifest.json)（正式版/latest）。seed `2026.10.14`（App `>=1.12 (6)`）、MoltenVK `1.4.2`、SDL2 `2.32.10` を使用します。`.17` を保持し、`wine-11.1` から `wine-11.16` の上流 stub バックポート（`0081`–`0087`、[BACKPORTS-11.1-11.19-STUBS.ja.md](BACKPORTS-11.1-11.19-STUBS.ja.md) 参照）と、待機に上限のあるオプトインの Steam ゲーム起動同期準備（`0118`、[LAUNCH-PREPARE.ja.md](LAUNCH-PREPARE.ja.md) 参照）を追加します。x86_64/WoW64 の完全ビルド、静的・統合チェック、ローカルおよび Dev での受け入れ確認に合格し、Production は Dev で検証済みの同一署名アーカイブを使用します。これらの結果は一般的なゲーム互換性を保証するものではありません。不変アセットは[リリースマニフェスト](release-manifests/cx26.3-wine11.0-runeon.18.source-archive.json)に記録しています。
 
-現在の正式ソース：[`cx26.3-wine11.0-runeon.17`](patchsets/cx26.3-wine11.0-runeon.17/manifest.json)（正式版/latest）。seed `2026.10.10`（App `>=1.10 (3)`）、MoltenVK `1.4.2`、SDL2 `2.32.10` を使用します。`.16` を保持し、x64 SEH のスタック境界チェック（`0112`）、ディレクトリ単位の Mesa OpenGL ルートと任意の context 診断（`0113`、`0114`）、kernelbase のコードページ 54936（GB18030）と、それを引き続き拒否する msvcrt（`0115`、`0116`）、macOS OpenGL での任意の二次元 BPTC デコード（`0117`）を追加しました。`0080` は `WGL_CONTEXT_OPENGL_NO_ERROR_ARB` を転送しなくなりました。新しい動作は呼び出し側が明示的に設定した値でのみ有効になります。x86_64/WoW64 の完全ビルド、静的・統合チェック、GB18030 と BPTC の関数レベルチェック、ローカルおよび Dev での受け入れに合格しました。Production は Dev で検証した署名済みアーカイブをそのまま使用します。これらの結果はすべてのゲームの互換性を保証するものではありません。不変アセットは[リリースマニフェスト](release-manifests/cx26.3-wine11.0-runeon.17.source-archive.json)に記録されています。
+以前の正式ソース、ロールバック用に保持（App `>=1.10 (3)`、`1.12 (6)` より前）：[`cx26.3-wine11.0-runeon.17`](patchsets/cx26.3-wine11.0-runeon.17/manifest.json)（正式版）。seed `2026.10.10` に対応します。`.16` を保持し、`0112`–`0117` を追加したものです。不変アセットは[リリースマニフェスト](release-manifests/cx26.3-wine11.0-runeon.17.source-archive.json)に記録しています。
 
-以前の正式ソース、ロールバック用に保持（App `>=1.10 (0)`）：[`cx26.3-wine11.0-runeon.16`](patchsets/cx26.3-wine11.0-runeon.16/manifest.json)（正式版）。seed `2026.10.06` に対応します。`.15` を保持し、任意の Steam downlevel D3D12 準備ゲート（`0111`）を追加したものです。不変アセットは[リリースマニフェスト](release-manifests/cx26.3-wine11.0-runeon.16.source-archive.json)に記録されています。
+seed `2026.10.06`（App `>=1.10 (0)`）用の `cx26.3-wine11.0-runeon.16`（正式版）はロールバック用に保持しています。`.15` に任意の Steam downlevel D3D12 準備ゲート（`0111`）を追加したものです。
 
 seed `2026.10.04`（App `>=1.10 (0)`）用の `cx26.3-wine11.0-runeon.15`（正式版）はロールバック用に保持しています。`.14` に dwrite の絵文字システムフォールバック（`0110`）と `wine-11.19` の対象修正（`0079`）を追加したものです。
 

@@ -22,11 +22,11 @@ Runeon Wine 同时接受主动上游审计和 diagnostics 驱动调查两类输�
 
 ## 当前 Wine 11.x 审查基线
 
-当前 Dev 候选：[`cx26.3-wine11.0-runeon.18`](patchsets/cx26.3-wine11.0-runeon.18/manifest.json)（Pre-release），搭配 Dev seed `2026.10.14`（App `>=1.12 (6)`）。保留 `.17`，新增 `wine-11.1` 至 `wine-11.16` 的上游 stub 回移（`0081`–`0087`，见 [BACKPORTS-11.1-11.19-STUBS.zh-CN.md](BACKPORTS-11.1-11.19-STUBS.zh-CN.md)），以及等待有上限的可选 Steam 游戏启动同步准备（`0118`，见 [LAUNCH-PREPARE.zh-CN.md](LAUNCH-PREPARE.zh-CN.md)）。已通过完整 x86_64/WoW64 构建、静态与集成检查及本地和 Dev 验收；Production 尚未授权。不可变附件记录在 [release manifest](release-manifests/cx26.3-wine11.0-runeon.18.source-archive.json)。
+当前正式源码：[`cx26.3-wine11.0-runeon.18`](patchsets/cx26.3-wine11.0-runeon.18/manifest.json)（正式版/latest），搭配 seed `2026.10.14`（App `>=1.12 (6)`）、MoltenVK `1.4.2` 与 SDL2 `2.32.10`。保留 `.17`，新增 `wine-11.1` 至 `wine-11.16` 的上游 stub 回移（`0081`–`0087`，见 [BACKPORTS-11.1-11.19-STUBS.zh-CN.md](BACKPORTS-11.1-11.19-STUBS.zh-CN.md)），以及等待有上限的可选 Steam 游戏启动同步准备（`0118`，见 [LAUNCH-PREPARE.zh-CN.md](LAUNCH-PREPARE.zh-CN.md)）。已通过完整 x86_64/WoW64 构建、静态与集成检查及本地和 Dev 验收；Production 使用 Dev 已验证的同一份签名归档。这些结果不代表普遍的游戏兼容性。不可变附件记录在[发布清单](release-manifests/cx26.3-wine11.0-runeon.18.source-archive.json)。
 
-当前正式源码：[`cx26.3-wine11.0-runeon.17`](patchsets/cx26.3-wine11.0-runeon.17/manifest.json)（正式版/latest），搭配 seed `2026.10.10`（App `>=1.10 (3)`）、MoltenVK `1.4.2` 与 SDL2 `2.32.10`。保留 `.16` 全部补丁，并新增 x64 SEH 栈边界检查（`0112`）、按目录路由的 Mesa OpenGL 与可选的上下文诊断（`0113`、`0114`）、kernelbase 的代码页 54936（GB18030，msvcrt 仍拒绝该代码页，`0115`、`0116`）以及 macOS OpenGL 上可选的二维 BPTC 解码（`0117`）；`0080` 不再转发 `WGL_CONTEXT_OPENGL_NO_ERROR_ARB`。新行为只在调用方显式设置的值下启用。已通过完整 x86_64/WoW64 构建、静态与集成检查、GB18030 与 BPTC 的函数级检查，以及本地与 Dev 验收；Production 直接使用 Dev 验证过的签名归档。这些结果不代表所有游戏都能兼容。不可变附件记录在[发布清单](release-manifests/cx26.3-wine11.0-runeon.17.source-archive.json)。
+上一正式源码，保留用于回滚（App `>=1.10 (3)`，`1.12 (6)` 之前）：[`cx26.3-wine11.0-runeon.17`](patchsets/cx26.3-wine11.0-runeon.17/manifest.json)（正式版），对应 seed `2026.10.10`。保留 `.16` 并新增 `0112`–`0117`。不可变附件记录在[发布清单](release-manifests/cx26.3-wine11.0-runeon.17.source-archive.json)。
 
-上一正式源码，保留用于回滚（App `>=1.10 (0)`）：[`cx26.3-wine11.0-runeon.16`](patchsets/cx26.3-wine11.0-runeon.16/manifest.json)（正式版），对应 seed `2026.10.06`。保留 `.15` 并新增可选的 Steam downlevel D3D12 准备入口（`0111`）。不可变附件记录在[发布清单](release-manifests/cx26.3-wine11.0-runeon.16.source-archive.json)。
+`cx26.3-wine11.0-runeon.16`（正式版）对应 seed `2026.10.06`（App `>=1.10 (0)`），保留用于回滚；它在 `.15` 上新增可选的 Steam downlevel D3D12 准备入口（`0111`）。
 
 `cx26.3-wine11.0-runeon.15`（正式版）对应 seed `2026.10.04`（App `>=1.10 (0)`），保留用于回滚；它在 `.14` 之上新增 dwrite emoji 系统回退（`0110`）与 `wine-11.19` 定向修复（`0079`）。
 
