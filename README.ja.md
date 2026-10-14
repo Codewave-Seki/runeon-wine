@@ -57,6 +57,7 @@ Runeon Wine は、Runeon の Steam Baseline runtime 用に公開されている�
 - [`cx26.3-wine11.0-runeon.15`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.15) は、保持している Production のロールバック用 seed `2026.10.04`（App `>=1.10 (0)`）に対応する正式なソース Release です。不変のソースの詳細は [release manifest](release-manifests/cx26.3-wine11.0-runeon.15.source-archive.json) を参照してください。
 - [`cx26.3-wine11.0-runeon.16`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.16) は、保持している Production のロールバック用 seed `2026.10.06`（App `>=1.10 (0)`）に対応する正式なソース Release です。不変のソースの詳細は [release manifest](release-manifests/cx26.3-wine11.0-runeon.16.source-archive.json) を参照してください。
 - [`cx26.3-wine11.0-runeon.17`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.17) は、現在の Production seed `2026.10.10`（App `>=1.10 (3)`）に対応する正式なソース Release です。Production は Dev で検証済みの同一成果物バイトを使用します。不変のソースの詳細は [release manifest](release-manifests/cx26.3-wine11.0-runeon.17.source-archive.json) を参照してください。
+- [`cx26.3-wine11.0-runeon.18`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.18) は、Dev seed `2026.10.14`（App `>=1.12 (6)`）に対応する Pre-release の Dev 候補で、まだ Production では使用していません。`.17` を保持し、上流 stub のバックポート（`0081`–`0087`）とオプトインの Steam 起動準備（`0118`）を追加します。不変のソースの詳細は [release manifest](release-manifests/cx26.3-wine11.0-runeon.18.source-archive.json) を参照してください。
 
 ## クイック検証
 

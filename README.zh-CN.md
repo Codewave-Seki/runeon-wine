@@ -57,6 +57,7 @@ Runeon Wine 是 Runeon Steam Baseline runtime 的公开源码维护仓库，保�
 - [`cx26.3-wine11.0-runeon.15`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.15) 是保留的 Production 回滚 seed `2026.10.04`（App `>=1.10 (0)`）对应的正式源码 Release。不可变源码详情见 [release manifest](release-manifests/cx26.3-wine11.0-runeon.15.source-archive.json)。
 - [`cx26.3-wine11.0-runeon.16`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.16) 是保留的 Production 回滚 seed `2026.10.06`（App `>=1.10 (0)`）对应的正式源码 Release。不可变源码详情见 [release manifest](release-manifests/cx26.3-wine11.0-runeon.16.source-archive.json)。
 - [`cx26.3-wine11.0-runeon.17`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.17) 是当前 Production seed `2026.10.10`（App `>=1.10 (3)`）对应的正式源码 Release；Production 使用 Dev 已验证的同一份产物字节。不可变源码详情见 [release manifest](release-manifests/cx26.3-wine11.0-runeon.17.source-archive.json)。
+- [`cx26.3-wine11.0-runeon.18`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.18) 是 Dev seed `2026.10.14`（App `>=1.12 (6)`）对应的 Pre-release Dev 候选，尚未用于 Production。保留 `.17` 并新增上游 stub 回移（`0081`–`0087`）与可选的 Steam 启动准备（`0118`）。不可变源码详情见 [release manifest](release-manifests/cx26.3-wine11.0-runeon.18.source-archive.json)。
 
 ## 快速验证
 
