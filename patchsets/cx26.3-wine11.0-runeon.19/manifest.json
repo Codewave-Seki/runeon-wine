@@ -2247,24 +2247,29 @@
     },
     {
       "order": 145,
-      "path": "patches/runeon/0119-ntdll-rosetta-debug-register-readback.patch",
-      "sha256": "5c593390cb4dc7da4884d35ff404eb7840b09c876e55c004be59be83da589bf4",
+      "path": "patches/runeon/0119-ntdll-rosetta-debug-register-report.patch",
+      "sha256": "7f91cf7b8906a2bb1653d5e7290b416c6eef1e7b508d7a11c43be40ef014b15f",
       "kind": "runeon-product",
       "status": "active",
-      "risk": "medium",
+      "risk": "low",
       "runeonTasks": [
         "T898"
       ],
-      "summary": "Opt-in read-back of the current thread's debug registers under Rosetta, where the server cannot set them and reads them as zero; breakpoints still never fire, and the first faked set logs a fixed ERR marker. No game identity in Wine.",
-      "testStrategy": "Compile the patched unit for x86_64 in a complete WoW64 build; compare a Denuvo-protected D3D12 title with the variable set and unset; static and integration checks prove the patch applies.",
+      "summary": "Opt-in ERR marker, once per process, when a debug register set is faked under Rosetta on the 64-bit or WoW64 path, so a launcher can recognise a hardware-breakpoint dependency; register handling is unchanged. No game identity in Wine.",
+      "testStrategy": "Static and integration checks prove the patch applies; it compiles only in a complete WoW64 build, which is still pending. With the variable set, a program that sets debug registers under Rosetta must log the marker once.",
       "verification": [
         {
           "path": "dlls/ntdll/unix/signal_x86_64.c",
-          "contains": "        const char *value = getenv( \"RUNEON_DEBUG_REGISTER_READBACK_V1\" );"
+          "contains": "    const char *value = getenv( \"RUNEON_ROSETTA_DEBUG_REGISTER_REPORT_V1\" );"
         },
         {
           "path": "dlls/ntdll/unix/signal_x86_64.c",
-          "contains": "    if ((needed_flags & CONTEXT_DEBUG_REGISTERS) && debug_register_readback())"
+          "contains": "    ERR_(seh)( \"RUNEON_ROSETTA_DEBUG_REGISTERS_UNSUPPORTED: hardware breakpoints cannot be set"
+        },
+        {
+          "path": "dlls/ntdll/unix/signal_x86_64.c",
+          "contains": "            report_unsupported_debug_registers();",
+          "occurrences": 2
         }
       ]
     }

@@ -1,0 +1,63 @@
+From: Runeon Contributors <dev@runeon.com>
+Subject: [PATCH] ntdll: Report hardware breakpoints Rosetta cannot set.
+
+Rosetta has no x86 debug registers. The server refuses to set them and
+an existing CrossOver change reports success anyway, so a hardware
+breakpoint a program sets never fires. A program that relies on one,
+such as a copy protection that steps its own code through debug
+exceptions, then fails later without anything in default logs to say
+why.
+
+With RUNEON_ROSETTA_DEBUG_REGISTER_REPORT_V1=1, the first faked set in
+a process, on the 64-bit or the WoW64 path, logs one ERR line with a
+fixed marker so a launcher can tell this failure apart from others.
+Register handling is unchanged, and without the variable nothing
+changes. Reading the set values back was tried and did not help such a
+program, which needs the breakpoints to fire.
+
+---
+diff --git a/dlls/ntdll/unix/signal_x86_64.c b/dlls/ntdll/unix/signal_x86_64.c
+index 4b8e52c..127b9b7 100644
+--- a/dlls/ntdll/unix/signal_x86_64.c
++++ b/dlls/ntdll/unix/signal_x86_64.c
+@@ -1108,6 +1108,24 @@ void *get_wow_context( CONTEXT *context )
+ }
+ 
+ 
++#ifdef __APPLE__
++/* Rosetta has no x86 debug registers, so a hardware breakpoint a program sets
++ * never fires; setting them is faked as a success below. A program that relies
++ * on them fails later with nothing in default logs to say why. With
++ * RUNEON_ROSETTA_DEBUG_REGISTER_REPORT_V1=1, report the first faked set in a
++ * process at ERR level with fixed text. Nothing else changes. */
++static void report_unsupported_debug_registers(void)
++{
++    static LONG reported;
++    const char *value = getenv( "RUNEON_ROSETTA_DEBUG_REGISTER_REPORT_V1" );
++
++    if (!value || strcmp( value, "1" )) return;
++    if (InterlockedExchange( &reported, 1 )) return;
++    ERR_(seh)( "RUNEON_ROSETTA_DEBUG_REGISTERS_UNSUPPORTED: hardware breakpoints cannot be set\n" );
++}
++#endif
++
++
+ /***********************************************************************
+  *              NtSetContextThread  (NTDLL.@)
+  *              ZwSetContextThread  (NTDLL.@)
+@@ -1151,6 +1169,7 @@ NTSTATUS WINAPI NtSetContextThread( HANDLE handle, const CONTEXT *context )
+             /* CW HACK 22131 */
+             WARN_(seh)( "Setting debug registers is not supported under Rosetta, faking success\n" );
+             ret = STATUS_SUCCESS;
++            report_unsupported_debug_registers();
+         }
+ #endif
+         if (ret || !self) return ret;
+@@ -1380,6 +1399,7 @@ NTSTATUS set_thread_wow64_context( HANDLE handle, const void *ctx, ULONG size )
+             /* CW HACK 22131 */
+             WARN_(seh)( "Setting debug registers is not supported under Rosetta, faking success\n" );
+             ret = STATUS_SUCCESS;
++            report_unsupported_debug_registers();
+         }
+ #endif
+         if (ret || !self) return ret;
