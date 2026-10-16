@@ -22,6 +22,8 @@ Runeon Wine は、能動的な上流監査と diagnostics 主導の調査とい�
 
 ## 現在の Wine 11.x レビューベースライン
 
+現在の Dev 候補：[`cx26.3-wine11.0-runeon.19`](patchsets/cx26.3-wine11.0-runeon.19/manifest.json)（Pre-release）。Dev seed `2026.10.16`（App `>=1.13 (10)`）と組み合わせます。`.18` を保持し、上流 `wine-11.3` の FindFirstFile ディレクトリ情報クラス修正（`0088`、プロセス内で `NtQueryDirectoryFile` をホットパッチするプログラムに必要）と、Rosetta がハードウェアデバッグレジスタを設定できない場合のオプトインのマーカー（`0119`）を追加します。x86_64/WoW64 の完全ビルド、静的・統合チェック、ローカルおよび Dev での受け入れ確認に合格しました。Production はまだ承認されていません。不変アセットは[リリースマニフェスト](release-manifests/cx26.3-wine11.0-runeon.19.source-archive.json)に記録しています。
+
 現在の正式ソース：[`cx26.3-wine11.0-runeon.18`](patchsets/cx26.3-wine11.0-runeon.18/manifest.json)（正式版/latest）。seed `2026.10.14`（App `>=1.12 (6)`）、MoltenVK `1.4.2`、SDL2 `2.32.10` を使用します。`.17` を保持し、`wine-11.1` から `wine-11.16` の上流 stub バックポート（`0081`–`0087`、[BACKPORTS-11.1-11.19-STUBS.ja.md](BACKPORTS-11.1-11.19-STUBS.ja.md) 参照）と、待機に上限のあるオプトインの Steam ゲーム起動同期準備（`0118`、[LAUNCH-PREPARE.ja.md](LAUNCH-PREPARE.ja.md) 参照）を追加します。x86_64/WoW64 の完全ビルド、静的・統合チェック、ローカルおよび Dev での受け入れ確認に合格し、Production は Dev で検証済みの同一署名アーカイブを使用します。これらの結果は一般的なゲーム互換性を保証するものではありません。不変アセットは[リリースマニフェスト](release-manifests/cx26.3-wine11.0-runeon.18.source-archive.json)に記録しています。
 
 以前の正式ソース、ロールバック用に保持（App `>=1.10 (3)`、`1.12 (6)` より前）：[`cx26.3-wine11.0-runeon.17`](patchsets/cx26.3-wine11.0-runeon.17/manifest.json)（正式版）。seed `2026.10.10` に対応します。`.16` を保持し、`0112`–`0117` を追加したものです。不変アセットは[リリースマニフェスト](release-manifests/cx26.3-wine11.0-runeon.17.source-archive.json)に記録しています。
