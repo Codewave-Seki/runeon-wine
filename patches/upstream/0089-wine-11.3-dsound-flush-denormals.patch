@@ -1,0 +1,23 @@
+From: Matteo Bruni <mbruni@codeweavers.com>
+Subject: [PATCH] dsound: Flush denormals in the mixing thread.
+
+Backport of WineHQ commit 1f8afa945a (wine-11.3, Matteo Bruni).
+
+Denormal floats are far slower than normal ones. 64-bit processes
+default to flushing them, but 32-bit processes do not, so the
+resampling and mixing of a 32-bit application could fall behind the
+mixer period and underrun, which is heard as stutter and crackle.
+
+--- a/dlls/dsound/mixer.c
++++ b/dlls/dsound/mixer.c
+@@ -760,8 +760,10 @@
+ DWORD CALLBACK DSOUND_mixthread(void *p)
+ {
+ 	DirectSoundDevice *dev = p;
++
+ 	TRACE("(%p)\n", dev);
+ 	SetThreadDescription(GetCurrentThread(), L"wine_dsound_mixer");
++        _controlfp_s(NULL, _DN_FLUSH, _MCW_DN);
+ 
+ 	while (dev->ref) {
+ 		DWORD ret;
