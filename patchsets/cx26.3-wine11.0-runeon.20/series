@@ -100,3 +100,4 @@ patches/upstream/0088-wine-11.3-kernelbase-findfile-both-directory-info.patch
 patches/upstream/0089-wine-11.3-dsound-flush-denormals.patch
 patches/runeon/0118-steam-launch-route-preparation.patch
 patches/runeon/0119-ntdll-rosetta-debug-register-report.patch
+patches/runeon/0120-dsound-sse-float-math.patch

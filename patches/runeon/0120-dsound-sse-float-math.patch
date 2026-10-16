@@ -1,0 +1,28 @@
+From: Runeon Contributors <dev@runeon.com>
+Subject: [PATCH] dsound: Build with SSE floating point math.
+
+The 32-bit build of dsound does all of its floating point work, the
+resampling filter included, on the x87 FPU, because the i386 compiler
+defaults to x87 math. Rosetta translates x87 code far more slowly than
+SSE, so resampling a 44.1 kHz buffer for a 48 kHz device takes a large
+share of the 10 ms mixer period, and two such buffers at once overrun
+it: the mixer falls behind and the output stutters and crackles. The
+64-bit build already uses SSE and is not affected.
+
+Compile the module with SSE2 scalar math. Every CPU Rosetta presents
+has SSE2, and the computed values are the same single precision floats
+the 64-bit build produces. The mixer thread already flushes denormals,
+which now covers the 32-bit build as well.
+
+---
+diff --git a/dlls/dsound/Makefile.in b/dlls/dsound/Makefile.in
+--- a/dlls/dsound/Makefile.in
++++ b/dlls/dsound/Makefile.in
+@@ -1,6 +1,7 @@
+ MODULE    = dsound.dll
+ IMPORTLIB = dsound
+ IMPORTS   = dxguid uuid winmm ole32 advapi32 user32
++EXTRADEFS = -msse2 -mfpmath=sse
+ 
+ SOURCES = \
+ 	buffer.c \

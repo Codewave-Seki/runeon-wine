@@ -2325,6 +2325,25 @@
           "occurrences": 2
         }
       ]
+    },
+    {
+      "order": 148,
+      "path": "patches/runeon/0120-dsound-sse-float-math.patch",
+      "sha256": "c30b973a45a0bbc2484992c9b711c4c9a545c185dfff58152afd8fb9f7ef1ebd",
+      "kind": "runeon-product",
+      "status": "active",
+      "risk": "low",
+      "runeonTasks": [
+        "T904"
+      ],
+      "summary": "dsound is compiled with SSE2 scalar floating point math, so the 32-bit build no longer resamples and mixes on the x87 FPU, which Rosetta translates slowly enough for two 44.1 kHz streams on a 48 kHz device to overrun the mixer period. No game identity in Wine.",
+      "testStrategy": "Static and integration checks prove the patch applies; a complete WoW64 build must show SSE instead of x87 instructions in the i386 dsound.dll. Under Rosetta, a 32-bit DirectSound program playing two 44.1 kHz streams on a 48 kHz device must mix within the 10 ms period without audible stutter.",
+      "verification": [
+        {
+          "path": "dlls/dsound/Makefile.in",
+          "contains": "EXTRADEFS = -msse2 -mfpmath=sse"
+        }
+      ]
     }
   ],
   "targetedReview": {
