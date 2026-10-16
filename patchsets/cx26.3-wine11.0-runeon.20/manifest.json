@@ -2277,6 +2277,65 @@
     },
     {
       "order": 146,
+      "path": "patches/upstream/0090-wine-11.11-dsound-resampler-performance.patch",
+      "sha256": "690d6559bf79822b4c8bfbac88b17371eafc089f4239911c980c65669ccf1b45",
+      "kind": "upstream-backport",
+      "status": "active",
+      "risk": "medium",
+      "firstWineRelease": "wine-11.11",
+      "upstreamCommits": [
+        "e33cf2c07bea270f2b170835e5a52180c09f93ea",
+        "e023741de82bf22538c72c9e2bde559726ef867d",
+        "0e83f60183ce6939ba154f1cab6cb33747d2da67",
+        "ae384834809eb26b22acd8eb5de3d4a4c1798f5d",
+        "9f9cb2f96b660beb9bb3d2a00421a464e4b39f0e",
+        "027ba3f95e3e25b178bddb9c0e236ec7496d7dc8",
+        "47fb02fe5a7eab05b225ef3b44fd8dc608bafdb8",
+        "a1ac7b73c08873f7625b56a078e52ebc9ef314f2",
+        "978318c3f5e581b3744311352452ca922451c39b",
+        "5c19fed232f4e399ec337e641dcc7dc16dc5c5e0",
+        "b261e4d7c46355c59d1e1527825a80a8a9612221",
+        "075b7d84027a6ae578f794bfdf87717e1e686436",
+        "3719498d54f5f52809e804048a5b6ed69baf3bc4",
+        "f797d0418e9bbf7919ff0bb488995012456222d3",
+        "68466e2dbf338e3df4eb9b8e4cdd990a628eaae3",
+        "e788b95dda4c3b1bfcbcbe66782be4b84370fa77",
+        "82c238d4ae38c67e407a6f4d198b40a5e65a66d9",
+        "97f3bffa60b173c43ceef6c96ed5d9a46fccef12",
+        "d0fbde08a2eb54ea4d88e61fd0f7f47fea30d463",
+        "b54be941794df69d19e62558183110cbe1713b17",
+        "217c2990c7132e3279b3b7bfe5ef0119e1495666",
+        "c59db3f5443b075738d260552e80d01d721e4366",
+        "472c5b3dc1d8337102d306dece5821ae4ea7be9e",
+        "c195a0b8071eb9d15b360926c3bb301bcc4258fb",
+        "a81c91b8ca712141e862e21239bb399ca48434bf",
+        "f704a2d17bd333c92e636b403c69b59b58279195",
+        "b9de3e57fa3e38efe888836d6b396c0ce7c3ed00",
+        "d79bd1cffc06f0f724c4ae8b15c3341a5ef51bd7",
+        "688618ff978bdca35ffc89d0a6d8ac6bfacba9de",
+        "3f30664a951031294c7433a03ffe8f9382f39fd9",
+        "0dd8d009ebbb35bd5d48ea7bc659066d14077060",
+        "61e1bac10fc85a527e0fa200f409de55f723f238"
+      ],
+      "adaptation": "Device lifetime commits ebc31cfbee, 0e6c3b5097 and 0e437b2baa conflict with the pinned dsound.c and are not carried; 0af0a69ec2 (7.1 output), c4f7c5d695 and 07eb3a56ca are unrelated to resampling and left out. The selected commits apply in upstream order without them; fir.h matches upstream at 61e1bac10f. Test hunks are not carried. The SSE loops need __SSE__, which 0120 provides for the i386 build.",
+      "summary": "Backports the DirectSound resampler rework: a Parks-McClellan FIR filter, single precision and fixed point arithmetic, a transposed filter table and SSE upsample and downsample loops, which cut the cost of resampling a stream to the device rate.",
+      "verification": [
+        {
+          "path": "dlls/dsound/fir.h",
+          "contains": "#define FIR_STEP_SHIFT 7"
+        },
+        {
+          "path": "dlls/dsound/mixer.c",
+          "contains": "static void upsample(DWORD freq_adjust_num, DWORD freq_acc_start, UINT count, float *input,"
+        },
+        {
+          "path": "dlls/dsound/mixer.c",
+          "contains": "#include <xmmintrin.h>"
+        }
+      ]
+    },
+    {
+      "order": 147,
       "path": "patches/runeon/0118-steam-launch-route-preparation.patch",
       "sha256": "b56f98cd3af0da516559576bfc82ef4d7ffb0eebade1ee42822098a81ad75544",
       "kind": "runeon-product",
@@ -2299,7 +2358,7 @@
       ]
     },
     {
-      "order": 147,
+      "order": 148,
       "path": "patches/runeon/0119-ntdll-rosetta-debug-register-report.patch",
       "sha256": "7f91cf7b8906a2bb1653d5e7290b416c6eef1e7b508d7a11c43be40ef014b15f",
       "kind": "runeon-product",
@@ -2327,16 +2386,16 @@
       ]
     },
     {
-      "order": 148,
+      "order": 149,
       "path": "patches/runeon/0120-dsound-sse-float-math.patch",
-      "sha256": "c30b973a45a0bbc2484992c9b711c4c9a545c185dfff58152afd8fb9f7ef1ebd",
+      "sha256": "0e664ed66022d1ad783affd1fab00053a5aeeab9d7070c1c35aacccbbfe5580d",
       "kind": "runeon-product",
       "status": "active",
       "risk": "low",
       "runeonTasks": [
         "T904"
       ],
-      "summary": "dsound is compiled with SSE2 scalar floating point math, so the 32-bit build no longer resamples and mixes on the x87 FPU, which Rosetta translates slowly enough for two 44.1 kHz streams on a 48 kHz device to overrun the mixer period. No game identity in Wine.",
+      "summary": "dsound is compiled with SSE2 and SSE scalar floating point math, so the 32-bit build no longer resamples and mixes on the x87 FPU, which Rosetta translates slowly enough for two 44.1 kHz streams on a 48 kHz device to overrun the mixer period, and the SSE resampler loops are enabled. No game identity in Wine.",
       "testStrategy": "Static and integration checks prove the patch applies; a complete WoW64 build must show SSE instead of x87 instructions in the i386 dsound.dll. Under Rosetta, a 32-bit DirectSound program playing two 44.1 kHz streams on a 48 kHz device must mix within the 10 ms period without audible stutter.",
       "verification": [
         {

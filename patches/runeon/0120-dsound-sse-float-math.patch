@@ -9,10 +9,13 @@ share of the 10 ms mixer period, and two such buffers at once overrun
 it: the mixer falls behind and the output stutters and crackles. The
 64-bit build already uses SSE and is not affected.
 
-Compile the module with SSE2 scalar math. Every CPU Rosetta presents
-has SSE2, and the computed values are the same single precision floats
-the 64-bit build produces. The mixer thread already flushes denormals,
-which now covers the 32-bit build as well.
+Compile the module with SSE2 and SSE scalar math. This also defines
+__SSE__, which enables the vectorised upsample and downsample loops of
+the backported resampler. Every CPU Rosetta presents has SSE2, and the
+computed values are the same single precision floats the 64-bit build
+produces. The mixer thread already flushes denormals, which now covers
+the 32-bit build as well. Upstream instead adds -msse2 to every i386
+module; this keeps the change to dsound.
 
 ---
 diff --git a/dlls/dsound/Makefile.in b/dlls/dsound/Makefile.in
