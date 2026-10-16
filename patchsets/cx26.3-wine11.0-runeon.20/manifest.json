@@ -2278,7 +2278,7 @@
     {
       "order": 146,
       "path": "patches/upstream/0090-wine-11.11-dsound-resampler-performance.patch",
-      "sha256": "690d6559bf79822b4c8bfbac88b17371eafc089f4239911c980c65669ccf1b45",
+      "sha256": "20044e5edd66016b5ac1d603ac8cb7503a073d5bd4bf5f781fc6eb4eace2f1bd",
       "kind": "upstream-backport",
       "status": "active",
       "risk": "medium",
@@ -2317,7 +2317,7 @@
         "0dd8d009ebbb35bd5d48ea7bc659066d14077060",
         "61e1bac10fc85a527e0fa200f409de55f723f238"
       ],
-      "adaptation": "Device lifetime commits ebc31cfbee, 0e6c3b5097 and 0e437b2baa conflict with the pinned dsound.c and are not carried; 0af0a69ec2 (7.1 output), c4f7c5d695 and 07eb3a56ca are unrelated to resampling and left out. The selected commits apply in upstream order without them; fir.h matches upstream at 61e1bac10f. Test hunks are not carried. The SSE loops need __SSE__, which 0120 provides for the i386 build.",
+      "adaptation": "Device lifetime commits ebc31cfbee, 0e6c3b5097 and 0e437b2baa conflict with the pinned dsound.c and are not carried; 0af0a69ec2 (7.1 output), c4f7c5d695 and 07eb3a56ca are unrelated to resampling and left out. The selected commits apply in upstream order without them; fir.h matches upstream at 61e1bac10f. Test hunks are not carried. The SSE loops need __SSE__, which 0120 provides for the i386 build. make_fir is deleted as upstream does; patch implementations that do not remove emptied files leave it as an empty, unbuilt file.",
       "summary": "Backports the DirectSound resampler rework: a Parks-McClellan FIR filter, single precision and fixed point arithmetic, a transposed filter table and SSE upsample and downsample loops, which cut the cost of resampling a stream to the device rate.",
       "verification": [
         {

@@ -3942,8 +3942,9 @@ diff --git a/dlls/dsound/fir.h b/dlls/dsound/fir.h
 +     2.6614854151e-06,  1.9318705150e-06, -2.4830013102e-06,  0.0000000000e+00,
  };
 diff --git a/dlls/dsound/make_fir b/dlls/dsound/make_fir
+deleted file mode 100755
 --- a/dlls/dsound/make_fir
-+++ b/dlls/dsound/make_fir
++++ /dev/null
 @@ -1,157 +0,0 @@
 -#! /usr/bin/perl -w
 -#
