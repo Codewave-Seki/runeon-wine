@@ -59,6 +59,7 @@ Runeon Wine は、Runeon の Steam Baseline runtime 用に公開されている�
 - [`cx26.3-wine11.0-runeon.17`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.17) は、保持している Production のロールバック用 seed `2026.10.10`（App `>=1.10 (3)`、`1.12 (6)` より前）に対応する正式なソース Release です。不変のソースの詳細は [release manifest](release-manifests/cx26.3-wine11.0-runeon.17.source-archive.json) を参照してください。
 - [`cx26.3-wine11.0-runeon.18`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.18) は、現在の Production seed `2026.10.14`（App `>=1.12 (6)`）に対応する正式なソース Release です。Production は Dev で検証済みの同一成果物バイトを使用します。不変のソースの詳細は [release manifest](release-manifests/cx26.3-wine11.0-runeon.18.source-archive.json) を参照してください。
 - [`cx26.3-wine11.0-runeon.19`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.19) は、Dev seed `2026.10.16`（App `>=1.13 (10)`）向けの Pre-release の Dev 候補で、まだ Production では使用していません。`.18` を保持し、上流の FindFirstFile ディレクトリ情報クラス修正（`0088`）とオプトインの Rosetta デバッグレジスタマーカー（`0119`）を追加します。不変のソースの詳細は [release manifest](release-manifests/cx26.3-wine11.0-runeon.19.source-archive.json) を参照してください。
+- [`cx26.3-wine11.0-runeon.20`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.20) は、Dev seed `2026.10.16.1`（App `>=1.13 (10)`）向けの Pre-release の Dev 候補で、Dev では `.19` を置き換え、まだ Production では使用していません。`.19` を保持し、上流の DirectSound リサンプラー改善（`0089`、`0090`）と dsound の SSE ビルド（`0120`）を追加します。不変のソースの詳細は [release manifest](release-manifests/cx26.3-wine11.0-runeon.20.source-archive.json) を参照してください。
 
 ## クイック検証
 
