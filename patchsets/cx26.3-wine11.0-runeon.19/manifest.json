@@ -2251,7 +2251,8 @@
         },
         {
           "path": "dlls/ntdll/unix/file.c",
-          "contains": "    if (reparse_tag) *reparse_tag = 0;"
+          "contains": "    if (reparse_tag) *reparse_tag = 0;",
+          "occurrences": 2
         }
       ]
     },
