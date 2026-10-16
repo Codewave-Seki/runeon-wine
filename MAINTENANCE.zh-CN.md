@@ -22,13 +22,13 @@ Runeon Wine 同时接受主动上游审计和 diagnostics 驱动调查两类输�
 
 ## 当前 Wine 11.x 审查基线
 
-当前 Dev 候选：[`cx26.3-wine11.0-runeon.20`](patchsets/cx26.3-wine11.0-runeon.20/manifest.json)（Pre-release），搭配 Dev seed `2026.10.16.1`（App `>=1.13 (10)`）。保留 `.19`，新增上游 DirectSound 重采样改进（`0089`：混音线程 flush denormal，`wine-11.3`；`0090`：`wine-11.3` 至 `wine-11.11` 的 32 个重采样提交，含 SSE 循环），并让 dsound 用 SSE 标量浮点编译（`0120`），32 位构建不再在 Rosetta 翻译缓慢的 x87 FPU 上重采样。已通过完整 x86_64/WoW64 构建、静态与集成检查及本地和 Dev 验收；尚未授权 Production。不可变附件记录在[发布清单](release-manifests/cx26.3-wine11.0-runeon.20.source-archive.json)。
+当前正式源码：[`cx26.3-wine11.0-runeon.20`](patchsets/cx26.3-wine11.0-runeon.20/manifest.json)（正式版/latest），搭配 seed `2026.10.16.1`（App `>=1.13 (10)`）、MoltenVK `1.4.2` 与 SDL2 `2.32.10`。保留 `.19`（上游 FindFirstFile 目录信息类修复 `0088` 与可选的 Rosetta 调试寄存器标记 `0119`），新增上游 DirectSound 重采样改进（`0089`、`0090`，`wine-11.3` 至 `wine-11.11`）与 dsound 的 SSE 构建（`0120`），32 位程序不再在 Rosetta 翻译缓慢的 x87 FPU 上重采样。已通过完整 x86_64/WoW64 构建、静态与集成检查、i386 dsound.dll 反汇编检查及本地和 Dev 验收；Production 使用 Dev 已验证的同一份签名归档。这些结果不代表普遍的游戏兼容性。不可变附件记录在[发布清单](release-manifests/cx26.3-wine11.0-runeon.20.source-archive.json)。
 
-此前的 Dev 候选，已由 `.20` 接替：[`cx26.3-wine11.0-runeon.19`](patchsets/cx26.3-wine11.0-runeon.19/manifest.json)（Pre-release），搭配 Dev seed `2026.10.16`（App `>=1.13 (10)`）。保留 `.18`，新增上游 `wine-11.3` 的 FindFirstFile 目录信息类修复（`0088`，进程内热补丁 `NtQueryDirectoryFile` 的程序需要它），以及 Rosetta 无法设置硬件调试寄存器时的可选标记（`0119`）。已通过完整 x86_64/WoW64 构建、静态与集成检查及本地和 Dev 验收；尚未授权 Production。不可变附件记录在[发布清单](release-manifests/cx26.3-wine11.0-runeon.19.source-archive.json)。
+`cx26.3-wine11.0-runeon.19`（Pre-release）曾是 Dev seed `2026.10.16` 的 Dev 候选，已由 `.20` 接替，未用于 Production。不可变附件记录在[发布清单](release-manifests/cx26.3-wine11.0-runeon.19.source-archive.json)。
 
-当前正式源码：[`cx26.3-wine11.0-runeon.18`](patchsets/cx26.3-wine11.0-runeon.18/manifest.json)（正式版/latest），搭配 seed `2026.10.14`（App `>=1.12 (6)`）、MoltenVK `1.4.2` 与 SDL2 `2.32.10`。保留 `.17`，新增 `wine-11.1` 至 `wine-11.16` 的上游 stub 回移（`0081`–`0087`，见 [BACKPORTS-11.1-11.19-STUBS.zh-CN.md](BACKPORTS-11.1-11.19-STUBS.zh-CN.md)），以及等待有上限的可选 Steam 游戏启动同步准备（`0118`，见 [LAUNCH-PREPARE.zh-CN.md](LAUNCH-PREPARE.zh-CN.md)）。已通过完整 x86_64/WoW64 构建、静态与集成检查及本地和 Dev 验收；Production 使用 Dev 已验证的同一份签名归档。这些结果不代表普遍的游戏兼容性。不可变附件记录在[发布清单](release-manifests/cx26.3-wine11.0-runeon.18.source-archive.json)。
+上一正式源码，保留用于回滚（App `>=1.12 (6)`，`1.13 (10)` 之前）：[`cx26.3-wine11.0-runeon.18`](patchsets/cx26.3-wine11.0-runeon.18/manifest.json)（正式版），对应 seed `2026.10.14`。保留 `.17` 并新增 `0081`–`0087` 与 `0118`。不可变附件记录在[发布清单](release-manifests/cx26.3-wine11.0-runeon.18.source-archive.json)。
 
-上一正式源码，保留用于回滚（App `>=1.10 (3)`，`1.12 (6)` 之前）：[`cx26.3-wine11.0-runeon.17`](patchsets/cx26.3-wine11.0-runeon.17/manifest.json)（正式版），对应 seed `2026.10.10`。保留 `.16` 并新增 `0112`–`0117`。不可变附件记录在[发布清单](release-manifests/cx26.3-wine11.0-runeon.17.source-archive.json)。
+`cx26.3-wine11.0-runeon.17`（正式版）对应 seed `2026.10.10`（App `>=1.10 (3)`，`1.12 (6)` 之前），保留用于回滚；它在 `.16` 上新增 `0112`–`0117`。
 
 `cx26.3-wine11.0-runeon.16`（正式版）对应 seed `2026.10.06`（App `>=1.10 (0)`），保留用于回滚；它在 `.15` 上新增可选的 Steam downlevel D3D12 准备入口（`0111`）。
 
