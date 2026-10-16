@@ -2224,6 +2224,39 @@
     },
     {
       "order": 144,
+      "path": "patches/upstream/0088-wine-11.3-kernelbase-findfile-both-directory-info.patch",
+      "sha256": "fdc41530941d82e06ce07deda2239689019755d8af449ee285ca8589d82e70c8",
+      "kind": "upstream-backport",
+      "status": "active",
+      "risk": "low",
+      "firstWineRelease": "wine-11.3",
+      "upstreamCommits": [
+        "68f7fcb30aaac21bf051b64addf047316ac604b6",
+        "8afeae43cc0b8abbfb71e40fda9fb8eecf10795b",
+        "ef1b1311e83e93dbdd674da5a7298e7747a4ef21"
+      ],
+      "summary": "FindFirstFileExW and FindNextFileW query FileBothDirectoryInformation, as Windows does, instead of FileIdExtdBothDirectoryInformation, which in-process NtQueryDirectoryFile hotpatchers mishandle; the reparse tag comes from EaSize, which ntdll now fills for non-Extd directory classes.",
+      "verification": [
+        {
+          "path": "dlls/kernelbase/file.c",
+          "contains": "static const UINT max_entry_size = offsetof( FILE_BOTH_DIRECTORY_INFORMATION, FileName[256] );"
+        },
+        {
+          "path": "dlls/kernelbase/file.c",
+          "contains": "            data->dwReserved0  = dir_info->EaSize;"
+        },
+        {
+          "path": "dlls/ntdll/unix/file.c",
+          "contains": "        info->both.EaSize = reparse_tag;"
+        },
+        {
+          "path": "dlls/ntdll/unix/file.c",
+          "contains": "    if (reparse_tag) *reparse_tag = 0;"
+        }
+      ]
+    },
+    {
+      "order": 145,
       "path": "patches/runeon/0118-steam-launch-route-preparation.patch",
       "sha256": "b56f98cd3af0da516559576bfc82ef4d7ffb0eebade1ee42822098a81ad75544",
       "kind": "runeon-product",
@@ -2246,7 +2279,7 @@
       ]
     },
     {
-      "order": 145,
+      "order": 146,
       "path": "patches/runeon/0119-ntdll-rosetta-debug-register-report.patch",
       "sha256": "7f91cf7b8906a2bb1653d5e7290b416c6eef1e7b508d7a11c43be40ef014b15f",
       "kind": "runeon-product",
