@@ -8,8 +8,11 @@
  *   PLACEMENT  normal, freed, decommit, readonly, guard, cross (Information on
  *              a no-access page after Status), watch (write-watched pages)
  *   DELIVERY   wait: the reader blocks in a wait, so Wine runs the completion
- *              in the syscall; spin: the reader spins in user mode, so Wine
- *              delivers the completion by signal and runs it on the signal stack
+ *              in the syscall (the writer allows 300 ms to enter the wait, so
+ *              a very slow run may deliver it by signal instead); spin: the
+ *              reader spins in user mode until the I/O's own event has fired,
+ *              so the completion was delivered by signal and ran on the
+ *              signal stack, and a spin that times out fails the case
  *   NOTIFY     event or port (I/O completion port)
  *
  * The reader issues an overlapped read on a named pipe; a second thread then
@@ -42,7 +45,9 @@ static HANDLE server, client, event, port;
 static OVERLAPPED *ov;
 static char *pages;
 static SIZE_T page_size;
-static volatile LONG reader_ready, may_check;
+static volatile LONG reader_ready;
+/* set by the writer once the I/O's own event fired: 1, or -1 on a timeout */
+static volatile LONG completion;
 static int failures;
 
 static void check( int ok, const char *what )
@@ -55,22 +60,29 @@ static void check( int ok, const char *what )
 static DWORD WINAPI writer( void *arg )
 {
     DWORD written, old;
+    BOOL ok = TRUE;
     (void)arg;
 
     while (!reader_ready) Sleep( 1 );
     Sleep( 300 );  /* let a waiting reader enter its wait */
 
-    if (!strcmp( placement, "freed" )) VirtualFree( pages, 0, MEM_RELEASE );
-    else if (!strcmp( placement, "decommit" )) VirtualFree( pages, 2 * page_size, MEM_DECOMMIT );
-    else if (!strcmp( placement, "readonly" )) VirtualProtect( pages, 2 * page_size, PAGE_READONLY, &old );
-    else if (!strcmp( placement, "guard" )) VirtualProtect( pages, 2 * page_size, PAGE_READWRITE | PAGE_GUARD, &old );
-    else if (!strcmp( placement, "cross" )) VirtualProtect( pages + page_size, page_size, PAGE_NOACCESS, &old );
-    else if (!strcmp( placement, "watch" )) ResetWriteWatch( pages, 2 * page_size );
+    /* a page change that did not happen would make the case pass for nothing */
+    if (!strcmp( placement, "freed" )) ok = VirtualFree( pages, 0, MEM_RELEASE );
+    else if (!strcmp( placement, "decommit" )) ok = VirtualFree( pages, 2 * page_size, MEM_DECOMMIT );
+    else if (!strcmp( placement, "readonly" )) ok = VirtualProtect( pages, 2 * page_size, PAGE_READONLY, &old );
+    else if (!strcmp( placement, "guard" )) ok = VirtualProtect( pages, 2 * page_size, PAGE_READWRITE | PAGE_GUARD, &old );
+    else if (!strcmp( placement, "cross" )) ok = VirtualProtect( pages + page_size, page_size, PAGE_NOACCESS, &old );
+    else if (!strcmp( placement, "watch" )) ok = !ResetWriteWatch( pages, 2 * page_size );
+    if (!ok)
+    {
+        printf( "  writer: changing the status block pages failed %lu\n", GetLastError() );
+        ExitProcess( 4 );
+    }
 
     if (!WriteFile( client, payload, DATA_SIZE, &written, NULL ) || written != DATA_SIZE)
         printf( "  writer: WriteFile failed %lu\n", GetLastError() );
-    Sleep( 500 );  /* time for the completion to be delivered */
-    InterlockedExchange( (LONG *)&may_check, 1 );
+    /* the event is a separate handle, so it shows completion without the status block */
+    InterlockedExchange( (LONG *)&completion, WaitForSingleObject( event, 5000 ) == WAIT_OBJECT_0 ? 1 : -1 );
     return 0;
 }
 
@@ -123,18 +135,21 @@ static int run_case( const char *name )
     if (!strcmp( delivery, "spin" ))
     {
         DWORD start = GetTickCount();
+        BOOL seen = FALSE;
         InterlockedExchange( (LONG *)&reader_ready, 1 );
-        /* user-mode spin, no syscalls: the completion has to arrive by signal */
-        while (!may_check && GetTickCount() - start < 10000)
+        /* user-mode spin, no syscalls, until the completion is known to have
+         * arrived: it can only have been delivered to this thread by signal */
+        while (!completion && GetTickCount() - start < 10000)
         {
-            if (!strcmp( placement, "normal" ) && __atomic_load_n( &ov->Internal, __ATOMIC_ACQUIRE ) != PENDING)
+            if (!seen && !strcmp( placement, "normal" ) && __atomic_load_n( &ov->Internal, __ATOMIC_ACQUIRE ) != PENDING)
             {
-                /* the status is published last: data and Information are visible */
+                /* smoke check only: x86 stores are not reordered anyway */
                 check( ov->InternalHigh == DATA_SIZE, "Information visible with Status" );
                 check( !memcmp( buffer, payload, DATA_SIZE ), "data visible with Status" );
-                break;
+                seen = TRUE;
             }
         }
+        check( completion == 1, "completion arrived while spinning" );
     }
     else InterlockedExchange( (LONG *)&reader_ready, 1 );
 
@@ -160,7 +175,8 @@ static int run_case( const char *name )
     if (!strcmp( placement, "guard" ))
     {
         MEMORY_BASIC_INFORMATION mbi;
-        /* reading would consume the guard; it must still be armed */
+        /* reading would consume the guard; skipping the write leaves it armed,
+         * which is this patch's choice, not measured against Windows */
         iosb_readable = FALSE;
         check( VirtualQuery( ov, &mbi, sizeof(mbi) ) && (mbi.Protect & PAGE_GUARD), "guard page untouched" );
     }
