@@ -72,6 +72,7 @@ Runeon 产品补丁默认必须开启后才生效，见 `CLAUDE.md`。只有维�
 | 补丁 | 不设开关的原因 | 边界 |
 |---|---|---|
 | `0100` | 中间件修复：所列 Steam 与 Rockstar 的 CEF 进程需要这些参数。 | 按中间件进程名匹配，从不匹配游戏。Steam webhelper 与 SocialClubHelper 只在主进程追加 `--in-process-gpu`；SocialClubHelper 的 SwiftShader 开关追加到每个 SocialClubHelper 进程。 |
+| `0101` | 产品受管 runtime 的新会话必须通过启动校验；缺少凭证或校验失败时，服务器拒绝启动，不回退为未校验启动。 | 只在定义了 `RUNEON_MANAGED_LAUNCH_VALIDATION` 的 macOS 构建中生效（任何值都算，包括 0）；在新 wineserver 启动时校验，已运行会话中的每个子进程不再重复校验。未定义该宏或非 macOS 构建时，检查直接放行。 |
 | `0103` | 补上 Windows 提供而 Wine 缺少的 `FlsGetValue2` 导出。 | 只新增导出；last error 与 FLS 存储行为不变。 |
 | `0106` | winegstreamer 无法描述分配 caps 时拒绝提供视频缓冲池，而不是提供大小为零的池。 | 只限这种情况；分配交给 GStreamer。 |
 | `0110` | 在 dwrite 系统回退中，把 Windows 用 Segoe UI Emoji 绘制的字符映射到该字体族。 | 回退表条目；另外，某个映射没有可用字体时，只上报共享该映射的那一段。没有 Segoe UI Emoji 字体时，每个字符的解析与以前相同。 |

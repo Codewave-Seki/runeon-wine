@@ -72,6 +72,7 @@ Runeon product patches are opt-in by default, as `CLAUDE.md` requires. A specifi
 | Patch | Why it is not opt-in | Boundary |
 |---|---|---|
 | `0100` | Middleware fix: the Steam and Rockstar CEF processes it names need these arguments. | Matched by middleware process name, never a game. Steam webhelper and SocialClubHelper get `--in-process-gpu` on the main process only; the SocialClubHelper SwiftShader switches go to every SocialClubHelper process. |
+| `0101` | A new session of the product's managed runtime must pass launch validation; with a missing credential or a failed validation the server refuses to start rather than falling back to an unvalidated launch. | Only in a macOS build that defines `RUNEON_MANAGED_LAUNCH_VALIDATION` (any value, including 0); checked when a new wineserver starts, not again for each child process of a running session. Without the define, or on another platform, the check passes. |
 | `0103` | Adds the `FlsGetValue2` export, which Windows provides and Wine lacks. | New export only; last error and FLS storage behave as before. |
 | `0106` | Declines a winegstreamer video buffer pool whose allocation caps cannot be described, instead of offering a zero-size pool. | Only that case; allocation is left to GStreamer. |
 | `0110` | Maps the characters Windows draws with Segoe UI Emoji to that family in the dwrite system fallback. | Fallback table entries, plus: when a mapping has no usable font, only the run sharing that mapping is reported. Without a Segoe UI Emoji font, every character resolves as before. |
