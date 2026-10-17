@@ -2416,11 +2416,35 @@
       "verification": [
         {
           "path": "dlls/ntdll/signal_x86_64.c",
-          "contains": "ERR( \"invalid stack pointer %p after collided unwind (%p-%p)"
+          "contains": "ERR( \"invalid stack pointer %p after collided unwind (%p-%p)",
+          "occurrences": 1
         },
         {
           "path": "dlls/ntdll/signal_x86_64.c",
-          "contains": "ERR( \"invalid stack pointer %p after collided TEB unwind (%p-%p)"
+          "contains": "ERR( \"invalid stack pointer %p after collided TEB unwind (%p-%p)",
+          "occurrences": 1
+        }
+      ]
+    },
+    {
+      "order": 151,
+      "path": "patches/runeon/0122-mmdevapi-log-failed-unix-call.patch",
+      "sha256": "c1c9608c59331b405c167c343a621c003aad7fc7d17ce0d2b616e0d5d455fa74",
+      "kind": "runeon-product",
+      "status": "active",
+      "risk": "low",
+      "summary": "Before mmdevapi asserts that a driver Unix call returned STATUS_SUCCESS, logs the driver name, call code and status on the default err channel. The audio drivers report device errors through their result parameter, so a non-zero status means the call did not complete, for example a fault in the Unix library returned as its exception code; the assertion message alone names neither the call nor the status. Diagnostic only: the assertion and all other behaviour are unchanged, and the line is written only on a path that aborts the process.",
+      "testStrategy": "Static and integration checks prove the patch applies and the anchors are present once. A complete i386/x86_64 WoW64 build must compile mmdevapi with the out-of-line logger. No local reproduction of the failing call exists; the line is expected to appear before the existing assertion in the next affected log.",
+      "verification": [
+        {
+          "path": "dlls/mmdevapi/main.c",
+          "contains": "unix call %u failed, status %#lx",
+          "occurrences": 1
+        },
+        {
+          "path": "dlls/mmdevapi/mmdevapi_private.h",
+          "contains": "if (status) unix_call_failed(code, status);",
+          "occurrences": 1
         }
       ]
     }

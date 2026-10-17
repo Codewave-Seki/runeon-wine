@@ -1,0 +1,51 @@
+From: Runeon Contributors <dev@runeon.com>
+Subject: [PATCH] mmdevapi: Log the code and status of a failed driver Unix call.
+
+wine_unix_call() asserts that the driver Unix call returned
+STATUS_SUCCESS. The audio drivers report device errors through the
+result field of their parameters and return STATUS_SUCCESS themselves,
+so a non-zero status normally means the call did not complete: a fault
+in the Unix library during the call comes back from the syscall
+dispatcher as the exception code. The assertion message only names
+mmdevapi_private.h, which tells neither which call failed nor how.
+
+Before the assertion, log the driver name, the call code and the
+status on the default err channel. The assertion and everything else
+are unchanged, so behaviour is identical; the only difference is one
+log line on a path that aborts the process anyway.
+
+diff --git a/dlls/mmdevapi/main.c b/dlls/mmdevapi/main.c
+index 66a6327..ffcdb13 100644
+--- a/dlls/mmdevapi/main.c
++++ b/dlls/mmdevapi/main.c
+@@ -51,6 +51,13 @@ WINE_DEFAULT_DEBUG_CHANNEL(mmdevapi);
+ DriverFuncs drvs;
+ static DriverFuncs midi_driver;
+ 
++/* The assertion that follows only names the header; log which call failed
++ * and how, since a fault in the Unix library comes back as its status. */
++void unix_call_failed(unsigned int code, NTSTATUS status)
++{
++    ERR("%s unix call %u failed, status %#lx\n", wine_dbgstr_w(drvs.module_name), code, status);
++}
++
+ #define MIDI_CALL(code,args)  __wine_unix_call( midi_driver.module_unixlib, code, args )
+ 
+ const WCHAR drv_keyW[] = L"Software\\Wine\\Drivers";
+diff --git a/dlls/mmdevapi/mmdevapi_private.h b/dlls/mmdevapi/mmdevapi_private.h
+index 672d901..4dbb7d0 100644
+--- a/dlls/mmdevapi/mmdevapi_private.h
++++ b/dlls/mmdevapi/mmdevapi_private.h
+@@ -114,9 +114,12 @@ typedef struct MMDevice {
+     struct list entry;
+ } MMDevice;
+ 
++extern void unix_call_failed(unsigned int code, NTSTATUS status);
++
+ static inline void wine_unix_call(const unsigned int code, void *args)
+ {
+     const NTSTATUS status = __wine_unix_call(drvs.module_unixlib, code, args);
++    if (status) unix_call_failed(code, status);
+     assert(!status);
+ }
+ 
