@@ -1,0 +1,100 @@
+From: Runeon Contributors <dev@runeon.com>
+Subject: [PATCH] ntdll: Skip an async I/O status block that is no longer writable.
+
+When an asynchronous I/O completes, invoke_system_apc() handles the
+APC_ASYNC_IO system APC and set_async_iosb() writes the result to the
+caller's IO status block. The server delivers a system APC to a thread
+that is not waiting for one with SIGUSR1, so the write can run on the
+signal stack. handle_syscall_fault() does not cover the signal stack, so
+if the block is no longer writable the fault ends in
+virtual_setup_exception() as a nested exception and the thread is
+aborted, together with any lock it holds.
+
+This was reproduced on the first Steam start in a fresh prefix: the
+32-bit bootstrapper faulted in invoke_system_apc() while writing the
+Information field of a WoW64 status block during shutdown, was aborted
+holding the loader lock, and the process hung. Why the block was no
+longer writable is not known.
+
+Check under the virtual lock that the whole status block is writable
+before writing it, and write it with the existing set_async_iosb() so
+that the status is still stored last with release semantics; write
+watches are updated as for virtual_uninterrupted_write_memory(). When it
+is not writable, skip the write and log it once per process. The result
+returned to the server, and therefore the event, APC and completion port
+notification, is unchanged. ReactOS likewise ignores a failed status
+block write when completing an IRP; the behaviour of Windows itself has
+not been measured.
+
+diff --git a/dlls/ntdll/unix/server.c b/dlls/ntdll/unix/server.c
+index 1e77a4e..fc0196b 100644
+--- a/dlls/ntdll/unix/server.c
++++ b/dlls/ntdll/unix/server.c
+@@ -417,7 +417,14 @@ static void invoke_system_apc( const union apc_call *call, union apc_result *res
+             result->async_io.status = status;
+             result->async_io.total = info;
+             /* the server will pass us NULL if a call failed synchronously */
+-            set_async_iosb( call->async_io.sb, result->async_io.status, info );
++            if (!virtual_set_async_iosb( call->async_io.sb, result->async_io.status, info ))
++            {
++                /* the I/O still completes; only the status block write is skipped */
++                static LONG reported;
++                if (!InterlockedExchange( &reported, 1 ))
++                    ERR( "skipping unwritable async I/O status block %s, I/O status %#x\n",
++                         wine_dbgstr_longlong( call->async_io.sb ), result->async_io.status );
++            }
+         }
+         else result->async_io.status = STATUS_PENDING; /* restart it */
+         break;
+diff --git a/dlls/ntdll/unix/unix_private.h b/dlls/ntdll/unix/unix_private.h
+index 269e376..3a81a34 100644
+--- a/dlls/ntdll/unix/unix_private.h
++++ b/dlls/ntdll/unix/unix_private.h
+@@ -313,6 +313,7 @@ extern BOOL virtual_check_buffer_for_read( const void *ptr, SIZE_T size );
+ extern BOOL virtual_check_buffer_for_write( void *ptr, SIZE_T size );
+ extern SIZE_T virtual_uninterrupted_read_memory( const void *addr, void *buffer, SIZE_T size );
+ extern NTSTATUS virtual_uninterrupted_write_memory( void *addr, const void *buffer, SIZE_T size );
++extern BOOL virtual_set_async_iosb( client_ptr_t iosb, NTSTATUS status, ULONG_PTR info );
+ extern void virtual_set_force_exec( BOOL enable );
+ extern void virtual_enable_write_exceptions( BOOL enable );
+ extern void virtual_init_rosetta_smc_step(void);
+diff --git a/dlls/ntdll/unix/virtual.c b/dlls/ntdll/unix/virtual.c
+index a61e5bd..30f7d8a 100644
+--- a/dlls/ntdll/unix/virtual.c
++++ b/dlls/ntdll/unix/virtual.c
+@@ -5057,6 +5057,35 @@ NTSTATUS virtual_uninterrupted_write_memory( void *addr, const void *buffer, SIZ
+ }
+ 
+ 
++/***********************************************************************
++ *           virtual_set_async_iosb
++ *
++ * Store the result of a completed asynchronous I/O in its IO status block
++ * the way set_async_iosb() does, but check under the virtual lock that the
++ * whole block is writable first. The completion runs in a system APC, which
++ * may be invoked on the signal stack where a fault cannot be handled.
++ * Returns FALSE without writing anything when the block is not writable.
++ */
++BOOL virtual_set_async_iosb( client_ptr_t iosb, NTSTATUS status, ULONG_PTR info )
++{
++    void *ptr = wine_server_get_ptr( iosb );
++    SIZE_T size = in_wow64_call() ? sizeof(IO_STATUS_BLOCK32) : sizeof(IO_STATUS_BLOCK);
++    BOOL has_write_watch = FALSE, ret;
++    sigset_t sigset;
++
++    if (!iosb) return TRUE;
++
++    server_enter_uninterrupted_section( &virtual_mutex, &sigset );
++    if ((ret = !check_write_access( ptr, size, &has_write_watch )))
++    {
++        set_async_iosb( iosb, status, info );
++        if (has_write_watch) update_write_watches( ptr, size, size );
++    }
++    server_leave_uninterrupted_section( &virtual_mutex, &sigset );
++    return ret;
++}
++
++
+ /***********************************************************************
+  *           virtual_set_force_exec
+  *

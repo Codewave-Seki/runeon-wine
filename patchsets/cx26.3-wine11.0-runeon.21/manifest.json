@@ -2447,6 +2447,38 @@
           "occurrences": 1
         }
       ]
+    },
+    {
+      "order": 152,
+      "path": "patches/runeon/0123-ntdll-skip-unwritable-async-iosb.patch",
+      "sha256": "1c28026745788c5c50f18c76aa2ee3494d86e21c9ace0c49e9ffd58154af2ec1",
+      "kind": "runeon-product",
+      "status": "active",
+      "risk": "medium",
+      "summary": "When an asynchronous I/O completes, writes the result to the caller's IO status block only after checking under the virtual lock that the whole block is writable, using the existing set_async_iosb() so the status is still stored last with release semantics and write watches are updated. The APC_ASYNC_IO system APC can run on the signal stack, where handle_syscall_fault() does not apply, so a status block that is no longer writable used to end in a nested exception that aborted the thread together with any lock it held; reproduced on the first Steam start in a fresh prefix, where the 32-bit bootstrapper was aborted holding the loader lock during shutdown and hung. When the block is not writable the write is skipped and logged once per process; the result returned to the server, and so the event, APC and completion port notification, is unchanged. It does not change user callbacks, the unix-call ABI or the server protocol. Why the block was no longer writable is not known. ReactOS ignores a failed status block write when completing an IRP; Windows itself has not been measured.",
+      "testStrategy": "Static and integration checks prove the patch applies and the anchors are present once. A complete i386/x86_64 WoW64 build must compile ntdll. A MinGW probe built for x86 and x64 compares the old and candidate runtimes: normal, freed, uncommitted, read-only, guard, page-crossing and write-watched status blocks, completed both while the reader waits and while it spins in user mode so that the APC arrives by signal, checking data, Information, Status, the event and completion port packets. The Steam first-start reproduction in a fresh macOS virtual machine is repeated with the candidate ntdll.",
+      "verification": [
+        {
+          "path": "dlls/ntdll/unix/server.c",
+          "contains": "if (!virtual_set_async_iosb( call->async_io.sb, result->async_io.status, info ))",
+          "occurrences": 1
+        },
+        {
+          "path": "dlls/ntdll/unix/server.c",
+          "contains": "skipping unwritable async I/O status block %s, I/O status %#x",
+          "occurrences": 1
+        },
+        {
+          "path": "dlls/ntdll/unix/virtual.c",
+          "contains": "BOOL virtual_set_async_iosb( client_ptr_t iosb, NTSTATUS status, ULONG_PTR info )",
+          "occurrences": 1
+        },
+        {
+          "path": "dlls/ntdll/unix/virtual.c",
+          "contains": "if ((ret = !check_write_access( ptr, size, &has_write_watch )))",
+          "occurrences": 1
+        }
+      ]
     }
   ],
   "targetedReview": {
