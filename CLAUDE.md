@@ -34,6 +34,7 @@ Select a non-default patch set with `RUNEON_WINE_PATCHSET_DEFINITION=patchsets/<
 - Preserve API contracts. Keep `GetLastError`/`SetLastError` semantics, HRESULT and NTSTATUS values, reference counting and output-pointer initialisation on failure paths.
 - Validate lengths and pointers crossing a trust boundary, and bound every buffer. Prefer an explicit overflow check to a silent truncation.
 - Downstream behaviour must be opt-in through a value the caller sets explicitly, such as an environment variable or an `AppDefaults` registry value. Without the opt-in, behaviour is identical to the unpatched base, and any failure to evaluate the condition falls back to it.
+- The only exception is a specific fix that the maintainer approves individually, whose manifest entry states why it is not opt-in and where it stops, and which is listed under "Product patches without an opt-in" in `MAINTENANCE.md`. Approving one patch never covers another, and an existing exception is not a precedent.
 - Never match on game names, Steam AppIDs or game executable names.
 - Keep each patch small and focused on one behaviour. Changes must compile for both i386 and x86_64 in the WoW64 configuration described in `BUILDING.md`.
 

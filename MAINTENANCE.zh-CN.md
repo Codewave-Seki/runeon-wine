@@ -65,6 +65,22 @@ Runeon Wine 同时接受主动上游审计和 diagnostics 驱动调查两类输�
 - clean prefix 与已有 prefix 都完成验证。
 - source bundle、notices、component metadata 和 Runeon 文档同步。
 
+## 不需要开关的产品补丁
+
+Runeon 产品补丁默认必须由调用方显式开启，见 `CLAUDE.md`。只有维护者逐项批准、并在 manifest 条目中写明原因与边界的具体修复，才可以不经开关生效。批准只覆盖该补丁本身，不构成类似改动的先例。目前不经开关生效的补丁如下：
+
+| 补丁 | 不设开关的原因 | 边界 |
+|---|---|---|
+| `0100` | 中间件修复：所列 Steam 与 Rockstar 主进程需要这些 CEF 参数。 | 只匹配这些中间件进程，从不匹配游戏；子进程不受影响。 |
+| `0103` | 补上 Windows 提供而 Wine 缺少的 `FlsGetValue2` 导出。 | 只新增导出；last error 与 FLS 存储行为不变。 |
+| `0106` | winegstreamer 无法描述分配 caps 时拒绝提供视频缓冲池，而不是提供大小为零的池。 | 只限这种情况；分配交给 GStreamer。 |
+| `0110` | 在 dwrite 系统回退中，把 Windows 用 Segoe UI Emoji 绘制的字符映射到该字体族。 | 只改回退表数据。 |
+| `0112`、`0121` | x64 处理函数查找在展开读到 StackBase 之外前结束，与现有建立帧检查对栈外帧的处理一致。 | 查找以 `EXCEPTION_STACK_INVALID` 结束；分发的其他行为不变。 |
+| `0115`、`0116` | 代码页 54936（GB18030）：Windows 以代码实现而 Wine 缺少；msvcrt 的 `setlocale()` 与 `_setmbcp()` 仍像以前一样拒绝它。 | 只涉及代码页转换。 |
+| `0120` | 构建选项：dsound 以 SSE 浮点数学编译。 | 只改一个模块的编译方式，不改其行为。 |
+| `0122` | 在现有断言之前记录失败的 mmdevapi 驱动调用。 | 只做诊断；断言不变。 |
+| `0123` | 异步 I/O 状态块不再可写时，防止嵌套故障的有限防护。 | 只跳过检查时已不可写的状态块；检查之后被释放仍会故障；Windows 的行为未实测。 |
+
 ## 发布规则
 
 Patch set 使用不可变 ID，例如 `cx26.3-wine11.0-runeon.1`。Git tag、source bundle、runtime component metadata 和 Runeon release 文档必须引用同一个 ID。新 artifact 必须先发布 Dev，并完成 readiness、download 和 product smoke；Production 只能 promote 已验证的精确字节，不能为 Production 直接重建。
