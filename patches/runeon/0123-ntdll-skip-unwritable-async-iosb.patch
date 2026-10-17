@@ -18,20 +18,29 @@ the block was no longer writable is not known.
 
 Before the write, read the protection of every page of the block and
 skip the write, logging it once per process, when a page is seen to be
-uncommitted, guarded or not writable. Otherwise write it with the
-existing set_async_iosb(), so the status is still stored last with
-release semantics. Write-watched pages count as writable and go through
-the existing write fault path. The result returned to the server, and so
+uncommitted, guarded or not writable; memory that Wine does not track
+counts as uncommitted. Otherwise write it with the existing
+set_async_iosb(), so the status is still stored last with release
+semantics. Write-watched pages count as writable and go through the
+existing write fault path. The result returned to the server, and so
 the event, APC and completion port notification, is unchanged.
+
+This also changes the completion that runs inside a wait: there the
+fault used to be returned by handle_syscall_fault(), so the wait failed
+with STATUS_ACCESS_VIOLATION (a guard page was cleared and reported as a
+guard page violation) and the I/O never completed. Now the write is
+skipped and the I/O completes.
 
 This is a limited guard, not a safe write. The protection table is read
 without the virtual lock: the interrupted thread may hold host locks,
 such as the dyld lock, that a virtual lock owner can be waiting for in
-dlopen(). The pages can therefore still be released or decommitted after
-the check, and that write faults as before. A guard page is skipped and
-left armed; that, like ignoring the failed write at all, has not been
-measured on Windows. ReactOS ignores a failed status block write when
-completing an IRP.
+dlopen(). The pages can therefore still be released, decommitted or
+reprotected before or while the block is written, and that write faults
+as before. The completion path as a whole still takes the virtual lock
+on write-watch faults and in some I/O callbacks. A guard page is skipped
+and left armed; that, like ignoring the failed write at all, has not
+been measured on Windows. ReactOS ignores a failed status block write
+when completing an IRP.
 
 diff --git a/dlls/ntdll/unix/server.c b/dlls/ntdll/unix/server.c
 index 1e77a4e..fc0196b 100644
@@ -66,10 +75,10 @@ index 269e376..3a81a34 100644
  extern void virtual_enable_write_exceptions( BOOL enable );
  extern void virtual_init_rosetta_smc_step(void);
 diff --git a/dlls/ntdll/unix/virtual.c b/dlls/ntdll/unix/virtual.c
-index a61e5bd..af3916c 100644
+index a61e5bd..a6b9af7 100644
 --- a/dlls/ntdll/unix/virtual.c
 +++ b/dlls/ntdll/unix/virtual.c
-@@ -5057,6 +5057,39 @@ NTSTATUS virtual_uninterrupted_write_memory( void *addr, const void *buffer, SIZ
+@@ -5057,6 +5057,40 @@ NTSTATUS virtual_uninterrupted_write_memory( void *addr, const void *buffer, SIZ
  }
  
  
@@ -84,8 +93,9 @@ index a61e5bd..af3916c 100644
 + * This only filters a block that is already unwritable when it is checked.
 + * The protection table is read without the virtual lock, because the thread
 + * may hold host locks that a virtual lock owner waits for (dlopen), so the
-+ * pages can still be released or decommitted before or while the block is
-+ * written, and that write faults as before. Write-watched pages count as
++ * pages can still be released, decommitted or reprotected before or while
++ * the block is written, and that write faults as before. Memory that Wine
++ * does not track counts as uncommitted. Write-watched pages count as
 + * writable and are handled by the existing write fault path.
 + * Returns FALSE without writing anything when the block is skipped.
 + */
