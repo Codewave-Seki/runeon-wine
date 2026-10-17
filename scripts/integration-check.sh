@@ -55,7 +55,11 @@ fi
 # The x64 handler search bound is checked from the patched dispatcher. Gate on
 # the series entry so a renamed helper fails the check instead of skipping it.
 if grep -Fqx 'patches/runeon/0112-ntdll-seh-dispatch-stack-bounds.patch' "$series_file"; then
-  python3 "$script_dir/../tests/seh-dispatch-stack-bounds-check.py" "$candidate_root" >/dev/null \
+  seh_bounds_flag=''
+  if grep -Fqx 'patches/runeon/0121-ntdll-seh-collided-unwind-stack-bounds.patch' "$series_file"; then
+    seh_bounds_flag='--collided'
+  fi
+  python3 "$script_dir/../tests/seh-dispatch-stack-bounds-check.py" ${seh_bounds_flag:+"$seh_bounds_flag"} "$candidate_root" >/dev/null \
     || die "x64 SEH dispatch stack bounds check failed"
 fi
 

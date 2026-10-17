@@ -6,9 +6,15 @@ then unwinds every frame as a leaf, reading the return address at Rsp the way
 RtlVirtualUnwind2() does. The thread stack ends at an inaccessible page, so a
 read past StackBase crashes the check. It covers an aligned walk that ends at
 StackBase and a stack pointer moved exactly to StackBase, across it or above
-it. It does not run Wine, real unwind data, language handlers, the TEB frame
-list, fibers or guard-page stack growth, and is_valid_frame() below is a copy
-of the ntdll_misc.h helper.
+it.
+
+With --collided it also checks both ExceptionCollidedUnwind branches: a
+language handler or a TEB frame handler replaces the dispatcher context Rsp,
+as unwind_exception_handler() does, and returns ExceptionCollidedUnwind, and
+the RtlVirtualUnwind() stub then reads the return address at Rsp as a leaf
+unwind does. It does not run Wine, real unwind data, RtlUnwindEx(), fibers or
+guard-page stack growth, and is_valid_frame() below is a copy of the
+ntdll_misc.h helper.
 """
 from pathlib import Path
 import re
@@ -59,6 +65,10 @@ static BOOL is_valid_frame( ULONG_PTR frame )
 }
 static int unwinds;
 static ULONG64 jump_rsp;
+/* Collided unwind setup: 1 for a language handler, 2 for a TEB frame handler. */
+static int collided_branch;
+static ULONG64 collided_rsp;
+static int handler_calls, collided_unwinds;
 /* The first frame may move Rsp anywhere; every later frame is a leaf, read
  * the same way RtlVirtualUnwind2() does. */
 static NTSTATUS virtual_unwind( ULONG type, DISPATCHER_CONTEXT *dispatch, CONTEXT *context )
@@ -67,6 +77,7 @@ static NTSTATUS virtual_unwind( ULONG type, DISPATCHER_CONTEXT *dispatch, CONTEX
     unwinds++;
     dispatch->EstablisherFrame = context->Rsp;
     dispatch->LanguageHandler = NULL;
+    if (collided_branch == 1 && unwinds == 1) dispatch->LanguageHandler = (PEXCEPTION_ROUTINE)1;
     if (jump_rsp)
     {
         context->Rsp = jump_rsp;
@@ -77,12 +88,27 @@ static NTSTATUS virtual_unwind( ULONG type, DISPATCHER_CONTEXT *dispatch, CONTEX
     context->Rsp += sizeof(ULONG64);
     return STATUS_SUCCESS;
 }
+/* A colliding handler replaces the dispatcher context, not the original
+ * context it is passed, as unwind_exception_handler() does. */
 static DWORD call_seh_handler( EXCEPTION_RECORD *rec, ULONG_PTR frame, CONTEXT *context,
                                void *dispatch, PEXCEPTION_ROUTINE handler )
-{ (void)rec; (void)frame; (void)context; (void)dispatch; (void)handler; return ExceptionContinueSearch; }
+{
+    DISPATCHER_CONTEXT *dc = dispatch;
+    (void)rec; (void)frame; (void)context; (void)handler;
+    if (!collided_branch || handler_calls++) return ExceptionContinueSearch;
+    dc->ContextRecord->Rsp = collided_rsp;
+    dc->LanguageHandler = NULL;
+    return ExceptionCollidedUnwind;
+}
+/* Unwinds the collided frame as a leaf, reading the return address at Rsp. */
 static void RtlVirtualUnwind( ULONG type, ULONG64 base, ULONG64 pc, void *function, CONTEXT *context,
                               void *data, ULONG_PTR *frame, void *ctx )
-{ (void)type; (void)base; (void)pc; (void)function; (void)context; (void)data; (void)frame; (void)ctx; }
+{
+    (void)type; (void)base; (void)pc; (void)function; (void)data; (void)frame; (void)ctx;
+    collided_unwinds++;
+    context->Rip = *(ULONG64 *)context->Rsp;
+    context->Rsp += sizeof(ULONG64);
+}
 '''
 
 MAIN = r'''
@@ -132,6 +158,34 @@ int main(void)
     assert( run( top - 64, top + sizeof(ULONG64), &flags ) == STATUS_UNHANDLED_EXCEPTION );
     assert( unwinds == 1 && (flags & EXCEPTION_STACK_INVALID) );
 
+#ifdef CHECK_COLLIDED
+    /* A handler collides and restores a context with Rsp just below, across,
+     * at or above StackBase; only the last slot below it may be unwound. */
+    for (collided_branch = 1; collided_branch <= 2; collided_branch++)
+    {
+        static const long offsets[] = { -8, -4, 0, 8 };
+        EXCEPTION_REGISTRATION_RECORD *teb_record = (EXCEPTION_REGISTRATION_RECORD *)(map + 64);
+        unsigned int i;
+
+        for (i = 0; i < sizeof(offsets) / sizeof(offsets[0]); i++)
+        {
+            teb_record->Prev = (EXCEPTION_REGISTRATION_RECORD *)~(ULONG_PTR)0;
+            teb.Tib.ExceptionList = collided_branch == 2 ? teb_record
+                                                         : (EXCEPTION_REGISTRATION_RECORD *)~(ULONG_PTR)0;
+            collided_rsp = top + offsets[i];
+            handler_calls = collided_unwinds = 0;
+            assert( run( top - 64, 0, &flags ) == STATUS_UNHANDLED_EXCEPTION );
+            assert( handler_calls == 1 );
+            if (offsets[i] == -8)
+                assert( collided_unwinds == 1 && !(flags & EXCEPTION_STACK_INVALID) );
+            else
+                assert( collided_unwinds == 0 && (flags & EXCEPTION_STACK_INVALID) );
+        }
+    }
+    collided_branch = 0;
+    teb.Tib.ExceptionList = (EXCEPTION_REGISTRATION_RECORD *)~(ULONG_PTR)0;
+#endif
+
     puts( "PASS" );
     return 0;
 }
@@ -149,7 +203,13 @@ def extract(source: str, signature: str) -> str:
 
 
 def main() -> int:
-    root = Path(sys.argv[1])
+    args = sys.argv[1:]
+    collided = '--collided' in args
+    if collided:
+        args.remove('--collided')
+    if len(args) != 1:
+        raise SystemExit('usage: seh-dispatch-stack-bounds-check.py [--collided] WINE_SOURCE_ROOT')
+    root = Path(args[0])
     source = (root / 'dlls/ntdll/signal_x86_64.c').read_text()
     if 'is_valid_unwind_rsp' not in source:
         raise SystemExit('patched stack pointer check is missing')
@@ -161,12 +221,14 @@ def main() -> int:
         binary = Path(temp) / 'check'
         c_file.write_text(PRELUDE + helper + dispatch + MAIN)
         subprocess.run(['cc', '-std=c11', '-D_DEFAULT_SOURCE', '-D_DARWIN_C_SOURCE', '-Wall', '-Werror',
-                        '-Wno-unused-function', '-o', str(binary), str(c_file)], check=True)
+                        '-Wno-unused-function'] + (['-DCHECK_COLLIDED'] if collided else []) +
+                       ['-o', str(binary), str(c_file)], check=True)
         result = subprocess.run([str(binary)], capture_output=True, text=True)
         if result.returncode != 0 or result.stdout.strip() != 'PASS':
             sys.stderr.write(result.stdout + result.stderr)
             return 1
-    print('PASS: SEH dispatch stops at the thread stack bounds without reading past StackBase')
+    print('PASS: SEH dispatch stops at the thread stack bounds without reading past StackBase'
+          + (', including after a collided unwind' if collided else ''))
     return 0
 
 

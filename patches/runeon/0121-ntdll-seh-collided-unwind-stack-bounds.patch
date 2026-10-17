@@ -1,0 +1,59 @@
+From: Runeon Contributors <dev@runeon.com>
+Subject: [PATCH] ntdll: Do not unwind past StackBase after a collided unwind.
+
+The x64 handler search checks the return address slot at Rsp against
+StackBase before each unwind, so a misread frame near the top of the
+stack ends the search with EXCEPTION_STACK_INVALID instead of faulting
+in RtlVirtualUnwind2(). A handler that returns ExceptionCollidedUnwind
+skips that check: unwind_exception_handler() has replaced the context
+with the one of the unwind it collided with, and call_seh_handlers()
+unwinds it directly and jumps past the check. When that context leaves
+Rsp less than one slot below StackBase or above it, the leaf unwind
+reads past the thread stack, and the resulting access violation fails
+the same way until the process dies in RtlVirtualUnwind2().
+
+Apply the same check in both collided-unwind branches, for language
+handlers and for TEB frame handlers, and end the search the way the
+loop does when the check fails: mark the exception
+EXCEPTION_STACK_INVALID and return STATUS_UNHANDLED_EXCEPTION, which
+leaves the existing unhandled exception path to the caller.
+
+This only stops these two entries from unwinding once the return
+address slot is past StackBase. It does not check the lower stack
+limit, page accessibility or other reads during the unwind, and the
+collided-unwind branches of RtlUnwindEx() are unchanged.
+
+diff --git a/dlls/ntdll/signal_x86_64.c b/dlls/ntdll/signal_x86_64.c
+index ce263e3..f8364a2 100644
+--- a/dlls/ntdll/signal_x86_64.c
++++ b/dlls/ntdll/signal_x86_64.c
+@@ -309,6 +309,15 @@ NTSTATUS call_seh_handlers( EXCEPTION_RECORD *rec, CONTEXT *orig_context )
+                 TRACE( "nested exception\n" );
+                 break;
+             case ExceptionCollidedUnwind:
++                /* the handler restored the collided unwind's context, which
++                 * the check at the top of the loop has not seen */
++                if (!is_valid_unwind_rsp( context.Rsp ))
++                {
++                    ERR( "invalid stack pointer %p after collided unwind (%p-%p)\n", (void *)context.Rsp,
++                         NtCurrentTeb()->Tib.StackLimit, NtCurrentTeb()->Tib.StackBase );
++                    rec->ExceptionFlags |= EXCEPTION_STACK_INVALID;
++                    return STATUS_UNHANDLED_EXCEPTION;
++                }
+                 RtlVirtualUnwind( UNW_FLAG_NHANDLER, dispatch.ImageBase, dispatch.ControlPc,
+                                   dispatch.FunctionEntry, &context, NULL, &frame, NULL );
+                 goto unwind_done;
+@@ -340,6 +349,13 @@ NTSTATUS call_seh_handlers( EXCEPTION_RECORD *rec, CONTEXT *orig_context )
+                 TRACE( "nested exception\n" );
+                 break;
+             case ExceptionCollidedUnwind:
++                if (!is_valid_unwind_rsp( context.Rsp ))
++                {
++                    ERR( "invalid stack pointer %p after collided TEB unwind (%p-%p)\n", (void *)context.Rsp,
++                         NtCurrentTeb()->Tib.StackLimit, NtCurrentTeb()->Tib.StackBase );
++                    rec->ExceptionFlags |= EXCEPTION_STACK_INVALID;
++                    return STATUS_UNHANDLED_EXCEPTION;
++                }
+                 RtlVirtualUnwind( UNW_FLAG_NHANDLER, dispatch.ImageBase, dispatch.ControlPc,
+                                   dispatch.FunctionEntry, &context, NULL, &frame, NULL );
+                 teb_frame = teb_frame->Prev;
