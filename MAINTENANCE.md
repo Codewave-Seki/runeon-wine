@@ -67,19 +67,19 @@ Real user logs may establish impact and priority. First pin down the call chain 
 
 ## Product patches without an opt-in
 
-Runeon product patches are opt-in by default, as `CLAUDE.md` requires. A specific fix may take effect without an opt-in only when the maintainer has approved that patch individually and its manifest entry states the reason and the boundary. The approval covers that patch alone and is not a precedent for similar changes. These patches currently take effect without an opt-in:
+Runeon product patches are opt-in by default, as `CLAUDE.md` requires. A specific fix may take effect without an opt-in only when the maintainer has approved that patch individually and the reason and the boundary are stated in this table or in its manifest entry. The approval covers that patch alone and is not a precedent for similar changes. These patches currently take effect without an opt-in:
 
 | Patch | Why it is not opt-in | Boundary |
 |---|---|---|
-| `0100` | Middleware fix: the CEF arguments are needed by the Steam and Rockstar main processes it names. | Matches those middleware processes only, never a game; child processes are untouched. |
+| `0100` | Middleware fix: the Steam and Rockstar CEF processes it names need these arguments. | Matched by middleware process name, never a game. Steam webhelper and SocialClubHelper get `--in-process-gpu` on the main process only; the SocialClubHelper SwiftShader switches go to every SocialClubHelper process. |
 | `0103` | Adds the `FlsGetValue2` export, which Windows provides and Wine lacks. | New export only; last error and FLS storage behave as before. |
 | `0106` | Declines a winegstreamer video buffer pool whose allocation caps cannot be described, instead of offering a zero-size pool. | Only that case; allocation is left to GStreamer. |
-| `0110` | Maps the characters Windows draws with Segoe UI Emoji to that family in the dwrite system fallback. | Fallback table data only. |
+| `0110` | Maps the characters Windows draws with Segoe UI Emoji to that family in the dwrite system fallback. | Fallback table entries, plus: when a mapping has no usable font, only the run sharing that mapping is reported. Without a Segoe UI Emoji font, every character resolves as before. |
 | `0112`, `0121` | End the x64 handler search before an unwind reads past StackBase, as the existing establisher frame check does for a frame outside the stack. | The search ends with `EXCEPTION_STACK_INVALID`; nothing else in dispatch changes. |
-| `0115`, `0116` | Code page 54936 (GB18030), which Windows implements in code and Wine lacks; msvcrt keeps refusing it in `setlocale()` and `_setmbcp()` as before. | Code page conversion only. |
-| `0120` | Build option: dsound is compiled with SSE floating point math. | Changes how one module is compiled, not what it does. |
+| `0115`, `0116` | Code page 54936 (GB18030), which Windows implements in code and Wine lacks; msvcrt keeps refusing it in `setlocale()` and `_setmbcp()` as before. | Code page 54936 only, including `IsValidCodePage()` and `GetCPInfo()` now accepting it; other code pages are unchanged. |
+| `0120` | Build option: dsound is compiled with SSE floating point math. | One module only: the i386 build mixes in single precision like the x64 build and uses the SSE resampler loops. |
 | `0122` | Logs a failed mmdevapi driver call before the existing assertion. | Diagnostic only; the assertion is unchanged. |
-| `0123` | Limited guard against a nested fault when an asynchronous I/O status block is no longer writable. | Skips only a block already seen to be unwritable; a release after the check still faults; the behaviour of Windows has not been measured. |
+| `0123` | Limited guard against a nested fault when an asynchronous I/O status block is no longer writable; it only replaces a fault that kills the thread or fails the wait. | Skips only a block seen to be unwritable when checked; a release, decommit or protection change before or while it is written still faults. A guard page is skipped and left armed. A completion inside a wait now completes instead of failing the wait. Windows has not been measured. |
 
 ## Release policy
 
