@@ -22,6 +22,8 @@ Runeon Wine は、能動的な上流監査と diagnostics 主導の調査とい�
 
 ## 現在の Wine 11.x レビューベースライン
 
+現在の Dev 候補：[`cx26.3-wine11.0-runeon.21`](patchsets/cx26.3-wine11.0-runeon.21/manifest.json)（Pre-release）。Dev seed `2026.10.18`（App `>=1.13 (10)`）と組み合わせます。`.20` を保持し、`0121`（`0112` のスタック上限チェックを x64 ハンドラ探索の 2 つの collided unwind 分岐に拡張）、`0122`（mmdevapi の Unix 呼び出しが失敗した際、アサーションの前にドライバ名、call code、status を記録）、`0123`（ページが書き込めなくなった非同期 I/O ステータスブロックへの書き戻しをスキップ）を追加します。`0123` は限定的な防護であり、チェック後に解放されたメモリでは依然として障害が起こり得ます。x86_64/WoW64 の完全ビルド、静的・統合チェック、ローカルおよび Dev での受け入れ確認に合格しました。Production はまだ承認されていません。不変アセットは[リリースマニフェスト](release-manifests/cx26.3-wine11.0-runeon.21.source-archive.json)に記録しています。
+
 現在の正式ソース：[`cx26.3-wine11.0-runeon.20`](patchsets/cx26.3-wine11.0-runeon.20/manifest.json)（正式版/latest）。seed `2026.10.16.1`（App `>=1.13 (10)`）、MoltenVK `1.4.2`、SDL2 `2.32.10` を使用します。`.19`（上流の FindFirstFile ディレクトリ情報クラス修正 `0088` とオプトインの Rosetta デバッグレジスタマーカー `0119`）を保持し、上流の DirectSound リサンプラー改善（`0089`、`0090`、`wine-11.3` から `wine-11.11`）と dsound の SSE ビルド（`0120`）を追加します。これにより 32 ビットプログラムは、Rosetta の変換が遅い x87 FPU でリサンプリングしなくなります。x86_64/WoW64 の完全ビルド、静的・統合チェック、i386 dsound.dll の逆アセンブルによる確認、ローカルおよび Dev での受け入れ確認に合格し、Production は Dev で検証済みの同一署名アーカイブを使用します。これらの結果は一般的なゲーム互換性を保証するものではありません。不変アセットは[リリースマニフェスト](release-manifests/cx26.3-wine11.0-runeon.20.source-archive.json)に記録しています。
 
 `cx26.3-wine11.0-runeon.19`（Pre-release）は Dev seed `2026.10.16` 向けの Dev 候補でしたが、`.20` に置き換えられ、Production では使用されていません。不変アセットは[リリースマニフェスト](release-manifests/cx26.3-wine11.0-runeon.19.source-archive.json)に記録しています。
