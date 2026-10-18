@@ -22,13 +22,13 @@ Runeon Wine 同时接受主动上游审计和 diagnostics 驱动调查两类输�
 
 ## 当前 Wine 11.x 审查基线
 
-当前 Dev 候选：[`cx26.3-wine11.0-runeon.21`](patchsets/cx26.3-wine11.0-runeon.21/manifest.json)（Pre-release），搭配 Dev seed `2026.10.18`（App `>=1.13 (10)`）。保留 `.20`，新增 `0121`（把 `0112` 的栈上界检查扩展到 x64 处理函数查找的两个 collided unwind 分支）、`0122`（mmdevapi Unix 调用失败时在断言前记录驱动名、call code 与 status）与 `0123`（异步 I/O 状态块所在页已不可写时跳过写回）。`0123` 是有限防护：检查之后才释放的内存仍可能触发故障。已通过 x86_64/WoW64 完整构建、静态与集成检查，以及本地与 Dev 验收；Production 尚未批准。不可变资产记录在[release manifest](release-manifests/cx26.3-wine11.0-runeon.21.source-archive.json)。
+当前正式源码：[`cx26.3-wine11.0-runeon.21`](patchsets/cx26.3-wine11.0-runeon.21/manifest.json)（正式版/latest），搭配 seed `2026.10.18`（App `>=1.13 (10)`）、MoltenVK `1.4.2` 与 SDL2 `2.32.10`。保留 `.20`，新增 `0121`（把 `0112` 的栈上界检查扩展到 x64 处理函数查找的两个 collided unwind 分支）、`0122`（mmdevapi Unix 调用失败时在断言前记录驱动名、call code 与 status）与 `0123`（异步 I/O 状态块所在页已不可写时跳过写回）。`0121` 与 `0123` 无需开关即生效，作为逐项批准的例外列在 MAINTENANCE 中；`0123` 是有限防护，检查之后才释放的内存仍可能触发故障。已通过 x86_64/WoW64 完整构建、静态与集成检查，以及本地与 Dev 验收；Production 使用 Dev 已验证的同一份签名归档。这些结果不代表普遍的游戏兼容性。不可变附件记录在[发布清单](release-manifests/cx26.3-wine11.0-runeon.21.source-archive.json)。
 
-当前正式源码：[`cx26.3-wine11.0-runeon.20`](patchsets/cx26.3-wine11.0-runeon.20/manifest.json)（正式版/latest），搭配 seed `2026.10.16.1`（App `>=1.13 (10)`）、MoltenVK `1.4.2` 与 SDL2 `2.32.10`。保留 `.19`（上游 FindFirstFile 目录信息类修复 `0088` 与可选的 Rosetta 调试寄存器标记 `0119`），新增上游 DirectSound 重采样改进（`0089`、`0090`，`wine-11.3` 至 `wine-11.11`）与 dsound 的 SSE 构建（`0120`），32 位程序不再在 Rosetta 翻译缓慢的 x87 FPU 上重采样。已通过完整 x86_64/WoW64 构建、静态与集成检查、i386 dsound.dll 反汇编检查及本地和 Dev 验收；Production 使用 Dev 已验证的同一份签名归档。这些结果不代表普遍的游戏兼容性。不可变附件记录在[发布清单](release-manifests/cx26.3-wine11.0-runeon.20.source-archive.json)。
+上一正式源码，已由 `.21` 接替，保留用于回滚：[`cx26.3-wine11.0-runeon.20`](patchsets/cx26.3-wine11.0-runeon.20/manifest.json)（正式版），对应 seed `2026.10.16.1`，该 seed 已不再分发。保留 `.19` 并新增 `0089`、`0090` 与 `0120`。不可变附件记录在[发布清单](release-manifests/cx26.3-wine11.0-runeon.20.source-archive.json)。
 
 `cx26.3-wine11.0-runeon.19`（Pre-release）曾是 Dev seed `2026.10.16` 的 Dev 候选，已由 `.20` 接替，未用于 Production。不可变附件记录在[发布清单](release-manifests/cx26.3-wine11.0-runeon.19.source-archive.json)。
 
-上一正式源码，保留用于回滚（App `>=1.12 (6)`，`1.13 (10)` 之前）：[`cx26.3-wine11.0-runeon.18`](patchsets/cx26.3-wine11.0-runeon.18/manifest.json)（正式版），对应 seed `2026.10.14`。保留 `.17` 并新增 `0081`–`0087` 与 `0118`。不可变附件记录在[发布清单](release-manifests/cx26.3-wine11.0-runeon.18.source-archive.json)。
+保留的正式源码，仍分发给 App `>=1.12 (6)`、`1.13 (10)` 之前：[`cx26.3-wine11.0-runeon.18`](patchsets/cx26.3-wine11.0-runeon.18/manifest.json)（正式版），对应 seed `2026.10.14`。保留 `.17` 并新增 `0081`–`0087` 与 `0118`。不可变附件记录在[发布清单](release-manifests/cx26.3-wine11.0-runeon.18.source-archive.json)。
 
 `cx26.3-wine11.0-runeon.17`（正式版）对应 seed `2026.10.10`（App `>=1.10 (3)`，`1.12 (6)` 之前），保留用于回滚；它在 `.16` 上新增 `0112`–`0117`。
 
