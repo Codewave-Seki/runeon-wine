@@ -1,0 +1,37 @@
+From: Paul Gofman <pgofman@codeweavers.com>
+Subject: [PATCH] kernelbase: Add stub for GetIntegratedDisplaySize().
+
+Backport of WineHQ commit c68ed23672 (wine-11.11, Paul Gofman).
+
+The CrossOver 26.3 tree only lists GetIntegratedDisplaySize as a
+commented-out stub, so a program that imports it gets the loader's
+unimplemented-function thunk and dies on the first call. The stub
+returns E_NOTIMPL, which callers treat as no integrated display.
+
+diff --git a/dlls/kernelbase/kernelbase.spec b/dlls/kernelbase/kernelbase.spec
+index 813419f..f55b8d6 100644
+--- a/dlls/kernelbase/kernelbase.spec
++++ b/dlls/kernelbase/kernelbase.spec
+@@ -570,7 +570,7 @@
+ @ stdcall GetGeoInfoEx(ptr long ptr long)
+ @ stdcall GetHandleInformation(long ptr)
+ # @ stub GetHivePath
+-# @ stub GetIntegratedDisplaySize
++@ stdcall GetIntegratedDisplaySize(ptr)
+ # @ stub GetIsEdpEnabled
+ @ stdcall GetKernelObjectSecurity(long long ptr long ptr)
+ @ stdcall GetLargePageMinimum()
+diff --git a/dlls/kernelbase/main.c b/dlls/kernelbase/main.c
+index 0e19819..fb88cfc 100644
+--- a/dlls/kernelbase/main.c
++++ b/dlls/kernelbase/main.c
+@@ -636,3 +636,9 @@ HRESULT WINAPI GetAcceptLanguagesW(WCHAR *langbuf, DWORD *buflen)
+     *buflen = 0;
+     return E_NOT_SUFFICIENT_BUFFER;
+ }
++
++HRESULT WINAPI GetIntegratedDisplaySize( double *sz_inches )
++{
++    FIXME( "%p stub.\n", sz_inches );
++    return E_NOTIMPL;
++}
