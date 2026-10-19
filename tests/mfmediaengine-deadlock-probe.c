@@ -1,4 +1,5 @@
-/* LGPL-2.1-or-later. Checks that the media engine does not hold a lock of its
+/* Copyright 2026 Runeon Contributors. LGPL-2.1-or-later.
+ * Checks that the media engine does not hold a lock of its
  * own while it calls IMFMediaEngineNotify::EventNotify() (0133).
  *
  * The main thread takes an application lock and sets the source of an audio-only

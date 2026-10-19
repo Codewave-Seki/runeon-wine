@@ -11,7 +11,7 @@ than the 10 ms period a shared-mode client is woken for, and longer
 than the Windows audio engine's own processing period. A client that
 keeps about one period queued then has too little at most pulls, and
 the rest of each pull is played as silence. As highball-engine
-measured on an M4 at 48 kHz: Counter-Strike 2's menu music dropped out 324 times in two
+measured on an M4 at 48 kHz: a game's menu music dropped out 324 times in two
 minutes, and not at all at 96 kHz, where the same 512 frames last
 5.3 ms, or with this change.
 

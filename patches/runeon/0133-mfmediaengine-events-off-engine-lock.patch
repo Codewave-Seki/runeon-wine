@@ -20,16 +20,23 @@ holds engine->cs: at the end of the call that raised them, or at once
 for an event raised outside the lock. The callback therefore runs on
 the same thread and before the call returns, as before and as on
 Windows, but never under engine->cs. A thread that still holds the
-lock recursively delivers nothing until it leaves it. After Shutdown()
-events are neither queued nor delivered.
+lock recursively delivers nothing until it leaves it. Inside a
+callback, only the events raised since it started are delivered, so
+they come before the rest of the outer call's events, the order of
+delivering each event as it was raised. Tearing a presentation down
+does not deliver halfway; the caller's own unlock does. After
+Shutdown() no event is queued, and queued events are dropped.
 
-Limits: an event raised inside a callback on the same thread is
-delivered before the rest of the events queued by the outer call, and
-events of an engine destroyed with some still queued are freed
-undelivered.
+Limits: events of different threads are no longer serialized by
+engine->cs, so two threads' callbacks can run at the same time and
+interleave in another order than before; Shutdown() does not wait for
+a callback already running on another thread, and an event that has
+passed the shut-down check can still be delivered after Shutdown()
+returns (the engine keeps its reference on the callback). Events still
+queued when the engine is destroyed are freed undelivered.
 
 diff --git a/dlls/mfmediaengine/main.c b/dlls/mfmediaengine/main.c
-index 6fa1c429..e3a58363 100644
+index 6fa1c429..0be7183f 100644
 --- a/dlls/mfmediaengine/main.c
 +++ b/dlls/mfmediaengine/main.c
 @@ -37,6 +37,7 @@
@@ -40,37 +47,51 @@ index 6fa1c429..e3a58363 100644
  
  WINE_DEFAULT_DEBUG_CHANNEL(mfplat);
  
-@@ -205,6 +206,9 @@ struct media_engine
+@@ -205,6 +206,11 @@ struct media_engine
          } d3d11;
      } video_frame;
      CRITICAL_SECTION cs;
 +    /* Events for the application, delivered once engine->cs is released. */
 +    CRITICAL_SECTION notify_cs;
 +    struct list notify_events;
++    struct list notify_barriers;
++    UINT64 notify_sequence;
  };
  
  static void media_engine_release_video_frame_resources(struct media_engine *engine)
-@@ -767,6 +771,75 @@ static HRESULT create_time_range(IMFMediaTimeRange **range)
+@@ -767,6 +773,102 @@ static HRESULT create_time_range(IMFMediaTimeRange **range)
      return S_OK;
  }
  
 +struct notify_event
 +{
 +    struct list entry;
++    UINT64 sequence;
 +    DWORD thread;
 +    DWORD event;
 +    DWORD_PTR param1;
 +    DWORD param2;
 +};
 +
++/* Marks, for the callback in progress on a thread, the last event queued before it started. */
++struct notify_barrier
++{
++    struct list entry;
++    DWORD thread;
++    UINT64 sequence;
++};
++
 +/* Calls the application with the events this thread raised, in order, unless it still holds
 + * engine->cs. Windows calls IMFMediaEngineNotify on the thread that raised the event, during the
 + * call that raised it; the callback must not run under engine->cs, because it may take a lock of
-+ * the application's that another thread holds while it calls the engine. After Shutdown() queued
++ * the application's that another thread holds while it calls the engine. Inside a callback, only
++ * the events raised since it started are delivered, so they come before the rest of the outer
++ * call's events, as when each event was delivered as it was raised. After Shutdown() queued
 + * events are dropped. */
 +static void media_engine_deliver_events(struct media_engine *engine)
 +{
 +    DWORD thread = GetCurrentThreadId();
++    struct notify_barrier barrier, *b;
 +    struct notify_event *event;
 +
 +    if (engine->cs.OwningThread == ULongToHandle(thread))
@@ -79,13 +100,23 @@ index 6fa1c429..e3a58363 100644
 +    for (;;)
 +    {
 +        struct notify_event *found = NULL;
++        UINT64 after = 0;
 +
 +        EnterCriticalSection(&engine->notify_cs);
++        LIST_FOR_EACH_ENTRY(b, &engine->notify_barriers, struct notify_barrier, entry)
++        {
++            if (b->thread != thread) continue;
++            after = b->sequence;
++            break;
++        }
 +        LIST_FOR_EACH_ENTRY(event, &engine->notify_events, struct notify_event, entry)
 +        {
-+            if (event->thread != thread) continue;
++            if (event->thread != thread || event->sequence <= after) continue;
 +            list_remove(&event->entry);
 +            found = event;
++            barrier.thread = thread;
++            barrier.sequence = engine->notify_sequence;
++            list_add_head(&engine->notify_barriers, &barrier.entry);
 +            break;
 +        }
 +        LeaveCriticalSection(&engine->notify_cs);
@@ -94,6 +125,10 @@ index 6fa1c429..e3a58363 100644
 +        if (!(engine->flags & FLAGS_ENGINE_SHUT_DOWN))
 +            IMFMediaEngineNotify_EventNotify(engine->callback, found->event, found->param1, found->param2);
 +        free(found);
++
++        EnterCriticalSection(&engine->notify_cs);
++        list_remove(&barrier.entry);
++        LeaveCriticalSection(&engine->notify_cs);
 +    }
 +}
 +
@@ -111,6 +146,7 @@ index 6fa1c429..e3a58363 100644
 +    event->param2 = param2;
 +
 +    EnterCriticalSection(&engine->notify_cs);
++    event->sequence = ++engine->notify_sequence;
 +    list_add_tail(&engine->notify_events, &event->entry);
 +    LeaveCriticalSection(&engine->notify_cs);
 +
@@ -126,7 +162,7 @@ index 6fa1c429..e3a58363 100644
  static void media_engine_set_flag(struct media_engine *engine, unsigned int mask, BOOL value)
  {
      if (value)
-@@ -947,7 +1020,7 @@ static HRESULT WINAPI media_engine_session_events_Invoke(IMFAsyncCallback *iface
+@@ -947,7 +1049,7 @@ static HRESULT WINAPI media_engine_session_events_Invoke(IMFAsyncCallback *iface
          case MEBufferingStarted:
          case MEBufferingStopped:
  
@@ -135,7 +171,7 @@ index 6fa1c429..e3a58363 100644
                      MF_MEDIA_ENGINE_EVENT_BUFFERINGSTARTED : MF_MEDIA_ENGINE_EVENT_BUFFERINGENDED, 0, 0);
              break;
          case MESessionTopologyStatus:
-@@ -980,15 +1053,15 @@ static HRESULT WINAPI media_engine_session_events_Invoke(IMFAsyncCallback *iface
+@@ -980,15 +1082,15 @@ static HRESULT WINAPI media_engine_session_events_Invoke(IMFAsyncCallback *iface
  
              media_engine_get_frame_size(engine, topology);
  
@@ -156,7 +192,7 @@ index 6fa1c429..e3a58363 100644
  
              PropVariantClear(&value);
  
-@@ -999,13 +1072,13 @@ static HRESULT WINAPI media_engine_session_events_Invoke(IMFAsyncCallback *iface
+@@ -999,13 +1101,13 @@ static HRESULT WINAPI media_engine_session_events_Invoke(IMFAsyncCallback *iface
              if (engine->flags & FLAGS_ENGINE_SEEKING)
              {
                  media_engine_set_flag(engine, FLAGS_ENGINE_SEEKING | FLAGS_ENGINE_IS_ENDED, FALSE);
@@ -174,7 +210,7 @@ index 6fa1c429..e3a58363 100644
              break;
          case MESessionEnded:
  
-@@ -1013,9 +1086,9 @@ static HRESULT WINAPI media_engine_session_events_Invoke(IMFAsyncCallback *iface
+@@ -1013,9 +1115,9 @@ static HRESULT WINAPI media_engine_session_events_Invoke(IMFAsyncCallback *iface
              media_engine_set_flag(engine, FLAGS_ENGINE_FIRST_FRAME, FALSE);
              media_engine_set_flag(engine, FLAGS_ENGINE_IS_ENDED, TRUE);
              engine->video_frame.pts = MINLONGLONG;
@@ -186,7 +222,7 @@ index 6fa1c429..e3a58363 100644
              break;
  
          case MEEndOfPresentationSegment:
-@@ -1065,13 +1138,13 @@ static HRESULT WINAPI media_engine_sink_events_Invoke(IMFAsyncCallback *iface, I
+@@ -1065,13 +1167,13 @@ static HRESULT WINAPI media_engine_sink_events_Invoke(IMFAsyncCallback *iface, I
      switch (event)
      {
          case MF_MEDIA_ENGINE_EVENT_FIRSTFRAMEREADY:
@@ -202,16 +238,16 @@ index 6fa1c429..e3a58363 100644
  
      return S_OK;
  }
-@@ -1241,7 +1314,7 @@ static void media_engine_clear_presentation(struct media_engine *engine)
+@@ -1241,6 +1343,8 @@ static void media_engine_clear_presentation(struct media_engine *engine)
      {
          /* critical section can not be held during shutdown, as shut down requires all pending
           * callbacks to complete, and some callbacks require this cs */
--        LeaveCriticalSection(&engine->cs);
-+        media_engine_unlock(engine);
++        /* No delivery here: a callback could tear the presentation down under us. The caller's
++         * own unlock delivers what was queued. */
+         LeaveCriticalSection(&engine->cs);
          IMFMediaSource_Shutdown(engine->presentation.source);
          EnterCriticalSection(&engine->cs);
-         IMFMediaSource_Release(engine->presentation.source);
-@@ -1448,12 +1521,12 @@ static HRESULT WINAPI media_engine_load_handler_Invoke(IMFAsyncCallback *iface,
+@@ -1448,12 +1552,12 @@ static HRESULT WINAPI media_engine_load_handler_Invoke(IMFAsyncCallback *iface,
  
      if (engine->flags & FLAGS_ENGINE_SHUT_DOWN)
      {
@@ -226,7 +262,7 @@ index 6fa1c429..e3a58363 100644
  
      start_playback = engine->flags & FLAGS_ENGINE_PLAY_PENDING;
      media_engine_set_flag(engine, FLAGS_ENGINE_SOURCE_PENDING | FLAGS_ENGINE_PLAY_PENDING, FALSE);
-@@ -1490,11 +1563,11 @@ static HRESULT WINAPI media_engine_load_handler_Invoke(IMFAsyncCallback *iface,
+@@ -1490,11 +1594,11 @@ static HRESULT WINAPI media_engine_load_handler_Invoke(IMFAsyncCallback *iface,
          engine->network_state = MF_MEDIA_ENGINE_NETWORK_NO_SOURCE;
          engine->error_code = MF_MEDIA_ENGINE_ERR_SRC_NOT_SUPPORTED;
          engine->extended_code = hr;
@@ -240,7 +276,7 @@ index 6fa1c429..e3a58363 100644
  
      return S_OK;
  }
-@@ -1569,6 +1642,15 @@ static void free_media_engine(struct media_engine *engine)
+@@ -1569,6 +1673,15 @@ static void free_media_engine(struct media_engine *engine)
          IMFDXGIDeviceManager_Release(engine->device_manager);
      }
      SysFreeString(engine->current_source);
@@ -256,7 +292,7 @@ index 6fa1c429..e3a58363 100644
      DeleteCriticalSection(&engine->cs);
      free(engine->video_frame.buffer);
      free(engine);
-@@ -1607,7 +1689,7 @@ static HRESULT WINAPI media_engine_GetError(IMFMediaEngineEx *iface, IMFMediaErr
+@@ -1607,7 +1720,7 @@ static HRESULT WINAPI media_engine_GetError(IMFMediaEngineEx *iface, IMFMediaErr
              IMFMediaError_SetExtendedErrorCode(*error, engine->extended_code);
          }
      }
@@ -265,7 +301,7 @@ index 6fa1c429..e3a58363 100644
  
      return hr;
  }
-@@ -1627,7 +1709,7 @@ static HRESULT WINAPI media_engine_SetErrorCode(IMFMediaEngineEx *iface, MF_MEDI
+@@ -1627,7 +1740,7 @@ static HRESULT WINAPI media_engine_SetErrorCode(IMFMediaEngineEx *iface, MF_MEDI
          hr = MF_E_SHUTDOWN;
      else
          engine->error_code = code;
@@ -274,7 +310,7 @@ index 6fa1c429..e3a58363 100644
  
      return hr;
  }
-@@ -1652,7 +1734,7 @@ static HRESULT media_engine_set_source(struct media_engine *engine, IMFByteStrea
+@@ -1652,7 +1765,7 @@ static HRESULT media_engine_set_source(struct media_engine *engine, IMFByteStrea
  
      engine->ready_state = MF_MEDIA_ENGINE_READY_HAVE_NOTHING;
  
@@ -283,7 +319,7 @@ index 6fa1c429..e3a58363 100644
  
      engine->network_state = MF_MEDIA_ENGINE_NETWORK_NO_SOURCE;
  
-@@ -1697,7 +1779,7 @@ static HRESULT WINAPI media_engine_SetSource(IMFMediaEngineEx *iface, BSTR url)
+@@ -1697,7 +1810,7 @@ static HRESULT WINAPI media_engine_SetSource(IMFMediaEngineEx *iface, BSTR url)
      else
          hr = media_engine_set_source(engine, NULL, url);
  
@@ -292,7 +328,7 @@ index 6fa1c429..e3a58363 100644
  
      return hr;
  }
-@@ -1721,7 +1803,7 @@ static HRESULT WINAPI media_engine_GetCurrentSource(IMFMediaEngineEx *iface, BST
+@@ -1721,7 +1834,7 @@ static HRESULT WINAPI media_engine_GetCurrentSource(IMFMediaEngineEx *iface, BST
              hr = E_OUTOFMEMORY;
      }
  
@@ -301,7 +337,7 @@ index 6fa1c429..e3a58363 100644
  
      return hr;
  }
-@@ -1744,7 +1826,7 @@ static MF_MEDIA_ENGINE_PRELOAD WINAPI media_engine_GetPreload(IMFMediaEngineEx *
+@@ -1744,7 +1857,7 @@ static MF_MEDIA_ENGINE_PRELOAD WINAPI media_engine_GetPreload(IMFMediaEngineEx *
  
      EnterCriticalSection(&engine->cs);
      preload = engine->preload;
@@ -310,7 +346,7 @@ index 6fa1c429..e3a58363 100644
  
      return preload;
  }
-@@ -1757,7 +1839,7 @@ static HRESULT WINAPI media_engine_SetPreload(IMFMediaEngineEx *iface, MF_MEDIA_
+@@ -1757,7 +1870,7 @@ static HRESULT WINAPI media_engine_SetPreload(IMFMediaEngineEx *iface, MF_MEDIA_
  
      EnterCriticalSection(&engine->cs);
      engine->preload = preload;
@@ -319,7 +355,7 @@ index 6fa1c429..e3a58363 100644
  
      return S_OK;
  }
-@@ -1779,7 +1861,7 @@ static HRESULT WINAPI media_engine_GetBuffered(IMFMediaEngineEx *iface, IMFMedia
+@@ -1779,7 +1892,7 @@ static HRESULT WINAPI media_engine_GetBuffered(IMFMediaEngineEx *iface, IMFMedia
      else if (!isnan(engine->duration))
          hr = IMFMediaTimeRange_AddRange(*range, 0.0, engine->duration);
  
@@ -328,7 +364,7 @@ index 6fa1c429..e3a58363 100644
  
      return hr;
  }
-@@ -1796,7 +1878,7 @@ static HRESULT WINAPI media_engine_Load(IMFMediaEngineEx *iface)
+@@ -1796,7 +1909,7 @@ static HRESULT WINAPI media_engine_Load(IMFMediaEngineEx *iface)
      if (engine->flags & FLAGS_ENGINE_SHUT_DOWN)
          hr = MF_E_SHUTDOWN;
  
@@ -337,7 +373,7 @@ index 6fa1c429..e3a58363 100644
  
      return hr;
  }
-@@ -1821,7 +1903,7 @@ static HRESULT WINAPI media_engine_CanPlayType(IMFMediaEngineEx *iface, BSTR mim
+@@ -1821,7 +1934,7 @@ static HRESULT WINAPI media_engine_CanPlayType(IMFMediaEngineEx *iface, BSTR mim
                       mime_type, answer);
      }
  
@@ -346,7 +382,7 @@ index 6fa1c429..e3a58363 100644
  
      return hr;
  }
-@@ -1835,7 +1917,7 @@ static USHORT WINAPI media_engine_GetReadyState(IMFMediaEngineEx *iface)
+@@ -1835,7 +1948,7 @@ static USHORT WINAPI media_engine_GetReadyState(IMFMediaEngineEx *iface)
  
      EnterCriticalSection(&engine->cs);
      state = engine->ready_state;
@@ -355,7 +391,7 @@ index 6fa1c429..e3a58363 100644
  
      return state;
  }
-@@ -1868,7 +1950,7 @@ static double WINAPI media_engine_GetCurrentTime(IMFMediaEngineEx *iface)
+@@ -1868,7 +1981,7 @@ static double WINAPI media_engine_GetCurrentTime(IMFMediaEngineEx *iface)
      {
          ret = mftime_to_seconds(clocktime);
      }
@@ -364,7 +400,7 @@ index 6fa1c429..e3a58363 100644
  
      return ret;
  }
-@@ -1897,16 +1979,16 @@ static HRESULT media_engine_set_current_time(struct media_engine *engine, double
+@@ -1897,16 +2010,16 @@ static HRESULT media_engine_set_current_time(struct media_engine *engine, double
      if (IMFMediaEngineEx_IsPaused(&engine->IMFMediaEngineEx_iface))
      {
          engine->presentation.start_position = position;
@@ -385,7 +421,7 @@ index 6fa1c429..e3a58363 100644
      }
  
      return hr;
-@@ -1926,7 +2008,7 @@ static HRESULT WINAPI media_engine_SetCurrentTime(IMFMediaEngineEx *iface, doubl
+@@ -1926,7 +2039,7 @@ static HRESULT WINAPI media_engine_SetCurrentTime(IMFMediaEngineEx *iface, doubl
      else
          hr = media_engine_set_current_time(engine, time);
  
@@ -394,7 +430,7 @@ index 6fa1c429..e3a58363 100644
  
      return hr;
  }
-@@ -1947,7 +2029,7 @@ static double WINAPI media_engine_GetDuration(IMFMediaEngineEx *iface)
+@@ -1947,7 +2060,7 @@ static double WINAPI media_engine_GetDuration(IMFMediaEngineEx *iface)
  
      EnterCriticalSection(&engine->cs);
      value = engine->duration;
@@ -403,7 +439,7 @@ index 6fa1c429..e3a58363 100644
  
      return value;
  }
-@@ -1961,7 +2043,7 @@ static BOOL WINAPI media_engine_IsPaused(IMFMediaEngineEx *iface)
+@@ -1961,7 +2074,7 @@ static BOOL WINAPI media_engine_IsPaused(IMFMediaEngineEx *iface)
  
      EnterCriticalSection(&engine->cs);
      value = !!(engine->flags & FLAGS_ENGINE_PAUSED);
@@ -412,7 +448,7 @@ index 6fa1c429..e3a58363 100644
  
      return value;
  }
-@@ -1975,7 +2057,7 @@ static double WINAPI media_engine_GetDefaultPlaybackRate(IMFMediaEngineEx *iface
+@@ -1975,7 +2088,7 @@ static double WINAPI media_engine_GetDefaultPlaybackRate(IMFMediaEngineEx *iface
  
      EnterCriticalSection(&engine->cs);
      rate = engine->default_playback_rate;
@@ -421,7 +457,7 @@ index 6fa1c429..e3a58363 100644
  
      return rate;
  }
-@@ -1993,9 +2075,9 @@ static HRESULT WINAPI media_engine_SetDefaultPlaybackRate(IMFMediaEngineEx *ifac
+@@ -1993,9 +2106,9 @@ static HRESULT WINAPI media_engine_SetDefaultPlaybackRate(IMFMediaEngineEx *ifac
      else if (engine->default_playback_rate != rate)
      {
          engine->default_playback_rate = rate;
@@ -433,7 +469,7 @@ index 6fa1c429..e3a58363 100644
  
      return hr;
  }
-@@ -2009,7 +2091,7 @@ static double WINAPI media_engine_GetPlaybackRate(IMFMediaEngineEx *iface)
+@@ -2009,7 +2122,7 @@ static double WINAPI media_engine_GetPlaybackRate(IMFMediaEngineEx *iface)
  
      EnterCriticalSection(&engine->cs);
      rate = engine->playback_rate;
@@ -442,7 +478,7 @@ index 6fa1c429..e3a58363 100644
  
      return rate;
  }
-@@ -2027,9 +2109,9 @@ static HRESULT WINAPI media_engine_SetPlaybackRate(IMFMediaEngineEx *iface, doub
+@@ -2027,9 +2140,9 @@ static HRESULT WINAPI media_engine_SetPlaybackRate(IMFMediaEngineEx *iface, doub
      else if (engine->playback_rate != rate)
      {
          engine->playback_rate = rate;
@@ -454,7 +490,7 @@ index 6fa1c429..e3a58363 100644
  
      return hr;
  }
-@@ -2046,7 +2128,7 @@ static HRESULT WINAPI media_engine_GetPlayed(IMFMediaEngineEx *iface, IMFMediaTi
+@@ -2046,7 +2159,7 @@ static HRESULT WINAPI media_engine_GetPlayed(IMFMediaEngineEx *iface, IMFMediaTi
      if (engine->flags & FLAGS_ENGINE_SHUT_DOWN)
          hr = MF_E_SHUTDOWN;
  
@@ -463,7 +499,7 @@ index 6fa1c429..e3a58363 100644
  
      return hr;
  }
-@@ -2075,7 +2157,7 @@ static HRESULT WINAPI media_engine_GetSeekable(IMFMediaEngineEx *iface, IMFMedia
+@@ -2075,7 +2188,7 @@ static HRESULT WINAPI media_engine_GetSeekable(IMFMediaEngineEx *iface, IMFMedia
          }
      }
  
@@ -472,7 +508,7 @@ index 6fa1c429..e3a58363 100644
  
      if (FAILED(hr) && time_range)
      {
-@@ -2095,7 +2177,7 @@ static BOOL WINAPI media_engine_IsEnded(IMFMediaEngineEx *iface)
+@@ -2095,7 +2208,7 @@ static BOOL WINAPI media_engine_IsEnded(IMFMediaEngineEx *iface)
  
      EnterCriticalSection(&engine->cs);
      value = !!(engine->flags & FLAGS_ENGINE_IS_ENDED);
@@ -481,7 +517,7 @@ index 6fa1c429..e3a58363 100644
  
      return value;
  }
-@@ -2109,7 +2191,7 @@ static BOOL WINAPI media_engine_GetAutoPlay(IMFMediaEngineEx *iface)
+@@ -2109,7 +2222,7 @@ static BOOL WINAPI media_engine_GetAutoPlay(IMFMediaEngineEx *iface)
  
      EnterCriticalSection(&engine->cs);
      value = !!(engine->flags & FLAGS_ENGINE_AUTO_PLAY);
@@ -490,7 +526,7 @@ index 6fa1c429..e3a58363 100644
  
      return value;
  }
-@@ -2122,7 +2204,7 @@ static HRESULT WINAPI media_engine_SetAutoPlay(IMFMediaEngineEx *iface, BOOL aut
+@@ -2122,7 +2235,7 @@ static HRESULT WINAPI media_engine_SetAutoPlay(IMFMediaEngineEx *iface, BOOL aut
  
      EnterCriticalSection(&engine->cs);
      media_engine_set_flag(engine, FLAGS_ENGINE_AUTO_PLAY, autoplay);
@@ -499,7 +535,7 @@ index 6fa1c429..e3a58363 100644
  
      return S_OK;
  }
-@@ -2136,7 +2218,7 @@ static BOOL WINAPI media_engine_GetLoop(IMFMediaEngineEx *iface)
+@@ -2136,7 +2249,7 @@ static BOOL WINAPI media_engine_GetLoop(IMFMediaEngineEx *iface)
  
      EnterCriticalSection(&engine->cs);
      value = !!(engine->flags & FLAGS_ENGINE_LOOP);
@@ -508,7 +544,7 @@ index 6fa1c429..e3a58363 100644
  
      return value;
  }
-@@ -2149,7 +2231,7 @@ static HRESULT WINAPI media_engine_SetLoop(IMFMediaEngineEx *iface, BOOL loop)
+@@ -2149,7 +2262,7 @@ static HRESULT WINAPI media_engine_SetLoop(IMFMediaEngineEx *iface, BOOL loop)
  
      EnterCriticalSection(&engine->cs);
      media_engine_set_flag(engine, FLAGS_ENGINE_LOOP, loop);
@@ -517,7 +553,7 @@ index 6fa1c429..e3a58363 100644
  
      return S_OK;
  }
-@@ -2167,12 +2249,12 @@ static HRESULT WINAPI media_engine_Play(IMFMediaEngineEx *iface)
+@@ -2167,12 +2280,12 @@ static HRESULT WINAPI media_engine_Play(IMFMediaEngineEx *iface)
          hr = MF_E_SHUTDOWN;
      else
      {
@@ -532,7 +568,7 @@ index 6fa1c429..e3a58363 100644
  
              if (!(engine->flags & FLAGS_ENGINE_SOURCE_PENDING))
                  media_engine_start_playback(engine);
-@@ -2182,10 +2264,10 @@ static HRESULT WINAPI media_engine_Play(IMFMediaEngineEx *iface)
+@@ -2182,10 +2295,10 @@ static HRESULT WINAPI media_engine_Play(IMFMediaEngineEx *iface)
              media_engine_set_flag(engine, FLAGS_ENGINE_WAITING, TRUE);
          }
  
@@ -545,7 +581,7 @@ index 6fa1c429..e3a58363 100644
  
      return hr;
  }
-@@ -2210,15 +2292,15 @@ static HRESULT WINAPI media_engine_Pause(IMFMediaEngineEx *iface)
+@@ -2210,15 +2323,15 @@ static HRESULT WINAPI media_engine_Pause(IMFMediaEngineEx *iface)
                  media_engine_set_flag(engine, FLAGS_ENGINE_WAITING | FLAGS_ENGINE_IS_ENDED, FALSE);
                  media_engine_set_flag(engine, FLAGS_ENGINE_PAUSED, TRUE);
  
@@ -565,7 +601,7 @@ index 6fa1c429..e3a58363 100644
  
      return hr;
  }
-@@ -2232,7 +2314,7 @@ static BOOL WINAPI media_engine_GetMuted(IMFMediaEngineEx *iface)
+@@ -2232,7 +2345,7 @@ static BOOL WINAPI media_engine_GetMuted(IMFMediaEngineEx *iface)
  
      EnterCriticalSection(&engine->cs);
      ret = !!(engine->flags & FLAGS_ENGINE_MUTED);
@@ -574,7 +610,7 @@ index 6fa1c429..e3a58363 100644
  
      return ret;
  }
-@@ -2250,9 +2332,9 @@ static HRESULT WINAPI media_engine_SetMuted(IMFMediaEngineEx *iface, BOOL muted)
+@@ -2250,9 +2363,9 @@ static HRESULT WINAPI media_engine_SetMuted(IMFMediaEngineEx *iface, BOOL muted)
      else if (!!(engine->flags & FLAGS_ENGINE_MUTED) ^ !!muted)
      {
          media_engine_set_flag(engine, FLAGS_ENGINE_MUTED, muted);
@@ -586,7 +622,7 @@ index 6fa1c429..e3a58363 100644
  
      return hr;
  }
-@@ -2266,7 +2348,7 @@ static double WINAPI media_engine_GetVolume(IMFMediaEngineEx *iface)
+@@ -2266,7 +2379,7 @@ static double WINAPI media_engine_GetVolume(IMFMediaEngineEx *iface)
  
      EnterCriticalSection(&engine->cs);
      volume = engine->volume;
@@ -595,7 +631,7 @@ index 6fa1c429..e3a58363 100644
  
      return volume;
  }
-@@ -2285,9 +2367,9 @@ static HRESULT WINAPI media_engine_SetVolume(IMFMediaEngineEx *iface, double vol
+@@ -2285,9 +2398,9 @@ static HRESULT WINAPI media_engine_SetVolume(IMFMediaEngineEx *iface, double vol
      {
          engine->volume = volume;
          media_engine_apply_volume(engine);
@@ -607,7 +643,7 @@ index 6fa1c429..e3a58363 100644
  
      return hr;
  }
-@@ -2301,7 +2383,7 @@ static BOOL WINAPI media_engine_HasVideo(IMFMediaEngineEx *iface)
+@@ -2301,7 +2414,7 @@ static BOOL WINAPI media_engine_HasVideo(IMFMediaEngineEx *iface)
  
      EnterCriticalSection(&engine->cs);
      value = !!(engine->flags & FLAGS_ENGINE_HAS_VIDEO);
@@ -616,7 +652,7 @@ index 6fa1c429..e3a58363 100644
  
      return value;
  }
-@@ -2315,7 +2397,7 @@ static BOOL WINAPI media_engine_HasAudio(IMFMediaEngineEx *iface)
+@@ -2315,7 +2428,7 @@ static BOOL WINAPI media_engine_HasAudio(IMFMediaEngineEx *iface)
  
      EnterCriticalSection(&engine->cs);
      value = !!(engine->flags & FLAGS_ENGINE_HAS_AUDIO);
@@ -625,7 +661,7 @@ index 6fa1c429..e3a58363 100644
  
      return value;
  }
-@@ -2342,7 +2424,7 @@ static HRESULT WINAPI media_engine_GetNativeVideoSize(IMFMediaEngineEx *iface, D
+@@ -2342,7 +2455,7 @@ static HRESULT WINAPI media_engine_GetNativeVideoSize(IMFMediaEngineEx *iface, D
          if (cy) *cy = engine->video_frame.size.cy;
      }
  
@@ -634,7 +670,7 @@ index 6fa1c429..e3a58363 100644
  
      return hr;
  }
-@@ -2369,7 +2451,7 @@ static HRESULT WINAPI media_engine_GetVideoAspectRatio(IMFMediaEngineEx *iface,
+@@ -2369,7 +2482,7 @@ static HRESULT WINAPI media_engine_GetVideoAspectRatio(IMFMediaEngineEx *iface,
          if (cy) *cy = engine->video_frame.ratio.cy;
      }
  
@@ -643,7 +679,7 @@ index 6fa1c429..e3a58363 100644
  
      return hr;
  }
-@@ -2390,11 +2472,11 @@ static HRESULT WINAPI media_engine_Shutdown(IMFMediaEngineEx *iface)
+@@ -2390,11 +2503,11 @@ static HRESULT WINAPI media_engine_Shutdown(IMFMediaEngineEx *iface)
          media_engine_clear_presentation(engine);
          /* critical section can not be held during shutdown, as shut down requires all pending
           * callbacks to complete, and some callbacks require this cs */
@@ -657,7 +693,7 @@ index 6fa1c429..e3a58363 100644
  
      return hr;
  }
-@@ -2864,7 +2946,7 @@ static HRESULT WINAPI media_engine_TransferVideoFrame(IMFMediaEngineEx *iface, I
+@@ -2864,7 +2977,7 @@ static HRESULT WINAPI media_engine_TransferVideoFrame(IMFMediaEngineEx *iface, I
          FIXME("Unsupported destination type.\n");
      }
  
@@ -666,7 +702,7 @@ index 6fa1c429..e3a58363 100644
  
      return hr;
  }
-@@ -2889,7 +2971,7 @@ static HRESULT WINAPI media_engine_OnVideoStreamTick(IMFMediaEngineEx *iface, LO
+@@ -2889,7 +3002,7 @@ static HRESULT WINAPI media_engine_OnVideoStreamTick(IMFMediaEngineEx *iface, LO
          hr = video_frame_sink_get_pts(engine->presentation.frame_sink, clocktime, pts);
      }
  
@@ -675,7 +711,7 @@ index 6fa1c429..e3a58363 100644
  
      return hr;
  }
-@@ -2910,7 +2992,7 @@ static HRESULT WINAPI media_engine_SetSourceFromByteStream(IMFMediaEngineEx *ifa
+@@ -2910,7 +3023,7 @@ static HRESULT WINAPI media_engine_SetSourceFromByteStream(IMFMediaEngineEx *ifa
      else
          hr = media_engine_set_source(engine, bytestream, url);
  
@@ -684,7 +720,7 @@ index 6fa1c429..e3a58363 100644
  
      return hr;
  }
-@@ -2978,7 +3060,7 @@ static HRESULT WINAPI media_engine_GetResourceCharacteristics(IMFMediaEngineEx *
+@@ -2978,7 +3091,7 @@ static HRESULT WINAPI media_engine_GetResourceCharacteristics(IMFMediaEngineEx *
              hr = S_OK;
          }
      }
@@ -693,7 +729,7 @@ index 6fa1c429..e3a58363 100644
  
      return hr;
  }
-@@ -2996,7 +3078,7 @@ static HRESULT WINAPI media_engine_GetPresentationAttribute(IMFMediaEngineEx *if
+@@ -2996,7 +3109,7 @@ static HRESULT WINAPI media_engine_GetPresentationAttribute(IMFMediaEngineEx *if
          hr = MF_E_SHUTDOWN;
      else if (engine->presentation.pd)
          hr = IMFPresentationDescriptor_GetItem(engine->presentation.pd, attribute, value);
@@ -702,7 +738,7 @@ index 6fa1c429..e3a58363 100644
  
      return hr;
  }
-@@ -3013,7 +3095,7 @@ static HRESULT WINAPI media_engine_GetNumberOfStreams(IMFMediaEngineEx *iface, D
+@@ -3013,7 +3126,7 @@ static HRESULT WINAPI media_engine_GetNumberOfStreams(IMFMediaEngineEx *iface, D
          hr = MF_E_SHUTDOWN;
      else if (engine->presentation.pd)
          hr = IMFPresentationDescriptor_GetStreamDescriptorCount(engine->presentation.pd, stream_count);
@@ -711,7 +747,7 @@ index 6fa1c429..e3a58363 100644
  
      return hr;
  }
-@@ -3040,7 +3122,7 @@ static HRESULT WINAPI media_engine_GetStreamAttribute(IMFMediaEngineEx *iface, D
+@@ -3040,7 +3153,7 @@ static HRESULT WINAPI media_engine_GetStreamAttribute(IMFMediaEngineEx *iface, D
              IMFStreamDescriptor_Release(sd);
          }
      }
@@ -720,7 +756,7 @@ index 6fa1c429..e3a58363 100644
  
      return hr;
  }
-@@ -3107,7 +3189,7 @@ static HRESULT WINAPI media_engine_InsertVideoEffect(IMFMediaEngineEx *iface, IU
+@@ -3107,7 +3220,7 @@ static HRESULT WINAPI media_engine_InsertVideoEffect(IMFMediaEngineEx *iface, IU
  
      EnterCriticalSection(&engine->cs);
      hr = media_engine_insert_effect(engine, &engine->video_effects, effect, is_optional);
@@ -729,7 +765,7 @@ index 6fa1c429..e3a58363 100644
  
      return hr;
  }
-@@ -3121,7 +3203,7 @@ static HRESULT WINAPI media_engine_InsertAudioEffect(IMFMediaEngineEx *iface, IU
+@@ -3121,7 +3234,7 @@ static HRESULT WINAPI media_engine_InsertAudioEffect(IMFMediaEngineEx *iface, IU
  
      EnterCriticalSection(&engine->cs);
      hr = media_engine_insert_effect(engine, &engine->audio_effects, effect, is_optional);
@@ -738,7 +774,7 @@ index 6fa1c429..e3a58363 100644
  
      return hr;
  }
-@@ -3141,7 +3223,7 @@ static HRESULT WINAPI media_engine_RemoveAllEffects(IMFMediaEngineEx *iface)
+@@ -3141,7 +3254,7 @@ static HRESULT WINAPI media_engine_RemoveAllEffects(IMFMediaEngineEx *iface)
          media_engine_clear_effects(&engine->audio_effects);
          media_engine_clear_effects(&engine->video_effects);
      }
@@ -747,7 +783,7 @@ index 6fa1c429..e3a58363 100644
  
      return hr;
  }
-@@ -3237,7 +3319,7 @@ static HRESULT WINAPI media_engine_GetAudioStreamCategory(IMFMediaEngineEx *ifac
+@@ -3237,7 +3350,7 @@ static HRESULT WINAPI media_engine_GetAudioStreamCategory(IMFMediaEngineEx *ifac
      else
          hr = IMFAttributes_GetUINT32(engine->attributes, &MF_MEDIA_ENGINE_AUDIO_CATEGORY, category);
  
@@ -756,7 +792,7 @@ index 6fa1c429..e3a58363 100644
  
      return hr;
  }
-@@ -3256,7 +3338,7 @@ static HRESULT WINAPI media_engine_SetAudioStreamCategory(IMFMediaEngineEx *ifac
+@@ -3256,7 +3369,7 @@ static HRESULT WINAPI media_engine_SetAudioStreamCategory(IMFMediaEngineEx *ifac
      else
          hr = IMFAttributes_SetUINT32(engine->attributes, &MF_MEDIA_ENGINE_AUDIO_CATEGORY, category);
  
@@ -765,7 +801,7 @@ index 6fa1c429..e3a58363 100644
  
      return hr;
  }
-@@ -3275,7 +3357,7 @@ static HRESULT WINAPI media_engine_GetAudioEndpointRole(IMFMediaEngineEx *iface,
+@@ -3275,7 +3388,7 @@ static HRESULT WINAPI media_engine_GetAudioEndpointRole(IMFMediaEngineEx *iface,
      else
          hr = IMFAttributes_GetUINT32(engine->attributes, &MF_MEDIA_ENGINE_AUDIO_ENDPOINT_ROLE, role);
  
@@ -774,7 +810,7 @@ index 6fa1c429..e3a58363 100644
  
      return hr;
  }
-@@ -3294,7 +3376,7 @@ static HRESULT WINAPI media_engine_SetAudioEndpointRole(IMFMediaEngineEx *iface,
+@@ -3294,7 +3407,7 @@ static HRESULT WINAPI media_engine_SetAudioEndpointRole(IMFMediaEngineEx *iface,
      else
          hr = IMFAttributes_SetUINT32(engine->attributes, &MF_MEDIA_ENGINE_AUDIO_ENDPOINT_ROLE, role);
  
@@ -783,7 +819,7 @@ index 6fa1c429..e3a58363 100644
  
      return hr;
  }
-@@ -3311,7 +3393,7 @@ static HRESULT WINAPI media_engine_GetRealTimeMode(IMFMediaEngineEx *iface, BOOL
+@@ -3311,7 +3424,7 @@ static HRESULT WINAPI media_engine_GetRealTimeMode(IMFMediaEngineEx *iface, BOOL
          hr = MF_E_SHUTDOWN;
      else
          *enabled = !!(engine->flags & MF_MEDIA_ENGINE_REAL_TIME_MODE);
@@ -792,7 +828,7 @@ index 6fa1c429..e3a58363 100644
  
      return hr;
  }
-@@ -3328,7 +3410,7 @@ static HRESULT WINAPI media_engine_SetRealTimeMode(IMFMediaEngineEx *iface, BOOL
+@@ -3328,7 +3441,7 @@ static HRESULT WINAPI media_engine_SetRealTimeMode(IMFMediaEngineEx *iface, BOOL
          hr = MF_E_SHUTDOWN;
      else
          media_engine_set_flag(engine, MF_MEDIA_ENGINE_REAL_TIME_MODE, enable);
@@ -801,7 +837,7 @@ index 6fa1c429..e3a58363 100644
  
      return hr;
  }
-@@ -3350,7 +3432,7 @@ static HRESULT WINAPI media_engine_SetCurrentTimeEx(IMFMediaEngineEx *iface, dou
+@@ -3350,7 +3463,7 @@ static HRESULT WINAPI media_engine_SetCurrentTimeEx(IMFMediaEngineEx *iface, dou
      else
          hr = media_engine_set_current_time(engine, seektime);
  
@@ -810,12 +846,13 @@ index 6fa1c429..e3a58363 100644
  
      return hr;
  }
-@@ -3528,6 +3610,8 @@ static HRESULT init_media_engine(DWORD flags, IMFAttributes *attributes, struct
+@@ -3528,6 +3641,9 @@ static HRESULT init_media_engine(DWORD flags, IMFAttributes *attributes, struct
      engine->next_seek = NAN;
      engine->video_frame.pts = MINLONGLONG;
      InitializeCriticalSection(&engine->cs);
 +    InitializeCriticalSection(&engine->notify_cs);
 +    list_init(&engine->notify_events);
++    list_init(&engine->notify_barriers);
  
      if (FAILED(hr = IMFAttributes_GetUnknown(attributes, &MF_MEDIA_ENGINE_CALLBACK, &IID_IMFMediaEngineNotify,
              (void **)&engine->callback)))

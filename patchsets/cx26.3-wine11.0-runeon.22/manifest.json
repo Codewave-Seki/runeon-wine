@@ -2608,7 +2608,7 @@
     {
       "order": 159,
       "path": "patches/runeon/0129-winecoreaudio-io-buffer-under-half-period.patch",
-      "sha256": "f2a36c1d73b0190f88fdd4e0a6e29d77b16acd5b3c6a22c0cfe2656cf7fec6d6",
+      "sha256": "76c57ffb551b9b46cca8500fa7c4a27b0baf9a92cd700ff67d3ed6524a8f9130",
       "kind": "runeon-product",
       "status": "active",
       "risk": "medium",
@@ -2656,7 +2656,7 @@
       "kind": "runeon-product",
       "status": "active",
       "risk": "low",
-      "summary": "On macOS, get_thread_times() reads a thread's kernel and user time with thread_info(THREAD_BASIC_INFO) on the Mach thread port the server recorded for it, for threads of the calling process; ThreadTimes no longer asks for the times of a thread that has an exit time, since its port name may name another thread by then. Before, macOS had no body: ThreadTimes answered zero for other threads and the whole process's time for the current one. Exited threads report zero, as before, where Windows reports their final times; another process's threads and the process-wide query without a thread still fail as before. Not opt-in: it reports what Windows reports for running threads and changes nothing else.",
+      "summary": "On macOS, get_thread_times() reads a thread's kernel and user time with thread_info(THREAD_BASIC_INFO) on the Mach thread port the server recorded for it, for threads of the calling process; ThreadTimes no longer asks for the times of a thread that has an exit time, since its port name may name another thread by then. Before, macOS had no body: ThreadTimes answered zero for other threads and the whole process's time for the current one. Exited threads report zero, as before, where Windows reports their final times; another process's threads and the process-wide query without a thread still fail as before. Not opt-in: it reports what Windows reports for running threads and changes nothing else. The SystemProcessInformation thread list goes through the same function, so it now reports the CPU times of the calling process's own threads too; that path has no exit-time guard, so a thread that exits while the list is built can briefly read a reused port name.",
       "testStrategy": "Static and integration checks prove the patch applies and the anchors are present once. A complete i386/x86_64 WoW64 build must compile it. tests/thread-times-probe.c, built for x86 and x64, spins a worker for 800 ms while the main thread sleeps and requires at least 500 ms for the worker and less than 300 ms for the main thread; the unpatched runtime reports 0 ms and 850 ms.",
       "provenance": {
         "repository": "https://github.com/gauthierpiarrette/highball-engine",
@@ -2704,18 +2704,12 @@
     {
       "order": 163,
       "path": "patches/runeon/0133-mfmediaengine-events-off-engine-lock.patch",
-      "sha256": "1644867c30738a8b2881e20bec072cb963596f3e869ee3608b9fbcbcd6bfddc1",
+      "sha256": "eea955f549a279d584e79b085a32c73f04a6bf0bffa025be76043da0ae1d1139",
       "kind": "runeon-product",
       "status": "active",
       "risk": "medium",
-      "summary": "The media engine queues each IMFMediaEngineNotify::EventNotify() call with the thread that raised it, and each thread delivers its own events in order as soon as it no longer holds engine->cs: at the end of the call that raised them, or at once outside the lock. Before, the callback ran with engine->cs held, so an application callback that takes its own lock deadlocked against a thread holding that lock and calling an engine method. Delivery stays on the raising thread and before the call returns, as Windows does for SEEKING and TIMEUPDATE in SetCurrentTime() according to Wine's own tests. After Shutdown() events are neither queued nor delivered. Limits: an event raised inside a callback on the same thread is delivered before the rest of the outer call's events; events still queued when the engine is destroyed are freed undelivered. Not opt-in: the callback keeps its thread and timing and only stops running under the engine lock.",
-      "testStrategy": "Static and integration checks prove the patch applies and the anchors are present once. A complete i386/x86_64 WoW64 build must compile it. tests/mfmediaengine-deadlock-probe.c, built for x86 and x64, holds an application lock while the first event on another thread waits for it and has a helper call GetCurrentTime(); the unpatched runtime reports DEADLOCK in both architectures, the patched one OK. Wine's own dlls/mfmediaengine/tests (474 tests, built from the pinned tree) must give the same result as on the unpatched runtime, 0 failures in both architectures; a work-queue design failed 5 of them (SEEKING not delivered during SetCurrentTime()), so they are run on every candidate.",
-      "provenance": {
-        "repository": "https://github.com/gauthierpiarrette/highball-engine",
-        "commit": "34c5f770862674c03e8cb3af5b223d3e7ae81aba",
-        "author": "Runeon Contributors",
-        "note": "The deadlock was reported by highball-engine arm64 patch 0040; this is a different implementation, because 0040's work-queue delivery fails Wine's own SetCurrentTime() tests. No code from 0040 is carried."
-      },
+      "summary": "The media engine queues each IMFMediaEngineNotify::EventNotify() call with the thread that raised it, and each thread delivers its own events in order as soon as it no longer holds engine->cs: at the end of the call that raised them, or at once outside the lock. Before, the callback ran with engine->cs held, so an application callback that takes its own lock deadlocked against a thread holding that lock and calling an engine method (reported by gauthierpiarrette/highball-engine arm64 patch 0040; its work-queue fix fails Wine's own SetCurrentTime() tests, so this is a different implementation and carries none of its code). Delivery stays on the raising thread and before the call returns, as Windows does for SEEKING and TIMEUPDATE in SetCurrentTime() according to Wine's tests. Inside a callback only the events raised since it started are delivered, so they come before the rest of the outer call's events, as before. Tearing a presentation down does not deliver halfway. After Shutdown() no event is queued and queued events are dropped. Limits: different threads' callbacks are no longer serialized by engine->cs, so they can run concurrently and interleave differently; Shutdown() does not wait for a callback already running on another thread, and an event past the shut-down check can arrive after Shutdown() returns; events still queued at destruction are freed undelivered. Not opt-in: each callback keeps its thread, timing and order and only stops running under the engine lock.",
+      "testStrategy": "Static and integration checks prove the patch applies and the anchors are present once. A complete i386/x86_64 WoW64 build must compile it. Built for x86 and x64: tests/mfmediaengine-deadlock-probe.c holds an application lock while the first event on another thread waits for it and has a helper call GetCurrentTime(), DEADLOCK on the unpatched runtime and OK patched; tests/mfmediaengine-event-order-probe.c calls SetMuted() from the SEEKING callback of a paused SetCurrentTime() and requires SEEKING, VOLUMECHANGE, SEEKED, TIMEUPDATE during the call, as on the unpatched runtime (a version without the per-callback barrier gives 16 17 18 22). Wine's own dlls/mfmediaengine/tests (474 tests) must give 0 failures in both architectures, as unpatched; a work-queue design failed 5 of them.",
       "verification": [
         {
           "path": "dlls/mfmediaengine/main.c",
@@ -2723,7 +2717,7 @@
         },
         {
           "path": "dlls/mfmediaengine/main.c",
-          "contains": "    if (engine->cs.OwningThread == ULongToHandle(thread))"
+          "contains": "            if (event->thread != thread || event->sequence <= after) continue;"
         }
       ]
     }
