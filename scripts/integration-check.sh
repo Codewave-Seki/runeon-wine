@@ -81,6 +81,12 @@ if grep -Fqx 'patches/runeon/0117-winemac-bptc-2d-decode.patch' "$series_file"; 
     || die "BPTC decode check failed"
 fi
 
+# Spatial audio static objects are checked from the patched channel mapping.
+if grep -Fqx 'patches/runeon/0128-mmdevapi-spatial-static-object-order.patch' "$series_file"; then
+  python3 "$script_dir/../tests/spatial-static-map-check.py" "$candidate_root" >/dev/null \
+    || die "spatial audio static object map check failed"
+fi
+
 if "$script_dir/apply-series.sh" "$candidate_root" >"$temp_root/reapply.stdout" 2>"$temp_root/reapply.stderr"; then
   die "a second patch application unexpectedly succeeded"
 fi

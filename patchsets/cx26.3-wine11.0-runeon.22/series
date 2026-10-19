@@ -110,3 +110,4 @@ patches/runeon/0124-ntdll-macos-commit-charge-footprint.patch
 patches/runeon/0125-advapi32-credenumerate-empty-host-store.patch
 patches/runeon/0126-loader-ntdll-next-to-bundle-link.patch
 patches/runeon/0127-winemac-bundle-name-from-embedded-plist.patch
+patches/runeon/0128-mmdevapi-spatial-static-object-order.patch

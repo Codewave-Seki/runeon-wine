@@ -2578,6 +2578,28 @@
           "contains": "static void copy_embedded_bundle_name(void)"
         }
       ]
+    },
+    {
+      "order": 158,
+      "path": "patches/runeon/0128-mmdevapi-spatial-static-object-order.patch",
+      "sha256": "085d79424bc6e92d93153f2c060c438056b5d01100ae98cc23945eb5ee9d174d",
+      "kind": "runeon-product",
+      "status": "active",
+      "risk": "low",
+      "summary": "static_mask_to_channels() gives each spatial audio static object the channel WAVEFORMATEXTENSIBLE order gives its speaker, the number of mask bits below it, so back left/right and back centre come before side left/right, and stores it at the object's own AudioObjectType_to_index() entry, so back centre is found. Before, a 7.1 or 7.1.4 bed had its side and back channels swapped and back centre was dropped. Not opt-in: it corrects a mapping Windows defines and changes nothing else.",
+      "testStrategy": "Static and integration checks prove the patch applies and the anchors are present once. A complete i386/x86_64 WoW64 build must compile it. tests/spatial-static-map-check.py, run by integration-check when this patch is in the series, extracts the real AudioObjectType_to_index() and static_mask_to_channels(), takes the constants from the tree's headers and checks 5.1, 7.1, 7.1.4 and a bed with back centre against ascending speaker-bit order; the unpatched function fails 27 entries.",
+      "provenance": {
+        "repository": "https://github.com/gauthierpiarrette/highball-engine",
+        "commit": "74d393b73c15c8240d4ff4c75fcb182ecc9c217c",
+        "author": "Tx (TxCsOffc)",
+        "note": "Adapted downstream fix (patch 0022), code unchanged; WineHQ master has the same code."
+      },
+      "verification": [
+        {
+          "path": "dlls/mmdevapi/spatialaudio.c",
+          "contains": "map[idx] = __builtin_popcount(*mask & (table[i].speaker - 1));"
+        }
+      ]
     }
   ],
   "targetedReview": {
