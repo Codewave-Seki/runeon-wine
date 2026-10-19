@@ -2666,6 +2666,32 @@
           "contains": "if (thread_info( (thread_act_t)unix_tid, THREAD_BASIC_INFO, (thread_info_t)&info, &count ) != KERN_SUCCESS)"
         }
       ]
+    },
+    {
+      "order": 162,
+      "path": "patches/runeon/0132-kernelbase-app-packages-from-registry.patch",
+      "sha256": "671163c5659ddc49ac9d0420dd164b112c38390eb165a115980fd9642f75571a",
+      "kind": "runeon-product",
+      "status": "active",
+      "risk": "medium",
+      "summary": "GetPackagesByPackageFamily() lists the app packages registered under the AppModel PackageRepository Packages key instead of always answering zero, GetPackagePath() reads a package's Path there, and PackageFullNameFromId() builds a full name; kernel32 forwards the two new exports. wine.inf registers the Microsoft.VCLibs.140.00 framework package for each architecture, pointing at system32 (syswow64 for WoW64), without replacing existing values, as Proton does. A program that waits for that package (Wine bug 55397) can now start. Not opt-in: Windows has these packages and answers these lookups.",
+      "testStrategy": "Static and integration checks prove the patch applies and the anchors are present once. A complete i386/x86_64 WoW64 build must compile it. tests/app-packages-probe.c, built for x86 and x64 and run in a prefix booted with the patched wine.inf, requires the VCLibs package of its architecture to be listed, its full name to round-trip through PackageIdFromFullName() and PackageFullNameFromId(), and GetPackagePath() to answer that architecture's system directory; the unpatched runtime lists no package and lacks both exports.",
+      "provenance": {
+        "repository": "https://github.com/gauthierpiarrette/highball-engine",
+        "commit": "e13247c012c6d71fb705406d31b714bfea714cfc",
+        "author": "Paul Gofman (Proton)",
+        "note": "Downstream port of Proton's implementations (ValveSoftware/wine, Paul Gofman) as carried by highball-engine patch 0024; WineHQ has PackageFullNameFromId() since 11.18 (ef6c413c68) and still stubs the others."
+      },
+      "verification": [
+        {
+          "path": "dlls/kernelbase/version.c",
+          "contains": "LONG WINAPI GetPackagePath(const PACKAGE_ID *package_id, const UINT32 reserved, UINT32 *length, WCHAR *path)"
+        },
+        {
+          "path": "loader/wine.inf.in",
+          "contains": "Microsoft.VCLibs.140.00_14.0.29231.0_x64__8wekyb3d8bbwe"
+        }
+      ]
     }
   ],
   "targetedReview": {

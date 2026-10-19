@@ -114,3 +114,4 @@ patches/runeon/0128-mmdevapi-spatial-static-object-order.patch
 patches/runeon/0129-winecoreaudio-io-buffer-under-half-period.patch
 patches/runeon/0130-opengl32-es2-compat-calls-in-legacy-contexts.patch
 patches/runeon/0131-ntdll-macos-thread-times.patch
+patches/runeon/0132-kernelbase-app-packages-from-registry.patch
