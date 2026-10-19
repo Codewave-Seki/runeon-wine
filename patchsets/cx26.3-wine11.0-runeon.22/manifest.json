@@ -2622,6 +2622,28 @@
           "contains": "frames = muldiv(stream->period / 2, (int)hw.mSampleRate, 10000000);"
         }
       ]
+    },
+    {
+      "order": 160,
+      "path": "patches/runeon/0130-opengl32-es2-compat-calls-in-legacy-contexts.patch",
+      "sha256": "ae09f23f8f375893edcf761bb7361d2941de0bfa125efa410765e04f9aea3e50",
+      "kind": "runeon-product",
+      "status": "active",
+      "risk": "low",
+      "summary": "When GL_ARB_ES2_compatibility is not supported, as in the legacy 2.1 context macOS gives a context created without attributes, wglGetProcAddress() answers glClearDepthf and glDepthRangef through glClearDepth and glDepthRange, glGetShaderPrecisionFormat with desktop single precision floats and 32-bit integers, and glReleaseShaderCompiler and glShaderBinary as no-ops, instead of nothing. Windows drivers offer these calls in any context. The entries go into the driver's shared table like the existing alternatives, so a later 4.1 core context gets the same functions; there they are equivalent, and macOS lists no shader binary formats (GL_NUM_SHADER_BINARY_FORMATS 0 measured). Not opt-in: it only answers calls that returned nothing.",
+      "testStrategy": "Static and integration checks prove the patch applies and the anchors are present once. A complete i386/x86_64 WoW64 build must compile it. tests/gl-es2-compat-probe.c, built for x86 and x64, requires all five calls in a wglCreateContext() context, checks that glClearDepthf and glDepthRangef take effect and that high float precision is single precision, and reports GL_NUM_SHADER_BINARY_FORMATS in a 4.1 core context; on the unpatched runtime all five are missing.",
+      "provenance": {
+        "repository": "https://github.com/gauthierpiarrette/highball-engine",
+        "commit": "15ab7f975db540d82104dade2d55c2ffd135e10b",
+        "author": "Gauthier Piarrette",
+        "note": "Adapted downstream fix (patch 0021), code unchanged."
+      },
+      "verification": [
+        {
+          "path": "dlls/opengl32/unix_wgl.c",
+          "contains": "static void compat_glClearDepthf( GLfloat d )"
+        }
+      ]
     }
   ],
   "targetedReview": {
