@@ -2692,6 +2692,28 @@
           "contains": "Microsoft.VCLibs.140.00_14.0.29231.0_x64__8wekyb3d8bbwe"
         }
       ]
+    },
+    {
+      "order": 163,
+      "path": "patches/runeon/0133-mfmediaengine-events-off-engine-lock.patch",
+      "sha256": "d717cd7539ccedbaf47b6eee5ba5496006577b9c86901c091bc7ff9acb33829e",
+      "kind": "runeon-product",
+      "status": "active",
+      "risk": "medium",
+      "summary": "The media engine delivers IMFMediaEngineNotify::EventNotify() calls from one dispatcher work item on the multithreaded queue, in order and with no engine lock held, instead of calling it with engine->cs held on the caller's or the session's thread. An application whose callback takes its own lock while another of its threads holds that lock and calls an engine method no longer deadlocks. Shutdown() waits up to 10 s for queued events after the session's shutdown, outside engine->cs; events raised after Shutdown() are dropped. Not opt-in: Windows delivers these events asynchronously, and the order of events is unchanged.",
+      "testStrategy": "Static and integration checks prove the patch applies and the anchors are present once. A complete i386/x86_64 WoW64 build must compile it. tests/mfmediaengine-deadlock-probe.c (from highball-engine), built for x86 and x64, holds an application lock while a callback on another thread waits for it and has a helper call GetCurrentTime(); the unpatched runtime reports DEADLOCK in both architectures, the patched one must report OK.",
+      "provenance": {
+        "repository": "https://github.com/gauthierpiarrette/highball-engine",
+        "commit": "34c5f770862674c03e8cb3af5b223d3e7ae81aba",
+        "author": "Gauthier Piarrette",
+        "note": "Adapted downstream fix (arm64 patch 0040, against Wine 11.18); the two session events 11.18 raises after a scrubbing check are raised unconditionally, as in the 11.0 code."
+      },
+      "verification": [
+        {
+          "path": "dlls/mfmediaengine/main.c",
+          "contains": "static void media_engine_notify(struct media_engine *engine, DWORD event, DWORD_PTR param1, DWORD param2)"
+        }
+      ]
     }
   ],
   "targetedReview": {
