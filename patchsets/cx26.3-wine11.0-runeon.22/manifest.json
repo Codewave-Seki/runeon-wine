@@ -2704,22 +2704,26 @@
     {
       "order": 163,
       "path": "patches/runeon/0133-mfmediaengine-events-off-engine-lock.patch",
-      "sha256": "c0613474119b8ec1de1fe788a9caeba6a98edd0b9a130c93d638396be43dfb7b",
+      "sha256": "1644867c30738a8b2881e20bec072cb963596f3e869ee3608b9fbcbcd6bfddc1",
       "kind": "runeon-product",
       "status": "active",
       "risk": "medium",
-      "summary": "The media engine queues IMFMediaEngineNotify::EventNotify() calls and delivers them in order from one dispatcher work item on the multithreaded queue with no engine lock held, instead of calling it with engine->cs held on the caller's or the session's thread, so an application callback that takes its own lock no longer deadlocks against a thread holding that lock and calling an engine method. After Shutdown() sets the shut-down flag, events are neither queued nor delivered and Shutdown() waits only for the callback in progress, at most 10 s, outside engine->cs. Limits: if that callback waits for a lock the Shutdown() caller holds, Shutdown() returns after 10 s; events queued but undelivered at Shutdown() are dropped (not measured on Windows); the flag is read without a lock, so one event can race it; events queued before a new source can arrive after MF_MEDIA_ENGINE_EVENT_PURGEQUEUEDEVENTS. Not opt-in: Windows delivers these events asynchronously, and the order of events is unchanged.",
-      "testStrategy": "Static and integration checks prove the patch applies and the anchors are present once. A complete i386/x86_64 WoW64 build must compile it. tests/mfmediaengine-deadlock-probe.c, built for x86 and x64, holds an application lock while the first event on another thread waits for it and has a helper call GetCurrentTime(); the unpatched runtime reports DEADLOCK in both architectures, the patched one must report OK. Wine's own dlls/mfmediaengine/tests are run against the candidate build where a test-enabled build is available.",
+      "summary": "The media engine queues each IMFMediaEngineNotify::EventNotify() call with the thread that raised it, and each thread delivers its own events in order as soon as it no longer holds engine->cs: at the end of the call that raised them, or at once outside the lock. Before, the callback ran with engine->cs held, so an application callback that takes its own lock deadlocked against a thread holding that lock and calling an engine method. Delivery stays on the raising thread and before the call returns, as Windows does for SEEKING and TIMEUPDATE in SetCurrentTime() according to Wine's own tests. After Shutdown() events are neither queued nor delivered. Limits: an event raised inside a callback on the same thread is delivered before the rest of the outer call's events; events still queued when the engine is destroyed are freed undelivered. Not opt-in: the callback keeps its thread and timing and only stops running under the engine lock.",
+      "testStrategy": "Static and integration checks prove the patch applies and the anchors are present once. A complete i386/x86_64 WoW64 build must compile it. tests/mfmediaengine-deadlock-probe.c, built for x86 and x64, holds an application lock while the first event on another thread waits for it and has a helper call GetCurrentTime(); the unpatched runtime reports DEADLOCK in both architectures, the patched one OK. Wine's own dlls/mfmediaengine/tests (474 tests, built from the pinned tree) must give the same result as on the unpatched runtime, 0 failures in both architectures; a work-queue design failed 5 of them (SEEKING not delivered during SetCurrentTime()), so they are run on every candidate.",
       "provenance": {
         "repository": "https://github.com/gauthierpiarrette/highball-engine",
         "commit": "34c5f770862674c03e8cb3af5b223d3e7ae81aba",
-        "author": "Gauthier Piarrette",
-        "note": "Adapted downstream fix (arm64 patch 0040, against Wine 11.18); the two session events 11.18 raises after a scrubbing check are raised unconditionally, as in the 11.0 code."
+        "author": "Runeon Contributors",
+        "note": "The deadlock was reported by highball-engine arm64 patch 0040; this is a different implementation, because 0040's work-queue delivery fails Wine's own SetCurrentTime() tests. No code from 0040 is carried."
       },
       "verification": [
         {
           "path": "dlls/mfmediaengine/main.c",
-          "contains": "static void media_engine_notify(struct media_engine *engine, DWORD event, DWORD_PTR param1, DWORD param2)"
+          "contains": "static void media_engine_deliver_events(struct media_engine *engine)"
+        },
+        {
+          "path": "dlls/mfmediaengine/main.c",
+          "contains": "    if (engine->cs.OwningThread == ULongToHandle(thread))"
         }
       ]
     }
