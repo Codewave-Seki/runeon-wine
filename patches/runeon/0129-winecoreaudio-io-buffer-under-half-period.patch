@@ -10,8 +10,8 @@ at once, 512 frames by default, which at 48 kHz is 10.7 ms: longer
 than the 10 ms period a shared-mode client is woken for, and longer
 than the Windows audio engine's own processing period. A client that
 keeps about one period queued then has too little at most pulls, and
-the rest of each pull is played as silence. Measured on an M4 at
-48 kHz: Counter-Strike 2's menu music dropped out 324 times in two
+the rest of each pull is played as silence. As highball-engine
+measured on an M4 at 48 kHz: Counter-Strike 2's menu music dropped out 324 times in two
 minutes, and not at all at 96 kHz, where the same 512 frames last
 5.3 ms, or with this change.
 
@@ -19,6 +19,18 @@ Before initializing a render stream's unit, lower its I/O buffer to
 half the stream period at the device rate when it is larger. The
 property is per process, so other applications keep theirs; failure
 to read or set it leaves the buffer as it was.
+
+Limits: the buffer belongs to the device, so a capture stream of the
+same process on a device that also renders gets the smaller buffer
+too; several render streams with different periods leave the last
+one's value; half a period doubles the callback rate (240 frames at
+48 kHz) and is a measured choice, not a value Windows defines.
+
+WineHQ 11.16 (07c7fcc86f, 8e09602ca6, da0b08472b, Zhiyi Zhang) sets
+the device buffer to the whole period instead, and fails stream
+creation when that fails; that series is not carried here because of
+those failure and device-change risks. A later backport of it
+replaces this patch rather than stacking on it.
 
 diff --git a/dlls/winecoreaudio.drv/coreaudio.c b/dlls/winecoreaudio.drv/coreaudio.c
 index c2bb765..ae46806 100644

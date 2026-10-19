@@ -3,7 +3,8 @@ Subject: [PATCH] mmdevapi: Put spatial audio static objects in WAVEFORMATEXTENSI
 
 Adapted for CrossOver 26.3 from gauthierpiarrette/highball-engine
 commit 74d393b73c15c8240d4ff4c75fcb182ecc9c217c (patch 0022), code
-unchanged. A downstream fix; WineHQ master has the same code.
+unchanged. A downstream fix; WineHQ still has the old mapping as of
+wine-11.20.
 
 static_mask_to_channels() gave the static objects channels in the
 order of the AudioObjectType list (front, centre, LFE, side, back, top,

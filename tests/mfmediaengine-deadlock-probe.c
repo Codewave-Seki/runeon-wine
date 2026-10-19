@@ -1,187 +1,174 @@
-/* LGPL-2.1-or-later. From gauthierpiarrette/highball-engine
- * tests/mfmediaengine/mfdeadlock.c (commit 34c5f770862674c03e8cb3af5b223d3e7ae81aba,
- * Gauthier Piarrette), unchanged below this header. Checks 0133.
- * Exit 0 OK, 1 DEADLOCK, 2 INCONCLUSIVE (no cross-thread event within 15 s). */
-/* mfdeadlock.c (2026-10-16): does IMFMediaEngine hold its own lock while it calls the application's
- * IMFMediaEngineNotify::EventNotify?  Wine 11.18's mfmediaengine does (engine->cs around every EventNotify, on the
- * caller's thread in Play/Pause/SetSource/... and on the MF work-queue thread for session events).  An application
- * whose callback takes a lock of its own, while another of its threads holds that lock and calls any engine method,
- * then deadlocks: the shape of the MSFS 2024 freeze at the intro video (boot61 b-190445, three threads in
- * RtlpWaitForCriticalSection, one of the sections unnamed and heap-allocated like the engine's).
+/* LGPL-2.1-or-later. Checks that the media engine does not hold a lock of its
+ * own while it calls IMFMediaEngineNotify::EventNotify() (0133).
  *
- * The test: the main thread holds lock R and sets the source; the first EventNotify that arrives on another thread
- * signals and then takes R (blocking while main holds it); main then has a helper thread call GetCurrentTime.  If the
- * engine holds its lock around the callback, the helper never returns while main holds R: DEADLOCK (exit 1).  If the
- * helper returns within 5 s: OK (exit 0).  No cross-thread event within 15 s: INCONCLUSIVE (exit 2).  Audio-only
- * engine, a 1 s silent WAV written next to the exe.
- *
- *   x86_64-w64-mingw32-clang -O1 mfdeadlock.c -o mfdeadlock.exe -lole32 -loleaut32 -lmfplat -lmf -lmfuuid -luuid
- */
+ * The main thread takes an application lock and sets the source of an audio-only
+ * engine (a one-second silent WAV written to the temporary directory). The first
+ * event that arrives on another thread signals the main thread and then waits for
+ * the application lock. The main thread then has a helper thread call
+ * GetCurrentTime(). If the engine holds its lock around the callback, the helper
+ * cannot return while the main thread holds the application lock: DEADLOCK, exit
+ * 1. If the helper returns within 5 s: OK, exit 0. If no event arrives on another
+ * thread within 15 s the result is INCONCLUSIVE, exit 2. The lock is released at
+ * the end in every case. Build with -lole32 -lmfplat -lmfuuid -luuid. */
 #define COBJMACROS
-#define INITGUID
 #include <windows.h>
 #include <initguid.h>
 #include <mfapi.h>
-#include <mfidl.h>
-#include <mferror.h>
 #include <mfmediaengine.h>
 #include <stdio.h>
-#include <string.h>
 
-static CRITICAL_SECTION R;
-static HANDLE incb, cbdone, getdone;
-static LONG armed = 1;
-static DWORD main_tid;
+static CRITICAL_SECTION app_lock;
+static HANDLE callback_waiting, helper_done;
+static DWORD main_thread;
+static LONG first_foreign = 1;
 static IMFMediaEngine *engine;
-
-struct notify { IMFMediaEngineNotify IMFMediaEngineNotify_iface; LONG ref; };
 
 static HRESULT WINAPI notify_QueryInterface(IMFMediaEngineNotify *iface, REFIID riid, void **out)
 {
-    if (IsEqualIID(riid, &IID_IUnknown) || IsEqualIID(riid, &IID_IMFMediaEngineNotify))
+    if (IsEqualIID(riid, &IID_IMFMediaEngineNotify) || IsEqualIID(riid, &IID_IUnknown))
     {
         *out = iface;
-        IMFMediaEngineNotify_AddRef(iface);
         return S_OK;
     }
     *out = NULL;
     return E_NOINTERFACE;
 }
-static ULONG WINAPI notify_AddRef(IMFMediaEngineNotify *iface)
+
+static ULONG WINAPI notify_AddRef(IMFMediaEngineNotify *iface) { return 2; }
+static ULONG WINAPI notify_Release(IMFMediaEngineNotify *iface) { return 1; }
+
+static HRESULT WINAPI notify_EventNotify(IMFMediaEngineNotify *iface, DWORD event, DWORD_PTR param1, DWORD param2)
 {
-    struct notify *n = CONTAINING_RECORD(iface, struct notify, IMFMediaEngineNotify_iface);
-    return InterlockedIncrement(&n->ref);
-}
-static ULONG WINAPI notify_Release(IMFMediaEngineNotify *iface)
-{
-    struct notify *n = CONTAINING_RECORD(iface, struct notify, IMFMediaEngineNotify_iface);
-    return InterlockedDecrement(&n->ref);
-}
-static HRESULT WINAPI notify_EventNotify(IMFMediaEngineNotify *iface, DWORD event, DWORD_PTR p1, DWORD p2)
-{
-    DWORD tid = GetCurrentThreadId();
-    printf("  event %lu (%Iu, %lu) on thread %lu%s\n", (unsigned long)event, (size_t)p1, (unsigned long)p2,
-           (unsigned long)tid, tid == main_tid ? " (main)" : "");
-    fflush(stdout);
-    if (tid != main_tid && InterlockedExchange(&armed, 0))
+    if (GetCurrentThreadId() != main_thread && InterlockedExchange(&first_foreign, 0))
     {
-        printf("  callback on thread %lu takes the application lock R...\n", (unsigned long)tid); fflush(stdout);
-        SetEvent(incb);
-        EnterCriticalSection(&R);
-        LeaveCriticalSection(&R);
-        printf("  callback got R and released it\n"); fflush(stdout);
-        SetEvent(cbdone);
+        printf("event %lu on thread %lu waits for the application lock\n", event, GetCurrentThreadId());
+        SetEvent(callback_waiting);
+        EnterCriticalSection(&app_lock);
+        LeaveCriticalSection(&app_lock);
     }
     return S_OK;
 }
-static const IMFMediaEngineNotifyVtbl notify_vtbl = { notify_QueryInterface, notify_AddRef, notify_Release, notify_EventNotify };
 
-static DWORD WINAPI getter(void *arg)
+static IMFMediaEngineNotifyVtbl notify_vtbl =
 {
-    double t = IMFMediaEngine_GetCurrentTime(engine);
-    printf("  helper: GetCurrentTime returned %f\n", t); fflush(stdout);
-    SetEvent(getdone);
+    notify_QueryInterface, notify_AddRef, notify_Release, notify_EventNotify,
+};
+static IMFMediaEngineNotify notify = { &notify_vtbl };
+
+static DWORD WINAPI helper(void *arg)
+{
+    double time = IMFMediaEngine_GetCurrentTime(engine);
+    (void)arg;
+    printf("helper: GetCurrentTime returned %f\n", time);
+    SetEvent(helper_done);
     return 0;
 }
 
-static int write_wav(const WCHAR *path)
+static BOOL write_silent_wav(const WCHAR *path)
 {
-    const int rate = 8000, seconds = 1;
-    DWORD datalen = rate * seconds * 2, n;
-    BYTE hdr[44] = "RIFF....WAVEfmt ";
-    HANDLE f;
-    DWORD v;
-    v = 36 + datalen; memcpy(hdr + 4, &v, 4);
-    v = 16; memcpy(hdr + 16, &v, 4);                 /* fmt chunk size */
-    hdr[20] = 1; hdr[21] = 0;                        /* PCM */
-    hdr[22] = 1; hdr[23] = 0;                        /* mono */
-    v = rate; memcpy(hdr + 24, &v, 4);
-    v = rate * 2; memcpy(hdr + 28, &v, 4);
-    hdr[32] = 2; hdr[33] = 0; hdr[34] = 16; hdr[35] = 0;
-    memcpy(hdr + 36, "data", 4); memcpy(hdr + 40, &datalen, 4);
-    f = CreateFileW(path, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, 0, NULL);
-    if (f == INVALID_HANDLE_VALUE) return 0;
-    WriteFile(f, hdr, 44, &n, NULL);
-    {
-        BYTE *z = calloc(datalen, 1);
-        WriteFile(f, z, datalen, &n, NULL);
-        free(z);
-    }
-    CloseHandle(f);
-    return 1;
+    static const DWORD rate = 8000, seconds = 1;
+    DWORD data = rate * seconds * 2, written;
+    BYTE header[44] = {'R','I','F','F'};
+    BYTE *samples;
+    HANDLE file;
+    BOOL ok;
+
+    *(DWORD *)(header + 4) = 36 + data;
+    memcpy(header + 8, "WAVEfmt ", 8);
+    *(DWORD *)(header + 16) = 16;
+    *(WORD *)(header + 20) = 1;           /* PCM */
+    *(WORD *)(header + 22) = 1;           /* mono */
+    *(DWORD *)(header + 24) = rate;
+    *(DWORD *)(header + 28) = rate * 2;
+    *(WORD *)(header + 32) = 2;
+    *(WORD *)(header + 34) = 16;
+    memcpy(header + 36, "data", 4);
+    *(DWORD *)(header + 40) = data;
+    if (!(samples = calloc(1, data))) return FALSE;
+    file = CreateFileW(path, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, 0, NULL);
+    ok = file != INVALID_HANDLE_VALUE && WriteFile(file, header, sizeof(header), &written, NULL)
+         && WriteFile(file, samples, data, &written, NULL);
+    if (file != INVALID_HANDLE_VALUE) CloseHandle(file);
+    free(samples);
+    return ok;
 }
 
 int main(void)
 {
     IMFMediaEngineClassFactory *factory = NULL;
-    IMFAttributes *attr = NULL;
-    struct notify n = { { &notify_vtbl }, 1 };
-    WCHAR wav[MAX_PATH], full[MAX_PATH];
-    BSTR src;
+    IMFAttributes *attributes = NULL;
+    WCHAR path[MAX_PATH];
+    BSTR url;
+    HANDLE thread;
     HRESULT hr;
-    HANDLE t;
-    int rc;
+    int result;
 
-    main_tid = GetCurrentThreadId();
-    InitializeCriticalSection(&R);
-    incb = CreateEventW(NULL, TRUE, FALSE, NULL);
-    cbdone = CreateEventW(NULL, TRUE, FALSE, NULL);
-    getdone = CreateEventW(NULL, TRUE, FALSE, NULL);
+    setvbuf(stdout, NULL, _IONBF, 0);
+    InitializeCriticalSection(&app_lock);
+    callback_waiting = CreateEventW(NULL, TRUE, FALSE, NULL);
+    helper_done = CreateEventW(NULL, TRUE, FALSE, NULL);
+    main_thread = GetCurrentThreadId();
 
-    GetTempPathW(MAX_PATH, wav); lstrcatW(wav, L"mfdeadlock.wav");
-    if (!write_wav(wav)) { printf("cannot write %ls\n", wav); return 3; }
-    GetFullPathNameW(wav, MAX_PATH, full, NULL);
+    GetTempPathW(MAX_PATH, path);
+    lstrcatW(path, L"runeon-mfengine-probe.wav");
+    if (!write_silent_wav(path))
+    {
+        printf("INCONCLUSIVE: cannot write %ls\n", path);
+        return 2;
+    }
 
-    hr = CoInitializeEx(NULL, COINIT_MULTITHREADED);
-    hr = MFStartup(MF_VERSION, MFSTARTUP_FULL);
-    if (FAILED(hr)) { printf("MFStartup %#lx\n", hr); return 3; }
-    hr = CoCreateInstance(&CLSID_MFMediaEngineClassFactory, NULL, CLSCTX_INPROC_SERVER, &IID_IMFMediaEngineClassFactory, (void **)&factory);
-    if (FAILED(hr)) { printf("MFMediaEngineClassFactory %#lx\n", hr); return 3; }
-    MFCreateAttributes(&attr, 2);
-    IMFAttributes_SetUnknown(attr, &MF_MEDIA_ENGINE_CALLBACK, (IUnknown *)&n.IMFMediaEngineNotify_iface);
-    hr = IMFMediaEngineClassFactory_CreateInstance(factory, MF_MEDIA_ENGINE_AUDIOONLY, attr, &engine);
-    if (FAILED(hr)) { printf("CreateInstance %#lx\n", hr); return 3; }
-    printf("engine created, main thread %lu, source %ls\n", (unsigned long)main_tid, full); fflush(stdout);
+    CoInitializeEx(NULL, COINIT_MULTITHREADED);
+    MFStartup(MF_VERSION, MFSTARTUP_FULL);
+    hr = CoCreateInstance(&CLSID_MFMediaEngineClassFactory, NULL, CLSCTX_INPROC_SERVER,
+                          &IID_IMFMediaEngineClassFactory, (void **)&factory);
+    if (SUCCEEDED(hr)) hr = MFCreateAttributes(&attributes, 1);
+    if (SUCCEEDED(hr)) hr = IMFAttributes_SetUnknown(attributes, &MF_MEDIA_ENGINE_CALLBACK, (IUnknown *)&notify);
+    if (SUCCEEDED(hr)) hr = IMFMediaEngineClassFactory_CreateInstance(factory, MF_MEDIA_ENGINE_AUDIOONLY,
+                                                                      attributes, &engine);
+    if (FAILED(hr))
+    {
+        printf("INCONCLUSIVE: cannot create the media engine, hr %#lx\n", hr);
+        return 2;
+    }
 
-    src = SysAllocString(full);
-    EnterCriticalSection(&R);
-    printf("main holds R and sets the source\n"); fflush(stdout);
-    hr = IMFMediaEngine_SetSource(engine, src);
-    printf("SetSource %#lx\n", hr); fflush(stdout);
-    if (WaitForSingleObject(incb, 15000) != WAIT_OBJECT_0)
+    EnterCriticalSection(&app_lock);
+    url = SysAllocString(path);
+    hr = IMFMediaEngine_SetSource(engine, url);
+    printf("main holds the application lock; SetSource hr %#lx\n", hr);
+
+    if (WaitForSingleObject(callback_waiting, 15000))
     {
         printf("INCONCLUSIVE: no event on another thread within 15 s\n");
-        LeaveCriticalSection(&R);
-        rc = 2;
+        result = 2;
     }
     else
     {
-        printf("main: the callback thread is waiting for R; helper calls GetCurrentTime\n"); fflush(stdout);
-        t = CreateThread(NULL, 0, getter, NULL, 0, NULL);
-        if (WaitForSingleObject(getdone, 5000) == WAIT_OBJECT_0)
+        thread = CreateThread(NULL, 0, helper, NULL, 0, NULL);
+        if (WaitForSingleObject(helper_done, 5000))
         {
-            printf("OK: an engine call does not wait for the application's callback\n");
-            rc = 0;
+            printf("DEADLOCK: GetCurrentTime waits while the callback waits for the application lock\n");
+            result = 1;
         }
         else
         {
-            printf("DEADLOCK: GetCurrentTime is blocked while the callback thread waits for R (the engine holds its lock around EventNotify)\n");
-            rc = 1;
+            printf("OK: an engine call does not wait for the application's callback\n");
+            result = 0;
         }
-        fflush(stdout);
-        LeaveCriticalSection(&R);
-        WaitForSingleObject(cbdone, 5000);
-        WaitForSingleObject(t, 5000);
-        CloseHandle(t);
+        LeaveCriticalSection(&app_lock);
+        WaitForSingleObject(thread, 10000);
+        CloseHandle(thread);
+        goto shutdown;
     }
+    LeaveCriticalSection(&app_lock);
+
+shutdown:
     IMFMediaEngine_Shutdown(engine);
     IMFMediaEngine_Release(engine);
-    IMFAttributes_Release(attr);
+    IMFAttributes_Release(attributes);
     IMFMediaEngineClassFactory_Release(factory);
-    SysFreeString(src);
+    SysFreeString(url);
     MFShutdown();
-    CoUninitialize();
-    DeleteFileW(wav);
-    printf("exit %d\n", rc);
-    return rc;
+    DeleteFileW(path);
+    printf("exit %d\n", result);
+    return result;
 }

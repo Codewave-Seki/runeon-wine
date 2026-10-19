@@ -16,6 +16,12 @@ next to the path the loader was started through, which
 _NSGetExecutablePath() reports with the symlink intact. Any other
 layout, and a failed lookup, takes the existing path unchanged.
 
+Limit: with WINEDLLPATH set and no preloader, CrossOver Hack 22144
+starts child processes through a hard link to the loader in a
+temporary directory; link() follows the symlink, so such children run
+the bundle's executable from outside the bundle and work, but get
+neither Game Mode nor the 0127 name.
+
 diff --git a/loader/main.c b/loader/main.c
 index d3fcd20..827e070 100644
 --- a/loader/main.c

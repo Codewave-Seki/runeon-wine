@@ -17,12 +17,15 @@ RssAnon + VmSwap; the macOS counterpart is the task's phys_footprint
 shows. A program that budgets memory from this figure, or warns about
 low memory from it, now sees memory it is actually charged for.
 
-The peak follows the current value, as in the Linux branch.
-VirtualSize and the working set are unchanged. When TASK_VM_INFO is
-unavailable or the query fails, the old values stay.
+PeakPagefileUsage is the kernel's footprint high-water mark
+(ledger_phys_footprint_peak, TASK_VM_INFO rev3) and at least the
+current value; with an older answer it is the current value, as in the
+Linux branch. VirtualSize and the working set are unchanged. When
+TASK_VM_INFO is unavailable, the query fails or the answer predates
+phys_footprint (rev1), the old values stay.
 
 diff --git a/dlls/ntdll/unix/process.c b/dlls/ntdll/unix/process.c
-index 1f550a6..efc80a4 100644
+index 1f550a60..c36891f4 100644
 --- a/dlls/ntdll/unix/process.c
 +++ b/dlls/ntdll/unix/process.c
 @@ -1485,6 +1485,9 @@ void fill_vm_counters( VM_COUNTERS_EX *pvmi, int unix_pid )
@@ -35,7 +38,7 @@ index 1f550a6..efc80a4 100644
  
      if (unix_pid != -1) return; /* FIXME: Retrieve information for other processes. */
  
-@@ -1496,6 +1499,17 @@ void fill_vm_counters( VM_COUNTERS_EX *pvmi, int unix_pid )
+@@ -1496,6 +1499,22 @@ void fill_vm_counters( VM_COUNTERS_EX *pvmi, int unix_pid )
          pvmi->WorkingSetSize = info.resident_size;
          pvmi->PeakWorkingSetSize = info.resident_size_max;
      }
@@ -44,10 +47,15 @@ index 1f550a6..efc80a4 100644
 +     * is what the kernel charges the task (dirty and compressed pages), the counterpart of the
 +     * RssAnon + VmSwap sum used on Linux. */
 +    infoCount = TASK_VM_INFO_COUNT;
-+    if (task_info( mach_task_self(), TASK_VM_INFO, (task_info_t)&vm_info, &infoCount ) == KERN_SUCCESS)
++    if (task_info( mach_task_self(), TASK_VM_INFO, (task_info_t)&vm_info, &infoCount ) == KERN_SUCCESS &&
++        infoCount >= TASK_VM_INFO_REV1_COUNT)
 +    {
 +        pvmi->PagefileUsage = vm_info.phys_footprint;
 +        pvmi->PeakPagefileUsage = pvmi->PagefileUsage;
++        /* The kernel keeps the footprint's high-water mark from rev3 on. */
++        if (infoCount >= TASK_VM_INFO_REV3_COUNT && vm_info.ledger_phys_footprint_peak > 0 &&
++            (ULONG64)vm_info.ledger_phys_footprint_peak > pvmi->PeakPagefileUsage)
++            pvmi->PeakPagefileUsage = vm_info.ledger_phys_footprint_peak;
 +    }
 +#endif
  #endif

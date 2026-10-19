@@ -3,9 +3,14 @@ Subject: [PATCH] kernelbase: Answer app package lookups from the registry.
 
 Adapted for CrossOver 26.3 from gauthierpiarrette/highball-engine
 commit e13247c012c6d71fb705406d31b714bfea714cfc (patch 0024), which
-takes GetPackagesByPackageFamily(), GetPackagePath() and
-PackageFullNameFromId() and the wine.inf entries from Proton
-(ValveSoftware/wine, Paul Gofman). A downstream port; WineHQ has
+takes these from Proton (ValveSoftware/wine, Paul Gofman):
+GetPackagesByPackageFamily() 7b4037421ea8c407837548f0f9a1b5ca5e2b1226,
+GetPackagePath() 8089c27dae7b4f47893cf2b29d6e8bbf7b1555db,
+PackageFullNameFromId() c18ebc392d1eb3f18f8b44034d088678841112b8 and
+the wine.inf package repository 09fbb2c010216c304c2e8cf2b145d43002c4b082.
+Changed here: PackageFullNameFromId() accepts a NULL resource id as
+WineHQ's ef6c413c68 does, the missing-key message is a warning, and
+two messages gain their newline. A downstream port; WineHQ has
 PackageFullNameFromId() since 11.18 (ef6c413c68) and still stubs the
 other two.
 
@@ -21,7 +26,7 @@ for each architecture, pointing at system32 (syswow64 for WoW64), as
 Proton does; the entries do not replace existing values.
 
 diff --git a/dlls/kernel32/kernel32.spec b/dlls/kernel32/kernel32.spec
-index 8aafa04..cbbb506 100644
+index 8aafa044..cbbb5062 100644
 --- a/dlls/kernel32/kernel32.spec
 +++ b/dlls/kernel32/kernel32.spec
 @@ -784,6 +784,7 @@
@@ -41,7 +46,7 @@ index 8aafa04..cbbb506 100644
  @ stdcall PowerClearRequest(long long)
  @ stdcall PowerCreateRequest(ptr)
 diff --git a/dlls/kernelbase/kernelbase.spec b/dlls/kernelbase/kernelbase.spec
-index f55b8d6..71a5c4d 100644
+index f55b8d63..71a5c4d9 100644
 --- a/dlls/kernelbase/kernelbase.spec
 +++ b/dlls/kernelbase/kernelbase.spec
 @@ -637,7 +637,7 @@
@@ -63,7 +68,7 @@ index f55b8d6..71a5c4d 100644
  @ stdcall PackageIdFromFullName(wstr long ptr ptr)
  # @ stub PackageIdFromProductId
 diff --git a/dlls/kernelbase/version.c b/dlls/kernelbase/version.c
-index 495325b..7252bb5 100644
+index 495325ba..684db843 100644
 --- a/dlls/kernelbase/version.c
 +++ b/dlls/kernelbase/version.c
 @@ -32,6 +32,7 @@
@@ -85,7 +90,7 @@ index 495325b..7252bb5 100644
  typedef struct
  {
      WORD offset;
-@@ -1647,17 +1652,111 @@ LONG WINAPI /* DECLSPEC_HOTPATCH */ GetPackageFamilyName( HANDLE process, UINT32
+@@ -1647,17 +1652,112 @@ LONG WINAPI /* DECLSPEC_HOTPATCH */ GetPackageFamilyName( HANDLE process, UINT32
  /***********************************************************************
   *         GetPackagesByPackageFamily   (kernelbase.@)
   */
@@ -126,7 +131,8 @@ index 495325b..7252bb5 100644
 +
 +    if (RegOpenKeyExW(HKEY_LOCAL_MACHINE, packages_key_name, 0, KEY_READ, &key))
 +    {
-+        ERR("Key open failed.\n");
++        /* A prefix made before wine.inf registered any package has no key. */
++        WARN("Key open failed.\n");
 +        *count = 0;
 +        *buffer_length = 0;
 +        return ERROR_SUCCESS;
@@ -204,7 +210,7 @@ index 495325b..7252bb5 100644
  }
  
  /***********************************************************************
-@@ -1698,6 +1797,16 @@ static UINT32 processor_arch_from_string(const WCHAR *str, unsigned int len)
+@@ -1698,6 +1798,16 @@ static UINT32 processor_arch_from_string(const WCHAR *str, unsigned int len)
      return ~0u;
  }
  
@@ -221,7 +227,7 @@ index 495325b..7252bb5 100644
  /***********************************************************************
   *         PackageIdFromFullName   (kernelbase.@)
   */
-@@ -1786,3 +1895,116 @@ LONG WINAPI PackageIdFromFullName(const WCHAR *full_name, UINT32 flags, UINT32 *
+@@ -1786,3 +1896,118 @@ LONG WINAPI PackageIdFromFullName(const WCHAR *full_name, UINT32 flags, UINT32 *
  
      return ERROR_SUCCESS;
  }
@@ -232,7 +238,7 @@ index 495325b..7252bb5 100644
 +LONG WINAPI PackageFullNameFromId(const PACKAGE_ID *package_id, UINT32 *length, WCHAR *full_name)
 +{
 +    WCHAR ver_str[5 * 4 + 3 + 1];
-+    const WCHAR *arch_str;
++    const WCHAR *arch_str, *resource_id;
 +    UINT32 have_length;
 +
 +    TRACE("package_id %p, length %p, full_name %p.\n", package_id, length, full_name);
@@ -241,20 +247,22 @@ index 495325b..7252bb5 100644
 +        return ERROR_INVALID_PARAMETER;
 +    if (!full_name && *length)
 +        return ERROR_INVALID_PARAMETER;
-+    if (!package_id->name || !package_id->resourceId || !package_id->publisherId
++    if (!package_id->name || !package_id->publisherId
 +            || !(arch_str = string_from_processor_arch(package_id->processorArchitecture)))
 +        return ERROR_INVALID_PARAMETER;
++    /* Most packages have no resource id; NULL is accepted, as in WineHQ's ef6c413c68. */
++    resource_id = package_id->resourceId ? package_id->resourceId : L"";
 +
 +    swprintf(ver_str, ARRAY_SIZE(ver_str), L"%u.%u.%u.%u", package_id->version.Major,
 +            package_id->version.Minor, package_id->version.Build, package_id->version.Revision);
 +    have_length = *length;
 +    *length = lstrlenW(package_id->name) + 1 + lstrlenW(ver_str) + 1 + lstrlenW(arch_str) + 1
-+            + lstrlenW(package_id->resourceId) + 1 + lstrlenW(package_id->publisherId) + 1;
++            + lstrlenW(resource_id) + 1 + lstrlenW(package_id->publisherId) + 1;
 +
 +    if (have_length < *length)
 +        return ERROR_INSUFFICIENT_BUFFER;
 +
-+    swprintf(full_name, *length, L"%s_%s_%s_%s_%s", package_id->name, ver_str, arch_str, package_id->resourceId, package_id->publisherId);
++    swprintf(full_name, *length, L"%s_%s_%s_%s_%s", package_id->name, ver_str, arch_str, resource_id, package_id->publisherId);
 +    return ERROR_SUCCESS;
 +}
 +
@@ -284,7 +292,7 @@ index 495325b..7252bb5 100644
 +    offset = lstrlenW(packages_key_name) + 1;
 +    if (!(key_name = HeapAlloc(GetProcessHeap(), 0, (offset + required_length) * sizeof(WCHAR))))
 +    {
-+        ERR("No memory.");
++        ERR("No memory.\n");
 +        return ERROR_OUTOFMEMORY;
 +    }
 +
@@ -308,7 +316,7 @@ index 495325b..7252bb5 100644
 +    }
 +    if (!(expanded_path = HeapAlloc(GetProcessHeap(), 0, size)))
 +    {
-+        ERR("No memory.");
++        ERR("No memory.\n");
 +        ret = ERROR_OUTOFMEMORY;
 +        goto done;
 +    }
@@ -339,7 +347,7 @@ index 495325b..7252bb5 100644
 +    return ret;
 +}
 diff --git a/loader/wine.inf.in b/loader/wine.inf.in
-index 942a2cf..10ded28 100644
+index 942a2cf1..10ded289 100644
 --- a/loader/wine.inf.in
 +++ b/loader/wine.inf.in
 @@ -82,6 +82,7 @@ AddReg=\

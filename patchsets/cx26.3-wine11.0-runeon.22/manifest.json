@@ -2506,12 +2506,12 @@
     {
       "order": 154,
       "path": "patches/runeon/0124-ntdll-macos-commit-charge-footprint.patch",
-      "sha256": "53e1fc7e21a5e6997a5301bffac86bbb042830dddd5d6ee7bc727c040722614b",
+      "sha256": "0ef4c961b5bf16326b1eb55018205d5f499a6cbc5cfd985d204a131294e315bb",
       "kind": "runeon-product",
       "status": "active",
       "risk": "low",
-      "summary": "On macOS, fill_vm_counters() reports the task's phys_footprint as PagefileUsage (and so PrivateUsage) and its peak, instead of the Mach virtual_size, which is address space: a 9 MB program under Rosetta read about 42 GB. This matches the private commit charge Windows reports and the RssAnon + VmSwap sum of the Linux branch. VirtualSize and the working set are unchanged; without TASK_VM_INFO or when the query fails the old values stay. Not opt-in: it corrects a counter Windows defines, and nothing else changes.",
-      "testStrategy": "Static and integration checks prove the patch applies and the anchors are present once. A complete i386/x86_64 WoW64 build must compile ntdll. tests/commit-charge-probe.c, built for x86 and x64 and linked with ntdll, reads PagefileUsage from GetProcessMemoryInfo() and PrivateUsage from ProcessVmCounters before and after committing and touching 256 MB, and requires both to grow by at least 200 MB, the 64-bit values of a small process to stay below 4 GB, and the peak not to be below the current value; the old counters fail all of them (about 42 GB that does not grow, and a zero peak).",
+      "summary": "On macOS, fill_vm_counters() reports the task's phys_footprint as PagefileUsage (and so PrivateUsage) instead of the Mach virtual_size, which is address space: a 9 MB program under Rosetta read about 42 GB. PeakPagefileUsage is the kernel's footprint high-water mark (ledger_phys_footprint_peak, TASK_VM_INFO rev3) and at least the current value, or the current value with an older answer. This matches the private commit charge Windows reports and the RssAnon + VmSwap sum of the Linux branch; the footprint approximates it. VirtualSize and the working set are unchanged; without TASK_VM_INFO, on failure or with an answer older than rev1 the old values stay. Not opt-in: it corrects a counter Windows defines, and nothing else changes.",
+      "testStrategy": "Static and integration checks prove the patch applies and the anchors are present once. A complete i386/x86_64 WoW64 build must compile ntdll. tests/commit-charge-probe.c, built for x86 and x64 and linked with ntdll, reads PagefileUsage from GetProcessMemoryInfo() and PrivateUsage from ProcessVmCounters before and after committing and touching 256 MB and after releasing it, and requires both to grow by at least 200 MB, the 64-bit values of a small process to stay below 4 GB, PagefileUsage to fall again after the release and the peak to keep the growth; the old counters fail (about 42 GB that does not grow, and a zero peak).",
       "provenance": {
         "repository": "https://github.com/gauthierpiarrette/highball-engine",
         "commit": "500a0a7f1846900dfc576aebba3aa609420de846",
@@ -2522,13 +2522,17 @@
         {
           "path": "dlls/ntdll/unix/process.c",
           "contains": "pvmi->PagefileUsage = vm_info.phys_footprint;"
+        },
+        {
+          "path": "dlls/ntdll/unix/process.c",
+          "contains": "pvmi->PeakPagefileUsage = vm_info.ledger_phys_footprint_peak;"
         }
       ]
     },
     {
       "order": 155,
       "path": "patches/runeon/0125-advapi32-credenumerate-empty-host-store.patch",
-      "sha256": "86352d8e7b68310e495360fe72e74ef268cbacb70d958701cba66408c8c74e66",
+      "sha256": "1b39412fa55d0ff50a1164fe67949c415a63e7507ece0677475153ae4a173651",
       "kind": "runeon-product",
       "status": "active",
       "risk": "low",
@@ -2538,7 +2542,7 @@
         "repository": "https://github.com/gauthierpiarrette/highball-engine",
         "commit": "a2b10db8b86f4ed5f02855a41fa7c6ad4d3cbfb6",
         "author": "Gauthier Piarrette",
-        "note": "Adapted downstream fix (patch 0019), code unchanged; not a WineHQ release backport."
+        "note": "Adapted downstream fix (patch 0019), code unchanged; WineHQ still forgives only ERROR_NOT_SUPPORTED there as of wine-11.20."
       },
       "verification": [
         {
@@ -2550,11 +2554,11 @@
     {
       "order": 156,
       "path": "patches/runeon/0126-loader-ntdll-next-to-bundle-link.patch",
-      "sha256": "1c30ffc7dd49960f36f5d515e61d41f46e43ef520a0276b25b2985417f4d054a",
+      "sha256": "5f3feb2d2bb778092aa9026bfadb73622957f37aabb6263c01bbd936b6cf21d9",
       "kind": "runeon-product",
       "status": "active",
       "risk": "low",
-      "summary": "When the loader's resolved directory is an app bundle's Contents/MacOS, try_dlopen() first loads ntdll.so next to the path the loader was started through (the symlink _NSGetExecutablePath() reports), so a signed app bundle can hold the loader alone without a symlink pointing outside it. macOS assigns Game Mode and other game policies only to a process running from a bundle whose Info.plist declares LSApplicationCategoryType; a bare executable is never labelled. Any other layout, and a failed lookup, takes the unchanged path. Not opt-in through a value: the packaged layout is the switch, and without it behaviour is identical.",
+      "summary": "When the loader's resolved directory is an app bundle's Contents/MacOS, try_dlopen() first loads ntdll.so next to the path the loader was started through (the symlink _NSGetExecutablePath() reports), so a signed app bundle can hold the loader alone without a symlink pointing outside it. macOS assigns Game Mode and other game policies only to a process running from a bundle whose Info.plist declares LSApplicationCategoryType; a bare executable is never labelled. Any other layout, and a failed lookup, takes the unchanged path. Not opt-in through a value: the packaged layout is the switch, and without it behaviour is identical. Limit: with WINEDLLPATH set and no preloader, CrossOver Hack 22144 starts children through a hard link to the loader in a temporary directory, which run the bundle's executable from outside the bundle and get neither Game Mode nor the 0127 name; the product launcher clears WINEDLLPATH.",
       "testStrategy": "Static and integration checks prove the patch applies and the anchor is present once. A complete i386/x86_64 WoW64 build must compile the loader. A runtime packaged with lib/wine/x86_64-unix/WineLoader.app (Info.plist with LSApplicationCategoryType public.app-category.games) and x86_64-unix/wine as a symlink to its executable must start wineboot and a full-screen Win32 window, pass codesign --verify --strict on the bundle, and be labelled a game by gamepolicyd (labelReason=appStoreCategory, Game mode enabled once the window is frontmost and full screen). The unpacked layout must behave as before.",
       "verification": [
         {
@@ -2570,7 +2574,7 @@
       "kind": "runeon-product",
       "status": "active",
       "risk": "low",
-      "summary": "Before AppKit starts, winemac copies CFBundleName from the Info.plist embedded in the loader, which the loader rewrites after the program it starts (CrossOver Hack 13438), into the main bundle's info dictionary when the main bundle is an app bundle. With the 0126 layout macOS reads the bundle's Info.plist from disk, so without this every program would show the bundle's fixed name in the menu bar and in its Hide and Quit items. Without an app bundle, or when the embedded copy cannot be read, nothing changes.",
+      "summary": "Before AppKit starts, winemac copies CFBundleName from the Info.plist embedded in the loader, which the loader rewrites after the program it starts (CrossOver Hack 13438), into the main bundle's info dictionary when the main bundle is an app bundle. With the 0126 layout macOS reads the bundle's Info.plist from disk, so without this every program would show the bundle's fixed name in the menu bar and in its Hide and Quit items. Without an app bundle, or when the embedded copy cannot be read, nothing changes. It relies on the main bundle's info dictionary being mutable in practice, which macOS does not document; if that changes, the call would abort instead of failing.",
       "testStrategy": "Static and integration checks prove the patch applies and the anchor is present once. A complete build must compile winemac.so. Under the 0126 layout the name macOS registers for a Win32 program's process must be the program's name, not the bundle's CFBundleName; without the bundle it must stay as before. A standalone Cocoa check confirmed that renaming the main bundle's info dictionary before NSApplication starts changes the menu bar title and the registered application name.",
       "verification": [
         {
@@ -2582,7 +2586,7 @@
     {
       "order": 158,
       "path": "patches/runeon/0128-mmdevapi-spatial-static-object-order.patch",
-      "sha256": "085d79424bc6e92d93153f2c060c438056b5d01100ae98cc23945eb5ee9d174d",
+      "sha256": "0bfc4243d0a911d6a48ca9566dbf93649bc64e187575085cecde13d4e4d4d877",
       "kind": "runeon-product",
       "status": "active",
       "risk": "low",
@@ -2592,7 +2596,7 @@
         "repository": "https://github.com/gauthierpiarrette/highball-engine",
         "commit": "74d393b73c15c8240d4ff4c75fcb182ecc9c217c",
         "author": "Tx (TxCsOffc)",
-        "note": "Adapted downstream fix (patch 0022), code unchanged; WineHQ master has the same code."
+        "note": "Adapted downstream fix (patch 0022), code unchanged; WineHQ still has the old mapping as of wine-11.20."
       },
       "verification": [
         {
@@ -2604,12 +2608,12 @@
     {
       "order": 159,
       "path": "patches/runeon/0129-winecoreaudio-io-buffer-under-half-period.patch",
-      "sha256": "2fb930a9b56769bba5c0432a06fc7f1b4d45445dbdce808c9bcf2d6a8583414e",
+      "sha256": "f2a36c1d73b0190f88fdd4e0a6e29d77b16acd5b3c6a22c0cfe2656cf7fec6d6",
       "kind": "runeon-product",
       "status": "active",
       "risk": "medium",
-      "summary": "Before a render stream's audio unit is initialized, its HAL I/O buffer is lowered to half the stream period at the device rate when it is larger (512 frames, 10.7 ms at 48 kHz, by default). A shared-mode client that keeps about one 10 ms period queued otherwise had too little at most pulls and the rest was played as silence. The property is per process; failing to read or set it leaves the buffer as it was. Capture streams are unchanged. Not opt-in: it keeps the device pull within the period Windows' audio engine works in, and changes nothing else.",
-      "testStrategy": "Static and integration checks prove the patch applies and the anchors are present once. A complete i386/x86_64 WoW64 build must compile it. tests/coreaudio-io-buffer-probe.c, built for x86 and x64, starts a shared-mode render stream with the default period; under WINEDEBUG=trace+coreaudio the patched driver logs the lowered buffer and the old one does not. It does not measure dropouts; a listening check with real games is still required.",
+      "summary": "Before a render stream's audio unit is initialized, its HAL I/O buffer is lowered to half the stream period at the device rate when it is larger (512 frames, 10.7 ms at 48 kHz, by default; 240 frames after). A shared-mode client that keeps about one 10 ms period queued otherwise had too little at most pulls and the rest was played as silence. The value is a measured choice, not one Windows defines, and doubles the callback rate. The buffer is per process and per device, so the same process's capture stream on a device that also renders gets it too, and several render streams leave the last one's value; failing to read or set it leaves the buffer as it was. WineHQ 11.16 (07c7fcc86f, 8e09602ca6, da0b08472b) sets the whole period instead and fails stream creation on failure; that series is not carried, and a later backport of it replaces this patch. Not opt-in: it keeps the device pull within the 10 ms period shared-mode clients are woken for.",
+      "testStrategy": "Static and integration checks prove the patch applies and the anchors are present once. A complete i386/x86_64 WoW64 build must compile it. tests/coreaudio-io-buffer-probe.c, built for x86 and x64, starts a shared-mode render stream with the default period; under WINEDEBUG=trace+coreaudio the patched driver logs the lowered buffer (512 -> 240 frames at 48 kHz) and the old one does not. It does not measure dropouts; a listening check with real games is required before release.",
       "provenance": {
         "repository": "https://github.com/gauthierpiarrette/highball-engine",
         "commit": "c9b8b9735643603e9b10d8fbee069cc35ca552cd",
@@ -2648,29 +2652,33 @@
     {
       "order": 161,
       "path": "patches/runeon/0131-ntdll-macos-thread-times.patch",
-      "sha256": "8bf09a273d9e5b1df2b2b51a1ca675c1ee790f53e246c84cf3a30419131b33b5",
+      "sha256": "b83290cc03492ce1c9c367e355d79deb8459fb1e31e1007893ee35ae1b8098f5",
       "kind": "runeon-product",
       "status": "active",
       "risk": "low",
-      "summary": "On macOS, get_thread_times() reads a thread's kernel and user time with thread_info(THREAD_BASIC_INFO) on the Mach thread port the server recorded for it, for threads of the calling process. Before, it had no macOS body: ThreadTimes answered zero for other threads and the whole process's time for the current one. Another process's threads still fail as before. Not opt-in: it reports what Windows reports and changes nothing else.",
+      "summary": "On macOS, get_thread_times() reads a thread's kernel and user time with thread_info(THREAD_BASIC_INFO) on the Mach thread port the server recorded for it, for threads of the calling process; ThreadTimes no longer asks for the times of a thread that has an exit time, since its port name may name another thread by then. Before, macOS had no body: ThreadTimes answered zero for other threads and the whole process's time for the current one. Exited threads report zero, as before, where Windows reports their final times; another process's threads and the process-wide query without a thread still fail as before. Not opt-in: it reports what Windows reports for running threads and changes nothing else.",
       "testStrategy": "Static and integration checks prove the patch applies and the anchors are present once. A complete i386/x86_64 WoW64 build must compile it. tests/thread-times-probe.c, built for x86 and x64, spins a worker for 800 ms while the main thread sleeps and requires at least 500 ms for the worker and less than 300 ms for the main thread; the unpatched runtime reports 0 ms and 850 ms.",
       "provenance": {
         "repository": "https://github.com/gauthierpiarrette/highball-engine",
         "commit": "9dc1026e911b722369ed9903c060475c0421e59b",
         "author": "Gauthier Piarrette",
-        "note": "Adapted downstream fix (msfs-gsbase branch patch 0024), code unchanged."
+        "note": "Adapted downstream fix (msfs-gsbase branch patch 0024), with guards added for exited threads and a missing thread."
       },
       "verification": [
         {
           "path": "dlls/ntdll/unix/thread.c",
           "contains": "if (thread_info( (thread_act_t)unix_tid, THREAD_BASIC_INFO, (thread_info_t)&info, &count ) != KERN_SUCCESS)"
+        },
+        {
+          "path": "dlls/ntdll/unix/thread.c",
+          "contains": "if (unix_pid != -1 && unix_tid != -1 && !kusrt.ExitTime.QuadPart)"
         }
       ]
     },
     {
       "order": 162,
       "path": "patches/runeon/0132-kernelbase-app-packages-from-registry.patch",
-      "sha256": "671163c5659ddc49ac9d0420dd164b112c38390eb165a115980fd9642f75571a",
+      "sha256": "f32c80e67cc5f7c6c4e32434bfa781534d0e1e8d474c1d075744ae91b4d54b19",
       "kind": "runeon-product",
       "status": "active",
       "risk": "medium",
@@ -2680,7 +2688,7 @@
         "repository": "https://github.com/gauthierpiarrette/highball-engine",
         "commit": "e13247c012c6d71fb705406d31b714bfea714cfc",
         "author": "Paul Gofman (Proton)",
-        "note": "Downstream port of Proton's implementations (ValveSoftware/wine, Paul Gofman) as carried by highball-engine patch 0024; WineHQ has PackageFullNameFromId() since 11.18 (ef6c413c68) and still stubs the others."
+        "note": "Downstream port of Proton's implementations (ValveSoftware/wine, Paul Gofman: GetPackagesByPackageFamily 7b4037421ea8c407837548f0f9a1b5ca5e2b1226, GetPackagePath 8089c27dae7b4f47893cf2b29d6e8bbf7b1555db, PackageFullNameFromId c18ebc392d1eb3f18f8b44034d088678841112b8, wine.inf 09fbb2c010216c304c2e8cf2b145d43002c4b082) as carried by highball-engine patch 0024; PackageFullNameFromId accepts a NULL resource id as WineHQ's ef6c413c68 (wine-11.18) does, which still stubs the other two."
       },
       "verification": [
         {
@@ -2696,12 +2704,12 @@
     {
       "order": 163,
       "path": "patches/runeon/0133-mfmediaengine-events-off-engine-lock.patch",
-      "sha256": "d717cd7539ccedbaf47b6eee5ba5496006577b9c86901c091bc7ff9acb33829e",
+      "sha256": "c0613474119b8ec1de1fe788a9caeba6a98edd0b9a130c93d638396be43dfb7b",
       "kind": "runeon-product",
       "status": "active",
       "risk": "medium",
-      "summary": "The media engine delivers IMFMediaEngineNotify::EventNotify() calls from one dispatcher work item on the multithreaded queue, in order and with no engine lock held, instead of calling it with engine->cs held on the caller's or the session's thread. An application whose callback takes its own lock while another of its threads holds that lock and calls an engine method no longer deadlocks. Shutdown() waits up to 10 s for queued events after the session's shutdown, outside engine->cs; events raised after Shutdown() are dropped. Not opt-in: Windows delivers these events asynchronously, and the order of events is unchanged.",
-      "testStrategy": "Static and integration checks prove the patch applies and the anchors are present once. A complete i386/x86_64 WoW64 build must compile it. tests/mfmediaengine-deadlock-probe.c (from highball-engine), built for x86 and x64, holds an application lock while a callback on another thread waits for it and has a helper call GetCurrentTime(); the unpatched runtime reports DEADLOCK in both architectures, the patched one must report OK.",
+      "summary": "The media engine queues IMFMediaEngineNotify::EventNotify() calls and delivers them in order from one dispatcher work item on the multithreaded queue with no engine lock held, instead of calling it with engine->cs held on the caller's or the session's thread, so an application callback that takes its own lock no longer deadlocks against a thread holding that lock and calling an engine method. After Shutdown() sets the shut-down flag, events are neither queued nor delivered and Shutdown() waits only for the callback in progress, at most 10 s, outside engine->cs. Limits: if that callback waits for a lock the Shutdown() caller holds, Shutdown() returns after 10 s; events queued but undelivered at Shutdown() are dropped (not measured on Windows); the flag is read without a lock, so one event can race it; events queued before a new source can arrive after MF_MEDIA_ENGINE_EVENT_PURGEQUEUEDEVENTS. Not opt-in: Windows delivers these events asynchronously, and the order of events is unchanged.",
+      "testStrategy": "Static and integration checks prove the patch applies and the anchors are present once. A complete i386/x86_64 WoW64 build must compile it. tests/mfmediaengine-deadlock-probe.c, built for x86 and x64, holds an application lock while the first event on another thread waits for it and has a helper call GetCurrentTime(); the unpatched runtime reports DEADLOCK in both architectures, the patched one must report OK. Wine's own dlls/mfmediaengine/tests are run against the candidate build where a test-enabled build is available.",
       "provenance": {
         "repository": "https://github.com/gauthierpiarrette/highball-engine",
         "commit": "34c5f770862674c03e8cb3af5b223d3e7ae81aba",

@@ -1,8 +1,10 @@
 /* LGPL-2.1-or-later. Checks that the commit charge follows committed memory (0124).
  * PagefileUsage (GetProcessMemoryInfo) and PrivateUsage (ProcessVmCounters, the
  * only place Wine fills it) must stay below 4 GB in a small 64-bit process and
- * grow by at least 200 MB when 256 MB is committed and touched. The old macOS
- * counters report address space, which is tens of GB and does not grow. */
+ * grow by at least 200 MB when 256 MB is committed and touched. After the memory
+ * is released, PeakPagefileUsage must keep that growth while PagefileUsage falls
+ * back. The old macOS counters report address space, which is tens of GB and does
+ * not grow, with a zero peak. */
 #include <windows.h>
 #include <psapi.h>
 #include <winternl.h>
@@ -46,7 +48,7 @@ static void print_counters(const char *label, const PROCESS_MEMORY_COUNTERS_EX *
 
 int main(void)
 {
-    PROCESS_MEMORY_COUNTERS_EX before, after;
+    PROCESS_MEMORY_COUNTERS_EX before, after, released;
     SYSTEM_INFO si;
     unsigned char *mem;
     SIZE_T i;
@@ -69,9 +71,11 @@ int main(void)
     print_counters("after", &after);
     CHECK(after.PagefileUsage >= before.PagefileUsage + MIN_GROWTH, "PagefileUsage grows with committed memory");
     CHECK(after.PrivateUsage >= before.PrivateUsage + MIN_GROWTH, "PrivateUsage grows with committed memory");
-    CHECK(after.PeakPagefileUsage >= after.PagefileUsage, "peak is not below the current value");
-
     VirtualFree(mem, 0, MEM_RELEASE);
+    CHECK(read_counters(&released), "GetProcessMemoryInfo after release");
+    print_counters("released", &released);
+    CHECK(released.PagefileUsage + MIN_GROWTH <= after.PagefileUsage, "PagefileUsage falls after the release");
+    CHECK(released.PeakPagefileUsage >= before.PagefileUsage + MIN_GROWTH, "the peak keeps the committed memory");
     printf(failures ? "RESULT: FAIL (%d)\n" : "RESULT: PASS\n", failures);
     return failures ? 1 : 0;
 }

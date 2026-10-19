@@ -4,7 +4,8 @@ Subject: [PATCH] advapi32: Do not fail CredEnumerateW() when the host store has 
 Adapted for CrossOver 26.3 from gauthierpiarrette/highball-engine
 commit a2b10db8b86f4ed5f02855a41fa7c6ad4d3cbfb6 (patch 0019). The code
 is unchanged. This is a downstream fix, not a WineHQ backport or a
-game-specific change; WineHQ has the same two lines today.
+game-specific change; WineHQ still forgives only ERROR_NOT_SUPPORTED
+there as of wine-11.20.
 
 CredEnumerateW() collects credentials from the registry, then from the
 host's store through mountmgr. On macOS that store is the Keychain, and

@@ -3,7 +3,8 @@ Subject: [PATCH] ntdll: Report per-thread CPU times on macOS.
 
 Adapted for CrossOver 26.3 from gauthierpiarrette/highball-engine
 commit 9dc1026e911b722369ed9903c060475c0421e59b (patch 0024 of the
-msfs-gsbase branch), code unchanged. A downstream fix, not a WineHQ
+msfs-gsbase branch), with two guards added: no thread_info() call for
+an exited thread or without a thread. A downstream fix, not a WineHQ
 backport.
 
 get_thread_times() has Linux and libprocstat bodies only, so on macOS
@@ -14,14 +15,19 @@ process. Windows reports each thread's own kernel and user time.
 On macOS, read the thread's times with thread_info(THREAD_BASIC_INFO)
 on the Mach thread port the server recorded for it, which
 get_unix_tid() takes from mach_thread_self() and which is only valid
-inside the same task. For another process the call still fails, as
-before.
+inside the same task. For another process, and for the process-wide
+query that passes no thread, the call still fails, as before.
+
+The server keeps an exited thread's unix tid, and its port name may
+name another thread by then, so ThreadTimes no longer asks for the
+times of a thread that has an exit time; such a thread reports zero,
+as before, where Windows reports its final times.
 
 diff --git a/dlls/ntdll/unix/thread.c b/dlls/ntdll/unix/thread.c
-index f1324c7..97f7ef5 100644
+index f1324c7f..8928a53f 100644
 --- a/dlls/ntdll/unix/thread.c
 +++ b/dlls/ntdll/unix/thread.c
-@@ -2004,6 +2004,26 @@ BOOL get_thread_times(int unix_pid, int unix_tid, LARGE_INTEGER *kernel_time, LA
+@@ -2004,6 +2004,27 @@ BOOL get_thread_times(int unix_pid, int unix_tid, LARGE_INTEGER *kernel_time, LA
      }
      procstat_close(pstat);
      return ret;
@@ -31,10 +37,11 @@ index f1324c7..97f7ef5 100644
 +    thread_basic_info_data_t info;
 +    mach_msg_type_number_t count = THREAD_BASIC_INFO_COUNT;
 +
++    if (unix_tid == -1) return FALSE;
 +    if (unix_pid != getpid())
 +    {
 +        static int once;
-+        if (!once++) FIXME("cross-process thread times not supported on this platform\n");
++        if (!once++) FIXME("cross-process thread times not supported on macOS\n");
 +        return FALSE;
 +    }
 +    if (thread_info( (thread_act_t)unix_tid, THREAD_BASIC_INFO, (thread_info_t)&info, &count ) != KERN_SUCCESS)
@@ -48,3 +55,13 @@ index f1324c7..97f7ef5 100644
  #else
      static int once;
      if (!once++) FIXME("not implemented on this platform\n");
+@@ -2214,7 +2235,8 @@ NTSTATUS WINAPI NtQueryInformationThread( HANDLE handle, THREADINFOCLASS class,
+             BOOL ret = FALSE;
+ 
+             kusrt.KernelTime.QuadPart = kusrt.UserTime.QuadPart = 0;
+-            if (unix_pid != -1 && unix_tid != -1)
++            /* An exited thread's unix tid may name another thread by now. */
++            if (unix_pid != -1 && unix_tid != -1 && !kusrt.ExitTime.QuadPart)
+                 ret = get_thread_times( unix_pid, unix_tid, &kusrt.KernelTime, &kusrt.UserTime );
+             if (!ret && handle == GetCurrentThread())
+             {

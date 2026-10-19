@@ -5,8 +5,8 @@ Adapted for CrossOver 26.3 from gauthierpiarrette/highball-engine
 commit 34c5f770862674c03e8cb3af5b223d3e7ae81aba (arm64 patch 0040,
 written against Wine 11.18). The two session events that 11.18
 raises after a scrubbing check are raised unconditionally in the 11.0
-code, as before; otherwise the code is unchanged. A downstream fix,
-not a WineHQ backport.
+code, as before, and the dispatcher drops events after Shutdown().
+A downstream fix, not a WineHQ backport.
 
 The media engine called the application's
 IMFMediaEngineNotify::EventNotify() with engine->cs held, on the
@@ -16,17 +16,30 @@ callback takes a lock of its own while another of its threads holds
 that lock and calls any engine method deadlocks: one thread holds the
 application's lock and waits for engine->cs, the other holds
 engine->cs inside the callback and waits for the application's lock.
-Windows delivers these events asynchronously without such a lock.
+Windows' media engine delivers its events asynchronously; whether it
+holds a lock of its own around them was not measured.
 
 Events now go through media_engine_notify(), which appends them to a
 FIFO under a small lock of its own, never held during a callback, and
 schedules one dispatcher work item on the multithreaded queue when
-none is running; the dispatcher drains the FIFO in order. Shutdown()
-waits up to 10 s for the queue to drain after the session's shutdown,
-outside engine->cs, and events raised after Shutdown() are dropped.
+none is running; the dispatcher drains the FIFO in order. Once
+Shutdown() has set the engine's shut-down flag, events are neither
+queued nor delivered: the dispatcher drops what remains, so Shutdown()
+waits, after the session's shutdown and outside engine->cs, only for
+the callback already in progress, at most 10 s. The flag is read
+without a lock, so an event being queued as Shutdown() runs can still
+be delivered once.
+
+Limits: when the callback in progress itself waits for a lock the
+thread calling Shutdown() holds, Shutdown() returns after the 10 s
+limit instead of never; events queued but not yet delivered when
+Shutdown() starts are dropped, which was not measured on Windows; and
+events still queued when a new source is set can be delivered after
+MF_MEDIA_ENGINE_EVENT_PURGEQUEUEDEVENTS, which synchronous delivery
+could not do.
 
 diff --git a/dlls/mfmediaengine/main.c b/dlls/mfmediaengine/main.c
-index 6fa1c42..a0d7f92 100644
+index 6fa1c429..f6e4253f 100644
 --- a/dlls/mfmediaengine/main.c
 +++ b/dlls/mfmediaengine/main.c
 @@ -37,6 +37,7 @@
@@ -53,7 +66,7 @@ index 6fa1c42..a0d7f92 100644
      IMFAttributes *attributes;
      IMFDXGIDeviceManager *device_manager;
      HANDLE device_handle;
-@@ -921,6 +929,132 @@ static HRESULT WINAPI media_engine_callback_GetParameters(IMFAsyncCallback *ifac
+@@ -921,6 +929,135 @@ static HRESULT WINAPI media_engine_callback_GetParameters(IMFAsyncCallback *ifac
      return E_NOTIMPL;
  }
  
@@ -105,7 +118,9 @@ index 6fa1c42..a0d7f92 100644
 +        LeaveCriticalSection(&engine->notify_cs);
 +
 +        e = LIST_ENTRY(head, struct notify_event, entry);
-+        IMFMediaEngineNotify_EventNotify(engine->callback, e->event, e->param1, e->param2);
++        /* After Shutdown() the rest is dropped, so it waits for one callback at most. */
++        if (!(engine->flags & FLAGS_ENGINE_SHUT_DOWN))
++            IMFMediaEngineNotify_EventNotify(engine->callback, e->event, e->param1, e->param2);
 +        free(e);
 +    }
 +
@@ -122,7 +137,7 @@ index 6fa1c42..a0d7f92 100644
 +    media_engine_notify_Invoke,
 +};
 +
-+/* Queue an event for the application. Called with engine->cs held; the callback runs later, without it. */
++/* Queue an event for the application, with or without engine->cs held; the callback runs later, without it. */
 +static void media_engine_notify(struct media_engine *engine, DWORD event, DWORD_PTR param1, DWORD param2)
 +{
 +    struct notify_event *e;
@@ -162,7 +177,8 @@ index 6fa1c42..a0d7f92 100644
 +    }
 +}
 +
-+/* Wait for the queued events to be delivered. Called without engine->cs; a no-op on the dispatcher's own thread. */
++/* Wait for the dispatcher to finish; after Shutdown() it only completes the callback in progress.
++ * Called without engine->cs; a no-op on the dispatcher's own thread. */
 +static void media_engine_notify_drain(struct media_engine *engine)
 +{
 +    unsigned int i;
@@ -186,7 +202,7 @@ index 6fa1c42..a0d7f92 100644
  static HRESULT media_engine_set_current_time(struct media_engine *engine, double seektime);
  
  static HRESULT WINAPI media_engine_session_events_Invoke(IMFAsyncCallback *iface, IMFAsyncResult *result)
-@@ -947,7 +1081,7 @@ static HRESULT WINAPI media_engine_session_events_Invoke(IMFAsyncCallback *iface
+@@ -947,7 +1084,7 @@ static HRESULT WINAPI media_engine_session_events_Invoke(IMFAsyncCallback *iface
          case MEBufferingStarted:
          case MEBufferingStopped:
  
@@ -195,7 +211,7 @@ index 6fa1c42..a0d7f92 100644
                      MF_MEDIA_ENGINE_EVENT_BUFFERINGSTARTED : MF_MEDIA_ENGINE_EVENT_BUFFERINGENDED, 0, 0);
              break;
          case MESessionTopologyStatus:
-@@ -980,13 +1114,13 @@ static HRESULT WINAPI media_engine_session_events_Invoke(IMFAsyncCallback *iface
+@@ -980,13 +1117,13 @@ static HRESULT WINAPI media_engine_session_events_Invoke(IMFAsyncCallback *iface
  
              media_engine_get_frame_size(engine, topology);
  
@@ -213,7 +229,7 @@ index 6fa1c42..a0d7f92 100644
  
              LeaveCriticalSection(&engine->cs);
  
-@@ -999,13 +1133,13 @@ static HRESULT WINAPI media_engine_session_events_Invoke(IMFAsyncCallback *iface
+@@ -999,13 +1136,13 @@ static HRESULT WINAPI media_engine_session_events_Invoke(IMFAsyncCallback *iface
              if (engine->flags & FLAGS_ENGINE_SEEKING)
              {
                  media_engine_set_flag(engine, FLAGS_ENGINE_SEEKING | FLAGS_ENGINE_IS_ENDED, FALSE);
@@ -230,7 +246,7 @@ index 6fa1c42..a0d7f92 100644
              break;
          case MESessionEnded:
  
-@@ -1015,7 +1149,7 @@ static HRESULT WINAPI media_engine_session_events_Invoke(IMFAsyncCallback *iface
+@@ -1015,7 +1152,7 @@ static HRESULT WINAPI media_engine_session_events_Invoke(IMFAsyncCallback *iface
              engine->video_frame.pts = MINLONGLONG;
              LeaveCriticalSection(&engine->cs);
  
@@ -239,7 +255,7 @@ index 6fa1c42..a0d7f92 100644
              break;
  
          case MEEndOfPresentationSegment:
-@@ -1065,7 +1199,7 @@ static HRESULT WINAPI media_engine_sink_events_Invoke(IMFAsyncCallback *iface, I
+@@ -1065,7 +1202,7 @@ static HRESULT WINAPI media_engine_sink_events_Invoke(IMFAsyncCallback *iface, I
      switch (event)
      {
          case MF_MEDIA_ENGINE_EVENT_FIRSTFRAMEREADY:
@@ -248,7 +264,7 @@ index 6fa1c42..a0d7f92 100644
              break;
          default:
              ;
-@@ -1453,7 +1587,7 @@ static HRESULT WINAPI media_engine_load_handler_Invoke(IMFAsyncCallback *iface,
+@@ -1453,7 +1590,7 @@ static HRESULT WINAPI media_engine_load_handler_Invoke(IMFAsyncCallback *iface,
      }
  
      engine->network_state = MF_MEDIA_ENGINE_NETWORK_LOADING;
@@ -257,7 +273,7 @@ index 6fa1c42..a0d7f92 100644
  
      start_playback = engine->flags & FLAGS_ENGINE_PLAY_PENDING;
      media_engine_set_flag(engine, FLAGS_ENGINE_SOURCE_PENDING | FLAGS_ENGINE_PLAY_PENDING, FALSE);
-@@ -1490,7 +1624,7 @@ static HRESULT WINAPI media_engine_load_handler_Invoke(IMFAsyncCallback *iface,
+@@ -1490,7 +1627,7 @@ static HRESULT WINAPI media_engine_load_handler_Invoke(IMFAsyncCallback *iface,
          engine->network_state = MF_MEDIA_ENGINE_NETWORK_NO_SOURCE;
          engine->error_code = MF_MEDIA_ENGINE_ERR_SRC_NOT_SUPPORTED;
          engine->extended_code = hr;
@@ -266,7 +282,7 @@ index 6fa1c42..a0d7f92 100644
                  engine->extended_code);
      }
  
-@@ -1569,6 +1703,17 @@ static void free_media_engine(struct media_engine *engine)
+@@ -1569,6 +1706,17 @@ static void free_media_engine(struct media_engine *engine)
          IMFDXGIDeviceManager_Release(engine->device_manager);
      }
      SysFreeString(engine->current_source);
@@ -284,7 +300,7 @@ index 6fa1c42..a0d7f92 100644
      DeleteCriticalSection(&engine->cs);
      free(engine->video_frame.buffer);
      free(engine);
-@@ -1652,7 +1797,7 @@ static HRESULT media_engine_set_source(struct media_engine *engine, IMFByteStrea
+@@ -1652,7 +1800,7 @@ static HRESULT media_engine_set_source(struct media_engine *engine, IMFByteStrea
  
      engine->ready_state = MF_MEDIA_ENGINE_READY_HAVE_NOTHING;
  
@@ -293,7 +309,7 @@ index 6fa1c42..a0d7f92 100644
  
      engine->network_state = MF_MEDIA_ENGINE_NETWORK_NO_SOURCE;
  
-@@ -1897,16 +2042,16 @@ static HRESULT media_engine_set_current_time(struct media_engine *engine, double
+@@ -1897,16 +2045,16 @@ static HRESULT media_engine_set_current_time(struct media_engine *engine, double
      if (IMFMediaEngineEx_IsPaused(&engine->IMFMediaEngineEx_iface))
      {
          engine->presentation.start_position = position;
@@ -314,7 +330,7 @@ index 6fa1c42..a0d7f92 100644
      }
  
      return hr;
-@@ -1993,7 +2138,7 @@ static HRESULT WINAPI media_engine_SetDefaultPlaybackRate(IMFMediaEngineEx *ifac
+@@ -1993,7 +2141,7 @@ static HRESULT WINAPI media_engine_SetDefaultPlaybackRate(IMFMediaEngineEx *ifac
      else if (engine->default_playback_rate != rate)
      {
          engine->default_playback_rate = rate;
@@ -323,7 +339,7 @@ index 6fa1c42..a0d7f92 100644
      }
      LeaveCriticalSection(&engine->cs);
  
-@@ -2027,7 +2172,7 @@ static HRESULT WINAPI media_engine_SetPlaybackRate(IMFMediaEngineEx *iface, doub
+@@ -2027,7 +2175,7 @@ static HRESULT WINAPI media_engine_SetPlaybackRate(IMFMediaEngineEx *iface, doub
      else if (engine->playback_rate != rate)
      {
          engine->playback_rate = rate;
@@ -332,7 +348,7 @@ index 6fa1c42..a0d7f92 100644
      }
      LeaveCriticalSection(&engine->cs);
  
-@@ -2167,12 +2312,12 @@ static HRESULT WINAPI media_engine_Play(IMFMediaEngineEx *iface)
+@@ -2167,12 +2315,12 @@ static HRESULT WINAPI media_engine_Play(IMFMediaEngineEx *iface)
          hr = MF_E_SHUTDOWN;
      else
      {
@@ -347,7 +363,7 @@ index 6fa1c42..a0d7f92 100644
  
              if (!(engine->flags & FLAGS_ENGINE_SOURCE_PENDING))
                  media_engine_start_playback(engine);
-@@ -2182,7 +2327,7 @@ static HRESULT WINAPI media_engine_Play(IMFMediaEngineEx *iface)
+@@ -2182,7 +2330,7 @@ static HRESULT WINAPI media_engine_Play(IMFMediaEngineEx *iface)
              media_engine_set_flag(engine, FLAGS_ENGINE_WAITING, TRUE);
          }
  
@@ -356,7 +372,7 @@ index 6fa1c42..a0d7f92 100644
      }
  
      LeaveCriticalSection(&engine->cs);
-@@ -2210,12 +2355,12 @@ static HRESULT WINAPI media_engine_Pause(IMFMediaEngineEx *iface)
+@@ -2210,12 +2358,12 @@ static HRESULT WINAPI media_engine_Pause(IMFMediaEngineEx *iface)
                  media_engine_set_flag(engine, FLAGS_ENGINE_WAITING | FLAGS_ENGINE_IS_ENDED, FALSE);
                  media_engine_set_flag(engine, FLAGS_ENGINE_PAUSED, TRUE);
  
@@ -372,7 +388,7 @@ index 6fa1c42..a0d7f92 100644
      }
  
      LeaveCriticalSection(&engine->cs);
-@@ -2250,7 +2395,7 @@ static HRESULT WINAPI media_engine_SetMuted(IMFMediaEngineEx *iface, BOOL muted)
+@@ -2250,7 +2398,7 @@ static HRESULT WINAPI media_engine_SetMuted(IMFMediaEngineEx *iface, BOOL muted)
      else if (!!(engine->flags & FLAGS_ENGINE_MUTED) ^ !!muted)
      {
          media_engine_set_flag(engine, FLAGS_ENGINE_MUTED, muted);
@@ -381,7 +397,7 @@ index 6fa1c42..a0d7f92 100644
      }
      LeaveCriticalSection(&engine->cs);
  
-@@ -2285,7 +2430,7 @@ static HRESULT WINAPI media_engine_SetVolume(IMFMediaEngineEx *iface, double vol
+@@ -2285,7 +2433,7 @@ static HRESULT WINAPI media_engine_SetVolume(IMFMediaEngineEx *iface, double vol
      {
          engine->volume = volume;
          media_engine_apply_volume(engine);
@@ -390,7 +406,7 @@ index 6fa1c42..a0d7f92 100644
      }
      LeaveCriticalSection(&engine->cs);
  
-@@ -2392,6 +2537,7 @@ static HRESULT WINAPI media_engine_Shutdown(IMFMediaEngineEx *iface)
+@@ -2392,6 +2540,7 @@ static HRESULT WINAPI media_engine_Shutdown(IMFMediaEngineEx *iface)
           * callbacks to complete, and some callbacks require this cs */
          LeaveCriticalSection(&engine->cs);
          IMFMediaSession_Shutdown(engine->session);
@@ -398,7 +414,7 @@ index 6fa1c42..a0d7f92 100644
          EnterCriticalSection(&engine->cs);
      }
      LeaveCriticalSection(&engine->cs);
-@@ -3528,6 +3674,10 @@ static HRESULT init_media_engine(DWORD flags, IMFAttributes *attributes, struct
+@@ -3528,6 +3677,10 @@ static HRESULT init_media_engine(DWORD flags, IMFAttributes *attributes, struct
      engine->next_seek = NAN;
      engine->video_frame.pts = MINLONGLONG;
      InitializeCriticalSection(&engine->cs);
