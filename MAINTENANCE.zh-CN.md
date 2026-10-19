@@ -83,6 +83,8 @@ Runeon 产品补丁默认必须开启后才生效，见 `CLAUDE.md`。只有维�
 | `0120` | 构建选项：dsound 以 SSE 浮点数学编译。 | 只涉及这一个模块：i386 构建像 x64 构建一样以单精度混音，并使用 SSE 重采样循环。 |
 | `0122` | 在现有断言之前记录失败的 mmdevapi 驱动调用。 | 只做诊断；断言不变。 |
 | `0123` | 异步 I/O 状态块不再可写时，防止嵌套故障的有限防护；它只替换会终止线程或让等待失败的故障。 | 只跳过检查时观察到不可写的状态块；写入之前或写入期间被释放、取消提交或修改保护仍会故障。guard 页被跳过且保持有效。等待中的完成现在会完成，而不是让等待失败。Windows 的行为未实测。 |
+| `0124` | 把 macOS 任务的内存占用（footprint）报告为提交量（`PagefileUsage`，以及经 `ProcessVmCounters` 返回的 `PrivateUsage`），与 Windows 对该计数的定义一致，而不是报告地址空间。 | 只改这个计数及其峰值；`VirtualSize` 与工作集不变，没有 `TASK_VM_INFO` 或查询失败时保留原值。footprint 是 Windows 私有提交量的近似值，不完全相等。 |
+| `0125` | macOS 钥匙串中没有匹配项时，带过滤条件的 `CredEnumerateW()` 仍返回注册表中匹配的凭据，与 Windows 返回已存凭据的行为一致。 | 只把宿主凭据库返回的 `ERROR_NOT_FOUND` 与原有的 `ERROR_NOT_SUPPORTED` 同样处理；任何地方都没有匹配时仍返回 `ERROR_NOT_FOUND`。 |
 
 ## 发布规则
 

@@ -83,6 +83,8 @@ Runeon product patches are opt-in by default, as `CLAUDE.md` requires. A specifi
 | `0120` | Build option: dsound is compiled with SSE floating point math. | One module only: the i386 build mixes in single precision like the x64 build and uses the SSE resampler loops. |
 | `0122` | Logs a failed mmdevapi driver call before the existing assertion. | Diagnostic only; the assertion is unchanged. |
 | `0123` | Limited guard against a nested fault when an asynchronous I/O status block is no longer writable; it only replaces a fault that kills the thread or fails the wait. | Skips only a block seen to be unwritable when checked; a release, decommit or protection change before or while it is written still faults. A guard page is skipped and left armed. A completion inside a wait now completes instead of failing the wait. Windows has not been measured. |
+| `0124` | Reports the macOS task footprint as the commit charge (`PagefileUsage`, and `PrivateUsage` through `ProcessVmCounters`), which is what Windows defines it as, instead of address space. | That counter and its peak only; `VirtualSize` and the working set are unchanged, and without `TASK_VM_INFO` or when the query fails the old values stay. The footprint approximates, not equals, the Windows private commit. |
+| `0125` | A filtered `CredEnumerateW()` returns matching registry credentials when the macOS Keychain has none, as Windows returns stored credentials. | Only `ERROR_NOT_FOUND` from the host store is forgiven, as `ERROR_NOT_SUPPORTED` already was; `ERROR_NOT_FOUND` is still returned when nothing matches anywhere. |
 
 ## Release policy
 
