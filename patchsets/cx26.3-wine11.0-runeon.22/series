@@ -106,3 +106,4 @@ patches/runeon/0121-ntdll-seh-collided-unwind-stack-bounds.patch
 patches/runeon/0122-mmdevapi-log-failed-unix-call.patch
 patches/runeon/0123-ntdll-skip-unwritable-async-iosb.patch
 patches/upstream/0091-wine-11.11-kernelbase-getintegrateddisplaysize-stub.patch
+patches/runeon/0124-ntdll-macos-commit-charge-footprint.patch

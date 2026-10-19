@@ -1,0 +1,55 @@
+From: Gauthier Piarrette <gauthierpiarrette@gmail.com>
+Subject: [PATCH] ntdll: Report the task footprint as the commit charge on macOS.
+
+Adapted for CrossOver 26.3 from gauthierpiarrette/highball-engine
+commit 500a0a7f1846900dfc576aebba3aa609420de846 (patch 0018). The code
+is unchanged; only the hunk offsets differ. This is a downstream fix,
+not a WineHQ backport or a game-specific change.
+
+fill_vm_counters() reported PagefileUsage, which ProcessVmCounters
+also returns as PrivateUsage, from the Mach task's virtual_size. That is
+address space, and a 64-bit process under Rosetta maps tens of
+gigabytes it never touches: a console program with a 9 MB working set
+read 41,987 MB, unchanged after committing and touching 512 MB.
+Windows reports the private commit charge. The Linux branch reports
+RssAnon + VmSwap; the macOS counterpart is the task's phys_footprint
+(dirty and compressed pages), which is also what Activity Monitor
+shows. A program that budgets memory from this figure, or warns about
+low memory from it, now sees memory it is actually charged for.
+
+The peak follows the current value, as in the Linux branch.
+VirtualSize and the working set are unchanged. When TASK_VM_INFO is
+unavailable or the query fails, the old values stay.
+
+diff --git a/dlls/ntdll/unix/process.c b/dlls/ntdll/unix/process.c
+index 1f550a6..efc80a4 100644
+--- a/dlls/ntdll/unix/process.c
++++ b/dlls/ntdll/unix/process.c
+@@ -1485,6 +1485,9 @@ void fill_vm_counters( VM_COUNTERS_EX *pvmi, int unix_pid )
+ #if defined(MACH_TASK_BASIC_INFO)
+     struct mach_task_basic_info info;
+     mach_msg_type_number_t infoCount;
++#ifdef TASK_VM_INFO
++    task_vm_info_data_t vm_info;
++#endif
+ 
+     if (unix_pid != -1) return; /* FIXME: Retrieve information for other processes. */
+ 
+@@ -1496,6 +1499,17 @@ void fill_vm_counters( VM_COUNTERS_EX *pvmi, int unix_pid )
+         pvmi->WorkingSetSize = info.resident_size;
+         pvmi->PeakWorkingSetSize = info.resident_size_max;
+     }
++#ifdef TASK_VM_INFO
++    /* The commit charge is memory the process is charged for, not address space. The footprint
++     * is what the kernel charges the task (dirty and compressed pages), the counterpart of the
++     * RssAnon + VmSwap sum used on Linux. */
++    infoCount = TASK_VM_INFO_COUNT;
++    if (task_info( mach_task_self(), TASK_VM_INFO, (task_info_t)&vm_info, &infoCount ) == KERN_SUCCESS)
++    {
++        pvmi->PagefileUsage = vm_info.phys_footprint;
++        pvmi->PeakPagefileUsage = pvmi->PagefileUsage;
++    }
++#endif
+ #endif
+ }
+ 

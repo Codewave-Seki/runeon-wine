@@ -2502,6 +2502,28 @@
           "contains": "HRESULT WINAPI GetIntegratedDisplaySize( double *sz_inches )"
         }
       ]
+    },
+    {
+      "order": 154,
+      "path": "patches/runeon/0124-ntdll-macos-commit-charge-footprint.patch",
+      "sha256": "53e1fc7e21a5e6997a5301bffac86bbb042830dddd5d6ee7bc727c040722614b",
+      "kind": "runeon-product",
+      "status": "active",
+      "risk": "low",
+      "summary": "On macOS, fill_vm_counters() reports the task's phys_footprint as PagefileUsage (and so PrivateUsage) and its peak, instead of the Mach virtual_size, which is address space: a 9 MB program under Rosetta read about 42 GB. This matches the private commit charge Windows reports and the RssAnon + VmSwap sum of the Linux branch. VirtualSize and the working set are unchanged; without TASK_VM_INFO or when the query fails the old values stay. Not opt-in: it corrects a counter Windows defines, and nothing else changes.",
+      "testStrategy": "Static and integration checks prove the patch applies and the anchors are present once. A complete i386/x86_64 WoW64 build must compile ntdll. tests/commit-charge-probe.c, built for x86 and x64 and linked with ntdll, reads PagefileUsage from GetProcessMemoryInfo() and PrivateUsage from ProcessVmCounters before and after committing and touching 256 MB, and requires both to grow by at least 200 MB, the 64-bit values of a small process to stay below 4 GB, and the peak not to be below the current value; the old counters fail all of them (about 42 GB that does not grow, and a zero peak).",
+      "provenance": {
+        "repository": "https://github.com/gauthierpiarrette/highball-engine",
+        "commit": "500a0a7f1846900dfc576aebba3aa609420de846",
+        "author": "Gauthier Piarrette",
+        "note": "Adapted downstream fix (patch 0018), code unchanged; not a WineHQ release backport."
+      },
+      "verification": [
+        {
+          "path": "dlls/ntdll/unix/process.c",
+          "contains": "pvmi->PagefileUsage = vm_info.phys_footprint;"
+        }
+      ]
     }
   ],
   "targetedReview": {
