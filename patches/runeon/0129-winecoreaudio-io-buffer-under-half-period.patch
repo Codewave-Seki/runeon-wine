@@ -1,0 +1,57 @@
+From: Gauthier Piarrette <gauthierpiarrette@gmail.com>
+Subject: [PATCH] winecoreaudio: Keep a render stream's I/O buffer under half a period.
+
+Adapted for CrossOver 26.3 from gauthierpiarrette/highball-engine
+commit c9b8b9735643603e9b10d8fbee069cc35ca552cd (patch 0015); only the
+comment is reworded. A downstream fix, not a WineHQ backport.
+
+The HAL output unit asks the render callback for its whole I/O buffer
+at once, 512 frames by default, which at 48 kHz is 10.7 ms: longer
+than the 10 ms period a shared-mode client is woken for, and longer
+than the Windows audio engine's own processing period. A client that
+keeps about one period queued then has too little at most pulls, and
+the rest of each pull is played as silence. Measured on an M4 at
+48 kHz: Counter-Strike 2's menu music dropped out 324 times in two
+minutes, and not at all at 96 kHz, where the same 512 frames last
+5.3 ms, or with this change.
+
+Before initializing a render stream's unit, lower its I/O buffer to
+half the stream period at the device rate when it is larger. The
+property is per process, so other applications keep theirs; failure
+to read or set it leaves the buffer as it was.
+
+diff --git a/dlls/winecoreaudio.drv/coreaudio.c b/dlls/winecoreaudio.drv/coreaudio.c
+index c2bb765..ae46806 100644
+--- a/dlls/winecoreaudio.drv/coreaudio.c
++++ b/dlls/winecoreaudio.drv/coreaudio.c
+@@ -800,6 +800,30 @@ static NTSTATUS unix_create_stream(void *args)
+                            "This can be enabled under Security & Privacy in System Preferences.\n");
+     }
+ 
++    if(stream->flow == eRender){
++        /* Keep each pull from the device under half a period. The device asks for its
++         * whole I/O buffer at once, 512 frames by default, which at 48 kHz is 10.7 ms,
++         * longer than the 10 ms period a shared-mode client is woken for, so a client
++         * keeping about one period queued had too little at most pulls and the rest was
++         * played as silence. The buffer size is per process, so other apps keep theirs. */
++        AudioStreamBasicDescription hw;
++        UInt32 hw_size = sizeof(hw), cur = 0, cur_size = sizeof(cur), frames;
++        if(AudioUnitGetProperty(stream->unit, kAudioUnitProperty_StreamFormat, kAudioUnitScope_Output, 0,
++                                &hw, &hw_size) == noErr && hw.mSampleRate > 0 &&
++           AudioUnitGetProperty(stream->unit, kAudioDevicePropertyBufferFrameSize, kAudioUnitScope_Global, 0,
++                                &cur, &cur_size) == noErr){
++            frames = muldiv(stream->period / 2, (int)hw.mSampleRate, 10000000);
++            if(frames > 0 && cur > frames){
++                sc = AudioUnitSetProperty(stream->unit, kAudioDevicePropertyBufferFrameSize, kAudioUnitScope_Global, 0,
++                                          &frames, sizeof(frames));
++                if(sc != noErr)
++                    WARN("Couldn't set the I/O buffer to %u frames: %x\n", (unsigned)frames, (int)sc);
++                else
++                    TRACE("I/O buffer %u -> %u frames at %u Hz\n", (unsigned)cur, (unsigned)frames, (unsigned)hw.mSampleRate);
++            }
++        }
++    }
++
+     sc = AudioUnitInitialize(stream->unit);
+     if(sc != noErr){
+         WARN("Couldn't initialize: %x\n", (int)sc);

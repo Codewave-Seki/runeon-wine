@@ -2600,6 +2600,28 @@
           "contains": "map[idx] = __builtin_popcount(*mask & (table[i].speaker - 1));"
         }
       ]
+    },
+    {
+      "order": 159,
+      "path": "patches/runeon/0129-winecoreaudio-io-buffer-under-half-period.patch",
+      "sha256": "2fb930a9b56769bba5c0432a06fc7f1b4d45445dbdce808c9bcf2d6a8583414e",
+      "kind": "runeon-product",
+      "status": "active",
+      "risk": "medium",
+      "summary": "Before a render stream's audio unit is initialized, its HAL I/O buffer is lowered to half the stream period at the device rate when it is larger (512 frames, 10.7 ms at 48 kHz, by default). A shared-mode client that keeps about one 10 ms period queued otherwise had too little at most pulls and the rest was played as silence. The property is per process; failing to read or set it leaves the buffer as it was. Capture streams are unchanged. Not opt-in: it keeps the device pull within the period Windows' audio engine works in, and changes nothing else.",
+      "testStrategy": "Static and integration checks prove the patch applies and the anchors are present once. A complete i386/x86_64 WoW64 build must compile it. tests/coreaudio-io-buffer-probe.c, built for x86 and x64, starts a shared-mode render stream with the default period; under WINEDEBUG=trace+coreaudio the patched driver logs the lowered buffer and the old one does not. It does not measure dropouts; a listening check with real games is still required.",
+      "provenance": {
+        "repository": "https://github.com/gauthierpiarrette/highball-engine",
+        "commit": "c9b8b9735643603e9b10d8fbee069cc35ca552cd",
+        "author": "Gauthier Piarrette",
+        "note": "Adapted downstream fix (patch 0015); only the comment is reworded."
+      },
+      "verification": [
+        {
+          "path": "dlls/winecoreaudio.drv/coreaudio.c",
+          "contains": "frames = muldiv(stream->period / 2, (int)hw.mSampleRate, 10000000);"
+        }
+      ]
     }
   ],
   "targetedReview": {
