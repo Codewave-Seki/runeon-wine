@@ -2644,6 +2644,28 @@
           "contains": "static void compat_glClearDepthf( GLfloat d )"
         }
       ]
+    },
+    {
+      "order": 161,
+      "path": "patches/runeon/0131-ntdll-macos-thread-times.patch",
+      "sha256": "8bf09a273d9e5b1df2b2b51a1ca675c1ee790f53e246c84cf3a30419131b33b5",
+      "kind": "runeon-product",
+      "status": "active",
+      "risk": "low",
+      "summary": "On macOS, get_thread_times() reads a thread's kernel and user time with thread_info(THREAD_BASIC_INFO) on the Mach thread port the server recorded for it, for threads of the calling process. Before, it had no macOS body: ThreadTimes answered zero for other threads and the whole process's time for the current one. Another process's threads still fail as before. Not opt-in: it reports what Windows reports and changes nothing else.",
+      "testStrategy": "Static and integration checks prove the patch applies and the anchors are present once. A complete i386/x86_64 WoW64 build must compile it. tests/thread-times-probe.c, built for x86 and x64, spins a worker for 800 ms while the main thread sleeps and requires at least 500 ms for the worker and less than 300 ms for the main thread; the unpatched runtime reports 0 ms and 850 ms.",
+      "provenance": {
+        "repository": "https://github.com/gauthierpiarrette/highball-engine",
+        "commit": "9dc1026e911b722369ed9903c060475c0421e59b",
+        "author": "Gauthier Piarrette",
+        "note": "Adapted downstream fix (msfs-gsbase branch patch 0024), code unchanged."
+      },
+      "verification": [
+        {
+          "path": "dlls/ntdll/unix/thread.c",
+          "contains": "if (thread_info( (thread_act_t)unix_tid, THREAD_BASIC_INFO, (thread_info_t)&info, &count ) != KERN_SUCCESS)"
+        }
+      ]
     }
   ],
   "targetedReview": {
