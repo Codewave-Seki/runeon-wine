@@ -2562,6 +2562,22 @@
           "contains": "static void *try_dlopen_next_to_link( const char *argv0, const char *dir )"
         }
       ]
+    },
+    {
+      "order": 157,
+      "path": "patches/runeon/0127-winemac-bundle-name-from-embedded-plist.patch",
+      "sha256": "e5c0a9bd4e1626f65ac801b01f1247c490d28e973ce4eeb3efd58b0bdd5c1e69",
+      "kind": "runeon-product",
+      "status": "active",
+      "risk": "low",
+      "summary": "Before AppKit starts, winemac copies CFBundleName from the Info.plist embedded in the loader, which the loader rewrites after the program it starts (CrossOver Hack 13438), into the main bundle's info dictionary when the main bundle is an app bundle. With the 0126 layout macOS reads the bundle's Info.plist from disk, so without this every program would show the bundle's fixed name in the menu bar and in its Hide and Quit items. Without an app bundle, or when the embedded copy cannot be read, nothing changes.",
+      "testStrategy": "Static and integration checks prove the patch applies and the anchor is present once. A complete build must compile winemac.so. Under the 0126 layout the name macOS registers for a Win32 program's process must be the program's name, not the bundle's CFBundleName; without the bundle it must stay as before. A standalone Cocoa check confirmed that renaming the main bundle's info dictionary before NSApplication starts changes the menu bar title and the registered application name.",
+      "verification": [
+        {
+          "path": "dlls/winemac.drv/cocoa_main.m",
+          "contains": "static void copy_embedded_bundle_name(void)"
+        }
+      ]
     }
   ],
   "targetedReview": {

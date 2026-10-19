@@ -1,0 +1,89 @@
+From: Runeon Contributors <dev@runeon.com>
+Subject: [PATCH] winemac: Carry the loader's bundle name over to an app bundle.
+
+The loader names the application menu by rewriting CFBundleName in the
+Info.plist embedded in its executable (CrossOver Hack 13438), after the
+program it starts. When the loader runs from an app bundle (see 0126),
+macOS reads the bundle's Info.plist from disk instead, so every program
+would show the bundle's fixed name in the menu bar and in its Hide and
+Quit menu items.
+
+Before AppKit starts, copy the rewritten CFBundleName from the embedded
+Info.plist into the main bundle's info dictionary. Without an app
+bundle, or when the embedded copy cannot be read, nothing changes.
+
+diff --git a/dlls/winemac.drv/cocoa_main.m b/dlls/winemac.drv/cocoa_main.m
+index 869b3c7..704b58b 100644
+--- a/dlls/winemac.drv/cocoa_main.m
++++ b/dlls/winemac.drv/cocoa_main.m
+@@ -21,6 +21,8 @@
+ #import <AppKit/AppKit.h>
+ #include <mach/mach.h>
+ #include <mach/mach_time.h>
++#include <crt_externs.h>
++#include <mach-o/getsect.h>
+ 
+ #include "macdrv_cocoa.h"
+ #import "cocoa_app.h"
+@@ -45,6 +47,53 @@
+ };
+ 
+ 
++/***********************************************************************
++ *              copy_embedded_bundle_name
++ *
++ * The loader names the application menu by rewriting CFBundleName in the
++ * Info.plist embedded in its executable (CrossOver Hack 13438).  When the
++ * loader runs from an app bundle, macOS reads the bundle's Info.plist from
++ * disk instead, so every program would carry the bundle's fixed name.  Copy
++ * the rewritten name into the main bundle's info dictionary before AppKit
++ * reads it.  Does nothing unless the main bundle is an app bundle.
++ */
++static void copy_embedded_bundle_name(void)
++{
++    const char* data;
++    unsigned long size = 0;
++    NSDictionary* embedded;
++    id name;
++    CFMutableDictionaryRef info;
++
++    if (![[[NSBundle mainBundle] bundlePath] hasSuffix:@".app"])
++        return;
++
++    data = (const char*)getsectiondata((const struct mach_header_64*)_NSGetMachExecuteHeader(),
++                                       "__TEXT", "__info_plist", &size);
++    if (!data || !size)
++        return;
++
++    embedded = [NSPropertyListSerialization propertyListWithData:[NSData dataWithBytesNoCopy:(void*)data
++                                                                                      length:size
++                                                                                freeWhenDone:NO]
++                                                         options:NSPropertyListImmutable
++                                                          format:NULL
++                                                           error:NULL];
++    if (![embedded isKindOfClass:[NSDictionary class]])
++        return;
++
++    name = [embedded objectForKey:(NSString*)kCFBundleNameKey];
++    if (![name isKindOfClass:[NSString class]] || ![name length])
++        return;
++
++    /* The main bundle's info dictionary is mutable in practice; this is the
++       only way to rename the application after launch. */
++    info = (CFMutableDictionaryRef)CFBundleGetInfoDictionary(CFBundleGetMainBundle());
++    if (info)
++        CFDictionarySetValue(info, kCFBundleNameKey, (CFStringRef)name);
++}
++
++
+ /***********************************************************************
+  *              run_cocoa_app
+  *
+@@ -70,6 +119,7 @@ static void run_cocoa_app(void* info)
+     {
+         if (!NSApp)
+         {
++            copy_embedded_bundle_name();
+             [WineApplication sharedApplication];
+             created_app = TRUE;
+         }
