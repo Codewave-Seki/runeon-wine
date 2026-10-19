@@ -6,7 +6,7 @@
  * SetMuted(TRUE), which raises VOLUMECHANGE. Delivered as each event is raised,
  * the main thread sees SEEKING, VOLUMECHANGE, SEEKED, TIMEUPDATE, and all of them
  * before SetCurrentTime() returns. Exit 0 on that order, 1 on another, 2 when the
- * media does not load within 15 s. Build with -lole32 -loleaut32 -lmfplat -lmfuuid -luuid. */
+ * media does not load within 15 s or the call fails or raises no event. Build with -lole32 -loleaut32 -lmfplat -lmfuuid -luuid. */
 #define COBJMACROS
 #include <windows.h>
 #include <initguid.h>
@@ -127,6 +127,12 @@ int main(void)
     printf("SetCurrentTime hr %#lx; events during the call:", hr);
     for (i = 0; i < seen; i++) printf(" %lu", order[i]);
     printf("\n");
+    if (FAILED(hr) || !seen)
+    {
+        printf("INCONCLUSIVE: SetCurrentTime raised no event\n");
+        result = 2;
+        goto done;
+    }
     if (seen != ARRAYSIZE(expected)) result = 1;
     for (i = 0; !result && i < seen; i++) if (order[i] != expected[i]) result = 1;
     printf(result ? "WRONG ORDER: expected 16 (seeking) 22 (volumechange) 17 (seeked) 18 (timeupdate)\n"

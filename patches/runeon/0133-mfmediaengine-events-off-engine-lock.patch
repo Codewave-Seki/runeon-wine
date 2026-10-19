@@ -27,7 +27,15 @@ delivering each event as it was raised. Tearing a presentation down
 does not deliver halfway; the caller's own unlock does. After
 Shutdown() no event is queued, and queued events are dropped.
 
-Limits: events of different threads are no longer serialized by
+Limits: an event raised under engine->cs is delivered when the call
+that raised it ends, so the callback sees the engine's state at the end
+of that call, not between its steps (for example a ready state past
+HAVE_METADATA in a LOADEDMETADATA callback, or LOADSTART after the
+topology is built); events raised after Shutdown(), which were
+delivered before, are dropped; a callback that leaves by an exception,
+longjmp or ExitThread() leaves its barrier in the list, where the old
+code left engine->cs held for good; events of different threads are no
+longer serialized by
 engine->cs, so two threads' callbacks can run at the same time and
 interleave in another order than before; Shutdown() does not wait for
 a callback already running on another thread, and an event that has
