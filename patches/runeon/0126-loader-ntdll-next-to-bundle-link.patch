@@ -1,0 +1,72 @@
+From: Runeon Contributors <dev@runeon.com>
+Subject: [PATCH] loader: Find ntdll.so next to the link when the loader runs from an app bundle.
+
+macOS gives a program its Game Mode, and other game policies, from the
+LSApplicationCategoryType of the bundle it runs from; a bare executable
+is never labelled, whatever Info.plist it embeds. Running the loader
+from an app bundle therefore needs the bundle to hold the loader alone,
+started through a symlink at its usual place next to ntdll.so: a signed
+bundle may not contain a symlink that points outside it, so ntdll.so
+cannot be linked into the bundle.
+
+try_dlopen() resolves the loader's path and looks for ntdll.so in that
+directory, which for such a loader is the bundle's Contents/MacOS. When
+the resolved directory is an app bundle's Contents/MacOS, first look
+next to the path the loader was started through, which
+_NSGetExecutablePath() reports with the symlink intact. Any other
+layout, and a failed lookup, takes the existing path unchanged.
+
+diff --git a/loader/main.c b/loader/main.c
+index d3fcd20..827e070 100644
+--- a/loader/main.c
++++ b/loader/main.c
+@@ -156,6 +156,34 @@ static const char *get_self_exe(void)
+     return NULL;
+ }
+ 
++#ifdef __APPLE__
++/* An app bundle may hold only the loader, so that macOS reads the bundle's
++ * Info.plist for it; the loader is then started through a symlink placed where
++ * it normally lives, and ntdll.so stays next to that symlink. A bundle cannot
++ * hold a symlink to ntdll.so either, since a signed bundle may not point outside
++ * itself. Only taken when the resolved directory is a bundle's Contents/MacOS. */
++static void *try_dlopen_next_to_link( const char *argv0, const char *dir )
++{
++    char *bundle, *link_dir, *path, *p;
++    void *handle;
++
++    if (!(bundle = remove_tail( dir, ".app/Contents/MacOS" ))) return NULL;
++    free( bundle );
++    if (!(link_dir = strdup( argv0 ))) return NULL;
++    if (!(p = strrchr( link_dir, '/' )) || p == link_dir)
++    {
++        free( link_dir );
++        return NULL;
++    }
++    *p = 0;
++    path = build_path( link_dir, "ntdll.so" );
++    handle = dlopen( path, RTLD_NOW );
++    free( link_dir );
++    free( path );
++    return handle;
++}
++#endif
++
+ static void *try_dlopen( const char *argv0 )
+ {
+     char *dir, *path, *p;
+@@ -164,6 +192,14 @@ static void *try_dlopen( const char *argv0 )
+     if (!argv0) return NULL;
+     if (!(dir = realpath_dirname( argv0 ))) return NULL;
+ 
++#ifdef __APPLE__
++    if ((handle = try_dlopen_next_to_link( argv0, dir )))
++    {
++        free( dir );
++        return handle;
++    }
++#endif
++
+     if ((p = remove_tail( dir, "/loader" )))
+         path = build_path( p, "dlls/ntdll/ntdll.so" );
+     else

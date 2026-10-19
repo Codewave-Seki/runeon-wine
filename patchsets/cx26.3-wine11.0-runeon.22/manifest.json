@@ -2546,6 +2546,22 @@
           "contains": "/* nothing matching in the host's store is not a failure, the registry may hold the matches */"
         }
       ]
+    },
+    {
+      "order": 156,
+      "path": "patches/runeon/0126-loader-ntdll-next-to-bundle-link.patch",
+      "sha256": "1c30ffc7dd49960f36f5d515e61d41f46e43ef520a0276b25b2985417f4d054a",
+      "kind": "runeon-product",
+      "status": "active",
+      "risk": "low",
+      "summary": "When the loader's resolved directory is an app bundle's Contents/MacOS, try_dlopen() first loads ntdll.so next to the path the loader was started through (the symlink _NSGetExecutablePath() reports), so a signed app bundle can hold the loader alone without a symlink pointing outside it. macOS assigns Game Mode and other game policies only to a process running from a bundle whose Info.plist declares LSApplicationCategoryType; a bare executable is never labelled. Any other layout, and a failed lookup, takes the unchanged path. Not opt-in through a value: the packaged layout is the switch, and without it behaviour is identical.",
+      "testStrategy": "Static and integration checks prove the patch applies and the anchor is present once. A complete i386/x86_64 WoW64 build must compile the loader. A runtime packaged with lib/wine/x86_64-unix/WineLoader.app (Info.plist with LSApplicationCategoryType public.app-category.games) and x86_64-unix/wine as a symlink to its executable must start wineboot and a full-screen Win32 window, pass codesign --verify --strict on the bundle, and be labelled a game by gamepolicyd (labelReason=appStoreCategory, Game mode enabled once the window is frontmost and full screen). The unpacked layout must behave as before.",
+      "verification": [
+        {
+          "path": "loader/main.c",
+          "contains": "static void *try_dlopen_next_to_link( const char *argv0, const char *dir )"
+        }
+      ]
     }
   ],
   "targetedReview": {
