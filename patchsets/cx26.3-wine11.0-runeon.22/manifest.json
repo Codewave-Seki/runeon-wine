@@ -2524,6 +2524,28 @@
           "contains": "pvmi->PagefileUsage = vm_info.phys_footprint;"
         }
       ]
+    },
+    {
+      "order": 155,
+      "path": "patches/runeon/0125-advapi32-credenumerate-empty-host-store.patch",
+      "sha256": "86352d8e7b68310e495360fe72e74ef268cbacb70d958701cba66408c8c74e66",
+      "kind": "runeon-product",
+      "status": "active",
+      "risk": "low",
+      "summary": "CredEnumerateW() treats ERROR_NOT_FOUND from the host credential store like ERROR_NOT_SUPPORTED, so on macOS a filter that matches registry credentials but no Keychain item returns the registry matches instead of failing the whole call; ERROR_NOT_FOUND is still returned when nothing matches anywhere. Not opt-in: it restores the result Windows gives for stored credentials, and the host store path returns before touching the count, length or buffer.",
+      "testStrategy": "Static and integration checks prove the patch applies and the anchors are present once. A complete i386/x86_64 WoW64 build must compile advapi32. tests/cred-enumerate-probe.c, built for x86 and x64, writes a generic credential under a unique prefix, requires a filtered CredEnumerateW() to return it, requires a filter matching nothing to fail with ERROR_NOT_FOUND, and deletes the credential.",
+      "provenance": {
+        "repository": "https://github.com/gauthierpiarrette/highball-engine",
+        "commit": "a2b10db8b86f4ed5f02855a41fa7c6ad4d3cbfb6",
+        "author": "Gauthier Piarrette",
+        "note": "Adapted downstream fix (patch 0019), code unchanged; not a WineHQ release backport."
+      },
+      "verification": [
+        {
+          "path": "dlls/advapi32/cred.c",
+          "contains": "/* nothing matching in the host's store is not a failure, the registry may hold the matches */"
+        }
+      ]
     }
   ],
   "targetedReview": {

@@ -1,0 +1,52 @@
+From: Gauthier Piarrette <gauthierpiarrette@gmail.com>
+Subject: [PATCH] advapi32: Do not fail CredEnumerateW() when the host store has no match.
+
+Adapted for CrossOver 26.3 from gauthierpiarrette/highball-engine
+commit a2b10db8b86f4ed5f02855a41fa7c6ad4d3cbfb6 (patch 0019). The code
+is unchanged. This is a downstream fix, not a WineHQ backport or a
+game-specific change; WineHQ has the same two lines today.
+
+CredEnumerateW() collects credentials from the registry, then from the
+host's store through mountmgr. On macOS that store is the Keychain, and
+mountmgr's search_credentials() returns STATUS_NOT_FOUND when no
+Keychain item matches the filter. CredEnumerateW() only forgave
+ERROR_NOT_SUPPORTED, the answer where there is no host store, so on
+macOS a filter that matched registry credentials but no Keychain item
+failed the whole call with ERROR_NOT_FOUND and the registry matches
+were dropped. On Windows, a filter that matches stored credentials
+returns them.
+
+A program that keeps its own generic credentials and looks them up by
+prefix therefore never found them: a sign-in library that reads its
+device key and tokens with a filtered CredEnumerateW() made a new
+device key on every start and asked the user to sign in again each
+time.
+
+An empty answer from the host is now treated like an unsupported host:
+the registry count decides, and ERROR_NOT_FOUND is still returned when
+nothing matched anywhere. host_enumerate_credentials() returns before
+touching the count, length or buffer on that path.
+
+diff --git a/dlls/advapi32/cred.c b/dlls/advapi32/cred.c
+index dd8d7ce..6cfce5e 100644
+--- a/dlls/advapi32/cred.c
++++ b/dlls/advapi32/cred.c
+@@ -1059,7 +1059,8 @@ BOOL WINAPI CredEnumerateW(LPCWSTR Filter, DWORD Flags, DWORD *Count, PCREDENTIA
+     if (ret == ERROR_SUCCESS)
+     {
+         ret = host_enumerate_credentials(Filter, NULL, NULL, &len, Count);
+-        if (ret == ERROR_NOT_SUPPORTED) ret = ERROR_SUCCESS;
++        /* nothing matching in the host's store is not a failure, the registry may hold the matches */
++        if (ret == ERROR_NOT_SUPPORTED || ret == ERROR_NOT_FOUND) ret = ERROR_SUCCESS;
+     }
+     if (ret == ERROR_SUCCESS && *Count == 0)
+         ret = ERROR_NOT_FOUND;
+@@ -1085,7 +1086,7 @@ BOOL WINAPI CredEnumerateW(LPCWSTR Filter, DWORD Flags, DWORD *Count, PCREDENTIA
+             if (ret == ERROR_SUCCESS)
+             {
+                 ret = host_enumerate_credentials(Filter, *Credentials, buffer, &len, Count);
+-                if (ret == ERROR_NOT_SUPPORTED) ret = ERROR_SUCCESS;
++                if (ret == ERROR_NOT_SUPPORTED || ret == ERROR_NOT_FOUND) ret = ERROR_SUCCESS;
+             }
+         }
+         else ret = ERROR_OUTOFMEMORY;
