@@ -62,6 +62,7 @@ Runeon Wine 是 Runeon Steam Baseline runtime 的公开源码维护仓库，保�
 - [`cx26.3-wine11.0-runeon.19`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.19) 是 Pre-release，曾是 Dev seed `2026.10.16` 的 Dev 候选，已由 `.20` 接替，未用于 Production。不可变源码详情见 [release manifest](release-manifests/cx26.3-wine11.0-runeon.19.source-archive.json)。
 - [`cx26.3-wine11.0-runeon.20`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.20) 是保留的 Production seed `2026.10.16.1` 对应的正式源码 Release，已由 `.21` 接替，不再分发。不可变源码详情见 [release manifest](release-manifests/cx26.3-wine11.0-runeon.20.source-archive.json)。
 - [`cx26.3-wine11.0-runeon.21`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.21) 是当前 Production seed `2026.10.18`（App `>=1.13 (10)`）对应的正式源码 Release；Production 使用 Dev 已验证的同一份产物字节。不可变源码详情见 [release manifest](release-manifests/cx26.3-wine11.0-runeon.21.source-archive.json)。
+- [`cx26.3-wine11.0-runeon.22`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.22) 是 Dev seed `2026.10.20`（App `>=1.13 (10)`）对应的 Pre-release Dev 候选，在 Dev 中接替 `.21`，尚未用于 Production。保留 `.21`，新增 `GetIntegratedDisplaySize()` 桩（`0091`），macOS 提交内存、凭据、线程时间与应用包相关修复（`0124`、`0125`、`0131`、`0132`），游戏模式 loader bundle（`0126`、`0127`），音频声道顺序与缓冲调整（`0128`、`0129`），旧式 OpenGL 上下文的 ES2 兼容调用（`0130`），以及在引擎锁之外调用的媒体引擎回调（`0133`）。不可变源码详情见 [release manifest](release-manifests/cx26.3-wine11.0-runeon.22.source-archive.json)。
 
 ## 快速验证
 

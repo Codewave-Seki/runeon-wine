@@ -22,6 +22,8 @@ Runeon Wine 同时接受主动上游审计和 diagnostics 驱动调查两类输�
 
 ## 当前 Wine 11.x 审查基线
 
+当前 Dev 候选：[`cx26.3-wine11.0-runeon.22`](patchsets/cx26.3-wine11.0-runeon.22/manifest.json)（Pre-release），搭配 Dev seed `2026.10.20`（App `>=1.13 (10)`）。保留 `.21`，新增 `0091`（WineHQ 11.11 的 `GetIntegratedDisplaySize()` 桩）与 `0124`–`0133`：macOS 上以任务内存占用作为提交内存（`0124`）；宿主凭据库没有匹配时保留注册表中的凭据（`0125`）；unix loader 从游戏类别的 app bundle 运行，使 macOS 可启用游戏模式，并保留各程序的菜单名（`0126`、`0127`）；空间音频静态对象按 `WAVEFORMATEXTENSIBLE` 声道顺序排列（`0128`）；render 流的 I/O 缓冲保持在半个周期以内（`0129`）；旧式 OpenGL 上下文提供 `GL_ARB_ES2_compatibility` 的调用（`0130`）；macOS 上按线程报告 CPU 时间（`0131`）；应用包查询从注册表回答（`0132`）；媒体引擎回调在引擎锁之外调用（`0133`）。`0129` 只验证了缓冲调整，未针对可听见的断音验证；`0133` 保持同一线程产生的事件顺序，但不同线程的回调不再串行。已通过 x86_64/WoW64 完整构建、静态与集成检查、探针，以及本地与 Dev 验收；Production 尚未批准。不可变附件记录在 [release manifest](release-manifests/cx26.3-wine11.0-runeon.22.source-archive.json)。
+
 当前正式源码：[`cx26.3-wine11.0-runeon.21`](patchsets/cx26.3-wine11.0-runeon.21/manifest.json)（正式版/latest），搭配 seed `2026.10.18`（App `>=1.13 (10)`）、MoltenVK `1.4.2` 与 SDL2 `2.32.10`。保留 `.20`，新增 `0121`（把 `0112` 的栈上界检查扩展到 x64 处理函数查找的两个 collided unwind 分支）、`0122`（mmdevapi Unix 调用失败时在断言前记录驱动名、call code 与 status）与 `0123`（异步 I/O 状态块所在页已不可写时跳过写回）。`0121` 与 `0123` 无需开关即生效，作为逐项批准的例外列在 MAINTENANCE 中；`0123` 是有限防护，检查之后才释放的内存仍可能触发故障。已通过 x86_64/WoW64 完整构建、静态与集成检查，以及本地与 Dev 验收；Production 使用 Dev 已验证的同一份签名归档。这些结果不代表普遍的游戏兼容性。不可变附件记录在[发布清单](release-manifests/cx26.3-wine11.0-runeon.21.source-archive.json)。
 
 上一正式源码，已由 `.21` 接替，保留用于回滚：[`cx26.3-wine11.0-runeon.20`](patchsets/cx26.3-wine11.0-runeon.20/manifest.json)（正式版），对应 seed `2026.10.16.1`，该 seed 已不再分发。保留 `.19` 并新增 `0089`、`0090` 与 `0120`。不可变附件记录在[发布清单](release-manifests/cx26.3-wine11.0-runeon.20.source-archive.json)。
