@@ -95,6 +95,7 @@ Runeon 产品补丁默认必须开启后才生效，见 `CLAUDE.md`。只有维�
 | `0131` | 在 macOS 上报告每个运行中线程自己的 CPU 时间，与 Windows 一致，不再是 0 或整个进程的时间。 | 只限调用进程内的线程；`ThreadTimes` 跳过已退出的线程，它们仍报 0（Windows 报最终值），查询其他进程仍与以前一样失败。进程列表（`SystemProcessInformation`）现在也会报告调用进程自己的线程，那条路径没有退出防护。 |
 | `0132` | 从注册表回答应用包查询，并在 `wine.inf` 中登记 VCLibs 框架包，与 Windows 已安装这些包一致。 | 只涉及三个查询函数与 VCLibs 条目；不覆盖已有值。 |
 | `0133` | 在引擎锁之外调用应用的媒体引擎回调，仍在产生事件的线程上、在该调用返回前、按原来的顺序送达，回调不会再与引擎互相死锁。 | 只改事件派发。持锁期间产生的事件在该调用结束时送达，回调看到的是调用结束时的状态；`Shutdown()` 之后的事件被丢弃。不同线程的回调不再由引擎锁串行，可能同时执行；`Shutdown()` 不等待其他线程上正在执行的回调，已通过关闭检查的事件仍可能送达。销毁时仍在排队的事件直接释放。 |
+| `0134` | Retina 模式下 winemac 不再把 `GetDeviceCaps(HORZRES/VERTRES)` 乘 2，屏幕 DC 报告的尺寸与 `GetSystemMetrics`、`EnumDisplaySettings` 和 `DESKTOPHORZRES` 一致，与 Windows 相同。它的开关是 Wine 自带的 `RetinaMode` 注册表值，不是本仓库定义的。 | 只在 `RetinaMode` 开启（`retina_on`）时生效；关闭时行为不变。只涉及屏幕设备的这两项；打印机 DC 不经过 winemac。 |
 
 ## 发布规则
 
