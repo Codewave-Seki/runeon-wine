@@ -1,0 +1,40 @@
+From: Alexander Theißen <alex@theissen.io>
+Subject: [PATCH] winemac: Don't double HORZRES and VERTRES in retina mode.
+
+Ported for CrossOver 26.3 from athei/wine commit
+6a52255e56a56e7366d5013075d2ce81149fa624, code unchanged; the same
+change is Highball's patch 0020. A downstream fix, not a WineHQ
+backport: WineHQ still doubles both caps through wine-11.20.
+
+macdrv_GetDeviceCaps doubled both caps whenever retina mode was on,
+on top of the fallback implementation. That fallback now returns the
+primary monitor rect or SM_CXSCREEN/SM_CYSCREEN, and winemac already
+reports monitors in pixels in retina mode (a882106e38), so a retina
+process saw HORZRES twice the width that EnumDisplaySettings,
+GetSystemMetrics and DESKTOPHORZRES report: 6048 against 3024 on a
+3024x1964 panel for a DPI-aware process, and 3024 against an
+SM_CXSCREEN of 1512 for an unaware one.
+
+Programs that size or centre windows from HORZRES and VERTRES place
+them on a desktop twice the real size. Pass both caps through to the
+fallback unchanged. Nothing changes unless RetinaMode is enabled.
+---
+--- a/dlls/winemac.drv/gdi.c
++++ b/dlls/winemac.drv/gdi.c
+@@ -213,15 +213,10 @@ static INT macdrv_GetDeviceCaps(PHYSDEV dev, INT cap)
+     case VERTSIZE:
+         ret = vert_size;
+         break;
+-    case HORZRES:
+-    case VERTRES:
+     default:
+         pthread_mutex_unlock(&device_data_mutex);
+         dev = GET_NEXT_PHYSDEV( dev, pGetDeviceCaps );
+-        ret = dev->funcs->pGetDeviceCaps( dev, cap );
+-        if ((cap == HORZRES || cap == VERTRES) && retina_on)
+-            ret *= 2;
+-        return ret;
++        return dev->funcs->pGetDeviceCaps( dev, cap );
+     }
+ 
+     TRACE("cap %d -> %d\n", cap, ret);
