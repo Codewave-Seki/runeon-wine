@@ -4,7 +4,7 @@
 
 > This English document is authoritative. The Chinese and Japanese documents are complete translations.
 
-Candidate patch set `cx26.3-wine11.0-runeon.23` adds `patches/upstream/0135-wine-11.20-targeted-fixes.patch` after `0134`. It squashes 34 WineHQ commits: 32 first released in `wine-11.20`, and two `wine-11.12` msvcp60 fixes that one of them depends on. The patch lists every commit with its author, and the manifest records the full commit IDs. Test-only hunks are omitted.
+Candidate patch set `cx26.3-wine11.0-runeon.23` adds `patches/upstream/0135-wine-11.20-targeted-fixes.patch` after `0134`. It squashes 37 WineHQ commits: 35 first released in `wine-11.20`, and two `wine-11.12` msvcp60 fixes that one of them depends on. The patch lists every commit with its author, and the manifest records the full commit IDs. Test-only hunks are omitted.
 
 ## Selection
 
@@ -26,6 +26,7 @@ Each taken commit applies to that tree in upstream order, which shows that the b
 | msvcp90 | `f0fef9fef7` | `_Strxfrm` passed the sort-key length as the source length, which over-read the source. |
 | msvcp90 | `00469cf5cf` | `codecvt<char16_t>` produced a wrong surrogate pair for U+10000. |
 | msvcp60 | `0740f54989` | `mbsrtowcs` never advanced the caller's source pointer. |
+| msvcp90 | `bbf2ae736c`, `199cc0386e`, `19b112a917` | Correctness fixes found in the independent review: `codecvt<unsigned short>` facets ignored the requested locale; wide floating-point output keyed the decimal point on `showbase` instead of `showpoint`; the three `time_put` types reported `num_put` RTTI names. None is a crash fix; each is a one-line change whose defect the base shares. |
 | vcruntime140_1 | `86b80d02b6` | C++ exception state was set up only in `DLL_THREAD_ATTACH`, so a thread created before the DLL loaded unwound with a wrong try level. |
 | winegstreamer | `73cc740a01`, `d7c49769d9`, `33fba6fc26`, `52f8e6b5a5`, `774cb470c5`, `90e98d3d94` | A NULL transform dereference on drain and flush; a failed media-type conversion reported as success, leaving the transform unset; a failed WMA output type ignored; a leaked async result on finalize; an uninitialised stream count; an unchecked allocation. |
 | d3d8 | `6f14a8ea45` | Releasing a texture with no references wrapped the count around instead of returning 0, as Windows does. Inferred consequence: a loop that releases until the count reaches zero would not end. |
@@ -44,7 +45,7 @@ Each taken commit applies to that tree in upstream order, which shows that the b
 
 `msvcp90/ios.c` and `msvcp90/locale.c` are also built into the `msvcp100`–`msvcp140` builtins, so the msvcp90 rows apply to them too.
 
-`81e52628b2` and `48e2d50404` are in areas this sweep normally leaves out. Each is a small fix whose defect is present in the base: CrossOver's `RtlWaitOnAddress` and `macdrv_GetWindowStyleMasks()` match the upstream code before the fix.
+`81e52628b2` and `48e2d50404` touch `ntdll` and `winemac.drv`, which this repository treats as ABI-sensitive and leaves out by default. The maintainer approved both as individual exceptions for this patch set on 2026-10-23; they do not widen the rule for later sweeps. Each is a small fix whose defect is present in the base: CrossOver's `RtlWaitOnAddress` and `macdrv_GetWindowStyleMasks()` match the upstream code before the fix. Neither changes a Unix-call ABI, the server protocol or a data structure shared across modules.
 
 ## Left out after review
 

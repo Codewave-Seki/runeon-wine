@@ -4,7 +4,7 @@
 
 > 以英文文档为准，中文与日文为完整译文。
 
-候选补丁集 `cx26.3-wine11.0-runeon.23` 在 `0134` 之后加入 `patches/upstream/0135-wine-11.20-targeted-fixes.patch`。它合并了 34 个 WineHQ 提交：32 个首次发布于 `wine-11.20`，另有 2 个 `wine-11.12` 的 msvcp60 修复，是其中一个提交的前置。补丁逐一列出每个提交及作者，manifest 记录完整提交 ID。只改测试的部分不包含在内。
+候选补丁集 `cx26.3-wine11.0-runeon.23` 在 `0134` 之后加入 `patches/upstream/0135-wine-11.20-targeted-fixes.patch`。它合并了 37 个 WineHQ 提交：35 个首次发布于 `wine-11.20`，另有 2 个 `wine-11.12` 的 msvcp60 修复，是其中一个提交的前置。补丁逐一列出每个提交及作者，manifest 记录完整提交 ID。只改测试的部分不包含在内。
 
 ## 选择
 
@@ -26,6 +26,7 @@
 | msvcp90 | `f0fef9fef7` | `_Strxfrm` 把排序键长度当作源长度传入，导致越界读源字符串。 |
 | msvcp90 | `00469cf5cf` | `codecvt<char16_t>` 对 U+10000 生成了错误的代理对。 |
 | msvcp60 | `0740f54989` | `mbsrtowcs` 不推进调用方的源指针。 |
+| msvcp90 | `bbf2ae736c`、`199cc0386e`、`19b112a917` | 独立复审发现的正确性修复：`codecvt<unsigned short>` facet 忽略调用方指定的 locale；宽字符浮点输出按 `showbase` 而不是 `showpoint` 决定是否输出小数点；三个 `time_put` 类型报告的是 `num_put` 的 RTTI 名称。都不是崩溃修复，各为一行修改，基线存在同样的缺陷。 |
 | vcruntime140_1 | `86b80d02b6` | C++ 异常状态只在 `DLL_THREAD_ATTACH` 中初始化，所以 DLL 加载前就已创建的线程在展开时 try level 错误。 |
 | winegstreamer | `73cc740a01`、`d7c49769d9`、`33fba6fc26`、`52f8e6b5a5`、`774cb470c5`、`90e98d3d94` | drain／flush 时解引用 NULL transform；媒体类型转换失败却报告成功，导致 transform 未被设置；忽略 WMA 输出类型的设置失败；finalize 时泄漏异步结果；使用未初始化的流数量；未检查内存分配。 |
 | d3d8 | `6f14a8ea45` | 释放引用计数已为 0 的纹理时，计数会回绕，而 Windows 返回 0。推断的后果：「一直释放到 0」的循环不会结束。 |
@@ -44,7 +45,7 @@
 
 `msvcp90/ios.c` 与 `msvcp90/locale.c` 也编进 `msvcp100`–`msvcp140` 的 builtin，所以表中 msvcp90 的各行同样适用于它们。
 
-`81e52628b2` 与 `48e2d50404` 属于本类回移通常不纳入的范围。两者都是小修复，且缺陷在基线中存在：CrossOver 的 `RtlWaitOnAddress` 与 `macdrv_GetWindowStyleMasks()` 和上游修复前的代码一致。
+`81e52628b2` 与 `48e2d50404` 改动 `ntdll` 与 `winemac.drv`，本仓库把这两个模块视为 ABI-sensitive，默认不纳入。维护者于 2026-10-23 批准两者作为本补丁集的单独例外，不放宽以后回移的规则。两者都是小修复，且缺陷在基线中存在：CrossOver 的 `RtlWaitOnAddress` 与 `macdrv_GetWindowStyleMasks()` 和上游修复前的代码一致。两者都不改变 Unix 调用 ABI、server 协议或跨模块共享的数据结构。
 
 ## 审查后不纳入
 

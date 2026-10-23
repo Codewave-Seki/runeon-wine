@@ -2746,7 +2746,7 @@
     {
       "order": 165,
       "path": "patches/upstream/0135-wine-11.20-targeted-fixes.patch",
-      "sha256": "dcceba09aa90ef762806b3d2a12f37af4555d9270b997a8a106c01b538aec27e",
+      "sha256": "bd742946bcb08e5090287845548d62ae19f0fc988ab6b2fd0057ff4451ecadbe",
       "kind": "upstream-backport",
       "status": "active",
       "risk": "medium",
@@ -2776,6 +2776,9 @@
         "0e7224e8522e8dab5aab43c73b94778891c035c8",
         "baa7c5d335abee2059f175a4899ea61d25ab692c",
         "0740f549897e43f8b7971bdac74af183720100dd",
+        "bbf2ae736cb7868f2c67c73c1b8a411214e4f095",
+        "199cc0386e607fdc79a1363fa719db06dc88b430",
+        "19b112a917254b8089839ea25ca3b845d6f148de",
         "f011c203a045282743c9a0fb2afc142e7a363e9c",
         "f0fef9fef7fc4bee42f952e76e810313ba9c4263",
         "00469cf5cfcdbdb075fa69903034f2eb48b56344",
@@ -2790,12 +2793,16 @@
         "81e52628b25ac173d04796e8a9b9cda637d3e233",
         "48e2d50404d0b67f30cf0a149df361f4d50eac64"
       ],
-      "summary": "Squashed user-mode fixes first released in wine-11.20 for DLLs used by Steam, launchers, installers and games (crash, memory-safety, leak, hang and error-path fixes), plus two wine-11.12 msvcp60 prerequisites; ABI-sensitive, driver-identity, feature series and behaviour changes without a stability benefit excluded.",
+      "summary": "Squashed user-mode fixes first released in wine-11.20 for DLLs used by Steam, launchers, installers and games (crash, memory-safety, leak, hang and error-path fixes), plus two wine-11.12 msvcp60 prerequisites and three msvcp90 correctness fixes; two small ntdll and winemac.drv fixes are taken as individually approved exceptions to the ABI-sensitive rule, and other ABI-sensitive, driver-identity, feature series and behaviour changes without a stability benefit are excluded.",
       "testStrategy": "Every commit applies in upstream order without fuzz on top of patches 0001-0134, except those documented as adapted; every affected module and every module sharing its sources builds for i386 and x86_64; full Wine build and product smoke validation. Upstream test hunks are omitted.",
       "verification": [
         {
           "path": "dlls/msvcrt/handler4.c",
           "contains": "static int thread_get_trylevel(void)"
+        },
+        {
+          "path": "dlls/msvcp90/locale.c",
+          "contains": "codecvt_short_ctor_locinfo((codecvt_wchar*)*facet, &locinfo, 0);"
         },
         {
           "path": "dlls/winemac.drv/window.c",

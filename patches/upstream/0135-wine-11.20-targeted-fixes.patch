@@ -1,8 +1,8 @@
 From: Wine upstream contributors (see commit list)
 Subject: [PATCH] Backport targeted Wine 11.20 fixes.
 
-Squashed backport of 34 WineHQ commits, applied in upstream order on top of
-cx26.3-wine11.0-runeon.23 patches 0001-0134. 32 were first released in wine-11.20; 5e5ca9fefc and
+Squashed backport of 37 WineHQ commits, applied in upstream order on top of
+cx26.3-wine11.0-runeon.23 patches 0001-0134. 35 were first released in wine-11.20; 5e5ca9fefc and
 076438fa7c (wine-11.12) are prerequisites of 794feb9289 and fix the same wide-string replace.
 Test-only hunks are omitted.
 Adaptations, marked [adapted] below: 146fbbe78b is applied to dlls/dmband/bandtrack.c, where the
@@ -30,6 +30,9 @@ one-line change below the CrossOver Quicken hack in macdrv_GetWindowStyleMasks()
   0e7224e852 Anton Baskanov: winmm: Use wine_midi_stream_free() to free MIDI stream.
   baa7c5d335 Alistair Leslie-Hughes: hnetcfg: Only assign output on success in NetFwPolicy2_create.
   0740f54989 Piotr Caban: msvcp60: Fix mbsrtowcs() implementation.
+  bbf2ae736c Piotr Caban: msvcp90: Use correct locale in codecvt_short__Getcat.
+  199cc0386e Piotr Caban: msvcp90: Fix FMTFLAG_showpoint handling in num_put_wchar__Ffmt.
+  19b112a917 Piotr Caban: msvcp90: Fix typos in time_put<> RTTI data.
   f011c203a0 Piotr Caban: msvcp90: Fix error path handling in locale_ctor_locale_cstr.
   f0fef9fef7 Piotr Caban: msvcp90: Fix incorrect len usage in _Strxfrm.
   00469cf5cf Piotr Caban: msvcp90: Fix off-by-one error in codecvt_char16_do_in.
@@ -1591,9 +1594,18 @@ index 71f8dc5..19c9687 100644
  
  /* ??$?5_WU?$char_traits@_W@std@@@std@@YAAAV?$basic_istream@_WU?$char_traits@_W@std@@@0@AAV10@AA_W@Z */
 diff --git a/dlls/msvcp90/locale.c b/dlls/msvcp90/locale.c
-index b80b7c1..2c4522a 100644
+index b80b7c1..656258e 100644
 --- a/dlls/msvcp90/locale.c
 +++ b/dlls/msvcp90/locale.c
+@@ -3685,7 +3685,7 @@ size_t __cdecl codecvt_short__Getcat(const locale_facet **facet, const locale *l
+ 
+         *facet = operator_new(sizeof(codecvt_wchar));
+         _Locinfo_ctor_cstr(&locinfo, locale_string_char_c_str(&loc->ptr->name));
+-        codecvt_short_ctor((codecvt_wchar*)*facet);
++        codecvt_short_ctor_locinfo((codecvt_wchar*)*facet, &locinfo, 0);
+         _Locinfo_dtor(&locinfo);
+     }
+ 
 @@ -4210,7 +4210,7 @@ int __thiscall codecvt_char16_do_in(const codecvt_char16 *this, _Mbstatet *state
  
          if (fourbyte)
@@ -1603,6 +1615,15 @@ index b80b7c1..2c4522a 100644
              {
                  res -= 0x10000;
                  MBSTATET_TO_INT(state) = 0xdc00 | (res & 0x3ff);
+@@ -8784,7 +8784,7 @@ char* __cdecl num_put_wchar__Ffmt(const num_put *this, char *fmt, char spec, int
+     *p++ = '%';
+     if(fmtfl & FMTFLAG_showpos)
+         *p++ = '+';
+-    if(fmtfl & FMTFLAG_showbase)
++    if(fmtfl & FMTFLAG_showpoint)
+         *p++ = '#';
+     *p++ = '.';
+     *p++ = '*';
 @@ -12665,7 +12665,6 @@ locale* __thiscall locale_ctor_locale_cstr(locale *this, const locale *loc, cons
      _Locinfo_ctor_cat_cstr(&locinfo, cat, locname);
      if(!memcmp(locale_string_char_c_str(&locinfo.newlocname), "*", 2)) {
@@ -1652,6 +1673,19 @@ index b80b7c1..2c4522a 100644
  }
  
  size_t __cdecl _Wcsxfrm(wchar_t *dest, wchar_t *dest_end,
+@@ -13155,9 +13160,9 @@ DEFINE_RTTI_DATA(num_get_short, 0, ".?AV?$num_get@GV?$istreambuf_iterator@GU?$ch
+ DEFINE_RTTI_DATA(num_put_char, 0, ".?AV?$num_put@DV?$ostreambuf_iterator@DU?$char_traits@D@std@@@std@@@std@@", locale_facet_rtti_base_descriptor)
+ DEFINE_RTTI_DATA(num_put_wchar, 0, ".?AV?$num_put@_WV?$ostreambuf_iterator@_WU?$char_traits@_W@std@@@std@@@std@@", locale_facet_rtti_base_descriptor)
+ DEFINE_RTTI_DATA(num_put_short, 0, ".?AV?$num_put@GV?$ostreambuf_iterator@GU?$char_traits@G@std@@@std@@@std@@", locale_facet_rtti_base_descriptor)
+-DEFINE_RTTI_DATA(time_put_char, 0, ".?AV?$num_put@DV?$ostreambuf_iterator@DU?$char_traits@D@std@@@std@@@std@@", locale_facet_rtti_base_descriptor)
+-DEFINE_RTTI_DATA(time_put_wchar, 0, ".?AV?$num_put@_WV?$ostreambuf_iterator@_WU?$char_traits@_W@std@@@std@@@std@@", locale_facet_rtti_base_descriptor)
+-DEFINE_RTTI_DATA(time_put_short, 0, ".?AV?$num_put@GV?$ostreambuf_iterator@GU?$char_traits@G@std@@@std@@@std@@", locale_facet_rtti_base_descriptor)
++DEFINE_RTTI_DATA(time_put_char, 0, ".?AV?$time_put@DV?$ostreambuf_iterator@DU?$char_traits@D@std@@@std@@@std@@", locale_facet_rtti_base_descriptor)
++DEFINE_RTTI_DATA(time_put_wchar, 0, ".?AV?$time_put@_WV?$ostreambuf_iterator@_WU?$char_traits@_W@std@@@std@@@std@@", locale_facet_rtti_base_descriptor)
++DEFINE_RTTI_DATA(time_put_short, 0, ".?AV?$time_put@GV?$ostreambuf_iterator@GU?$char_traits@G@std@@@std@@@std@@", locale_facet_rtti_base_descriptor)
+ DEFINE_RTTI_DATA(time_base, 0, ".?AUtime_base@std@@", locale_facet_rtti_base_descriptor)
+ DEFINE_RTTI_DATA(time_get_char, 0, ".?AV?$time_get@DV?$istreambuf_iterator@DU?$char_traits@D@std@@@std@@@std@@", time_base_rtti_base_descriptor, locale_facet_rtti_base_descriptor)
+ DEFINE_RTTI_DATA(time_get_wchar, 0, ".?AV?$time_get@_WV?$istreambuf_iterator@_WU?$char_traits@_W@std@@@std@@@std@@", time_base_rtti_base_descriptor, locale_facet_rtti_base_descriptor)
 diff --git a/dlls/msvcrt/handler4.c b/dlls/msvcrt/handler4.c
 index 06bd02d..0abc448 100644
 --- a/dlls/msvcrt/handler4.c
