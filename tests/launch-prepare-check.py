@@ -121,14 +121,16 @@ int main(void) {
     grant_ok=0; check(&p,1,NULL); grant_ok=1; app_ok=0; check(&p,1,NULL); app_ok=1;
     RtlInitUnicodeString(&parent.ImagePathName,L"C:\\not-steam.exe"); check(&p,1,NULL);
     RtlInitUnicodeString(&parent.ImagePathName,L"C:\\Steam\\STEAM.EXE"); check(&p,1,L"d3d12on7-prepare");
-    for(fail=1;fail<=6;fail++) check(&p,1,NULL); fail=0;
+    for(fail=1;fail<=6;fail++) check(&p,1,NULL);
+    fail=0;
     nwjs=1; layout=3; check(&p,1,L"nwjs-auto"); guard=0; check(&p,1,L"nwjs-auto");
     layout=1; check(&p,1,NULL); guard=1; check(&p,1,L"d3d12on7-prepare");
     RtlInitUnicodeString(&p.CommandLine,L"\"C:\\other.exe\""); check(&p,1,NULL);
     RtlInitUnicodeString(&p.CommandLine,L"\"C:\\Games\\Example\\game.exe\"suffix"); check(&p,1,NULL);
     RtlInitUnicodeString(&p.CommandLine,L"\"C:\\Games\\Example\\game.exe\"\n"); check(&p,1,NULL);
     WCHAR huge[32768]; wcscpy(huge,L"\"C:\\Games\\Example\\game.exe\" ");
-    size_t start=wcslen(huge); for(size_t i=start;i<32766;i++) huge[i]='a'; huge[32766]=0;
+    size_t start=wcslen(huge); for(size_t i=start;i<32766;i++) huge[i]='a';
+    huge[32766]=0;
     RtlInitUnicodeString(&p.CommandLine,huge); check(&p,1,NULL);
     /* Route preparation: every x64 or i386 game Steam creates, beside D3D12on7,
      * never for the NW.js hand-off, and only with the creation gate allowed. */
@@ -142,7 +144,8 @@ int main(void) {
     grant_ok=0; check2(&p,1,NULL,0); grant_ok=1; app_ok=0; check2(&p,1,NULL,0); app_ok=1;
     RtlInitUnicodeString(&parent.ImagePathName,L"C:\\not-steam.exe"); check2(&p,1,NULL,0);
     RtlInitUnicodeString(&parent.ImagePathName,L"C:\\Steam\\steam.exe");
-    for(fail=1;fail<=6;fail++) check2(&p,1,NULL,0); fail=0;
+    for(fail=1;fail<=6;fail++) check2(&p,1,NULL,0);
+    fail=0;
     RtlInitUnicodeString(&p.CommandLine,L"\"C:\\other.exe\""); check2(&p,1,NULL,0);
     RtlInitUnicodeString(&p.CommandLine,huge); check2(&p,1,NULL,0);
     launch=0;
