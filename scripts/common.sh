@@ -6,6 +6,13 @@ script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd "$script_dir/.." && pwd)"
 base_manifest="$repo_root/base/crossover-26.3-wine-11.0.json"
 patchset_definition="${RUNEON_WINE_PATCHSET_DEFINITION:-}"
+# Selection order: an explicit definition; the root series of a patch-set
+# bundle, which carries exactly one definition; otherwise the newest patch set
+# in the repository.
+if [[ -z "$patchset_definition" && ! -f "$repo_root/series" ]]; then
+  patchset_definition="$(cd "$repo_root" && ls -d patchsets/*/ 2>/dev/null | sort -V | tail -n 1)"
+  patchset_definition="${patchset_definition%/}"
+fi
 if [[ -n "$patchset_definition" ]]; then
   patchset_definition="$(cd "$repo_root" && cd "$(dirname "$patchset_definition")" && pwd)/$(basename "$patchset_definition")"
   patch_manifest="$patchset_definition/manifest.json"

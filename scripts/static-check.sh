@@ -84,24 +84,23 @@ for release_manifest in "$repo_root"/release-manifests/*.source-archive.json; do
     || die "release manifest must use the canonical public GitHub release URL: $release_manifest"
 done
 
-# The marked README line identifies the active source definition, which may be
-# an unshipped candidate. Shipped source status is recorded separately. Historical
-# patch-set checkouts do not have to match the current README definition.
-if [[ -z "${RUNEON_WINE_PATCHSET_DEFINITION:-}" ]]; then
-  for readme in "$repo_root"/README.md "$repo_root"/README.zh-CN.md "$repo_root"/README.ja.md; do
-    require_file "$readme"
-    marker_count="$(grep -cF '<!-- release-facts:current-patch-set -->' "$readme" || true)"
-    [[ "$marker_count" == "1" ]] \
-      || die "README must carry exactly one release-facts:current-patch-set marker: $readme"
-    current_source_line="$(grep -A1 -F '<!-- release-facts:current-patch-set -->' "$readme" | tail -n 1)"
-    grep -Fq "$patch_set_id" <<<"$current_source_line" \
-      || die "README active source must name $patch_set_id: $readme"
-    stale_patch_set_ids="$(grep -oE 'cx[0-9]+\.[0-9]+-wine[0-9]+\.[0-9]+-runeon\.[0-9]+' <<<"$current_source_line" \
-      | grep -Fxv "$patch_set_id" || true)"
-    [[ -z "$stale_patch_set_ids" ]] \
-      || die "README active source also names a stale patch set: $readme"
-  done
-fi
+# The marked README line names the current stable source: the newest patch set
+# whose release manifest is stable.
+current_stable_id="$(for manifest in "$repo_root"/release-manifests/*.source-archive.json; do
+  [[ "$(json_value "$manifest" '.releaseState')" == "stable" ]] && json_value "$manifest" '.patchSetID'
+done | sort -V | tail -n 1)"
+for readme in "$repo_root"/README.md "$repo_root"/README.zh-CN.md "$repo_root"/README.ja.md; do
+  marker_count="$(grep -cF '<!-- release-facts:current-patch-set -->' "$readme" || true)"
+  [[ "$marker_count" == "1" ]] \
+    || die "README must carry exactly one release-facts:current-patch-set marker: $readme"
+  current_source_line="$(grep -A1 -F '<!-- release-facts:current-patch-set -->' "$readme" | tail -n 1)"
+  grep -Fq "$current_stable_id" <<<"$current_source_line" \
+    || die "README current source must name $current_stable_id: $readme"
+  stale_patch_set_ids="$(grep -oE 'cx[0-9]+\.[0-9]+-wine[0-9]+\.[0-9]+-runeon\.[0-9]+' <<<"$current_source_line" \
+    | grep -Fxv "$current_stable_id" || true)"
+  [[ -z "$stale_patch_set_ids" ]] \
+    || die "README current source also names another patch set: $readme"
+done
 
 python3 "$repo_root/tests/verification-marker-check.py" >/dev/null \
   || die "verification marker self-test failed: tests/verification-marker-check.py"

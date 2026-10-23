@@ -59,7 +59,7 @@ The patch set inherits the three VC14 commits, the adapted Escape `cfgmgr32` shu
 | 11.14 | `568aca4e2aad` | GDI+ | Reject point-count arithmetic overflow |
 | 11.1 | `73e02c1e7f54` | CMD | Bound MKLINK paths; adapted to the legacy CrossOver parser |
 
-The authoritative path, SHA-256, risk, full commit ID, adaptation note, and order for every patch are in [`patches/manifest.json`](../patches/manifest.json).
+The authoritative path, SHA-256, risk, full commit ID, adaptation note, and order for every patch are in [`patchsets/cx26.3-wine11.0-runeon.9/manifest.json`](../patchsets/cx26.3-wine11.0-runeon.9/manifest.json).
 
 ### CrossOver equivalents or non-applicable defects
 
@@ -124,7 +124,7 @@ The patch set inherits every patch from `.5` and adds nine backports covering tw
 | 11.15 | `d8186e465ad4` | CMD | Initialise the `node_builder_parse` loop flag before it is read |
 | 11.15 | `d4b32af24629` | Crypt32 | Ignore bytes past the outer DER SEQUENCE when importing a PFX blob, with the upstream test |
 
-The authoritative path, SHA-256, risk, full commit IDs, and order for every patch are in [`patches/manifest.json`](../patches/manifest.json).
+The authoritative path, SHA-256, risk, full commit IDs, and order for every patch are in [`patchsets/cx26.3-wine11.0-runeon.9/manifest.json`](../patchsets/cx26.3-wine11.0-runeon.9/manifest.json).
 
 #### Test backports
 
@@ -212,7 +212,7 @@ Equivalent CrossOver implementations and prerequisites were checked against the 
 - `0045` combines the original DirectInput test prerequisite and fix into one reversible final diff. The original assertions and authorship are retained without production-code adaptation.
 - `0053` similarly includes the original D3D10 tests. The only extra test adaptation is an explicit skip if device creation fails, avoiding a NULL-device dereference. A skipped device test is not a graphics pass. All 14 byte-sized fields are covered by the production fix.
 - `0059` groups the independent D3D10 and D3D10.1 adapter fixes. No production semantics were adapted in the selected backports. All other added upstream commits contain no original regression test; the independent checks below cover their specific contracts, with affected-module and product tests still required.
-- Full commit IDs, patch digests and first Wine releases remain authoritative in [the manifest](../patches/manifest.json). Source bundles retain the patches, original attribution and [test sources](../tests).
+- Full commit IDs, patch digests and first Wine releases remain authoritative in [the manifest](../patchsets/cx26.3-wine11.0-runeon.9/manifest.json). Source bundles retain the patches, original attribution and [test sources](../tests).
 
 ### Deferred after deeper review
 

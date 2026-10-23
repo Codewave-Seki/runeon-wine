@@ -6,14 +6,14 @@ on:
       - "base/**"
       - "patches/**"
       - "scripts/**"
-      - "series"
+      - "patchsets/**"
       - ".github/workflows/integration.yml"
   pull_request:
     paths:
       - "base/**"
       - "patches/**"
       - "scripts/**"
-      - "series"
+      - "patchsets/**"
       - ".github/workflows/integration.yml"
   workflow_dispatch:
 
@@ -33,6 +33,6 @@ jobs:
       - name: Fetch the fixed source baseline
         id: source
         run: echo "root=$(scripts/fetch-source.sh)" >> "$GITHUB_OUTPUT"
-      - name: Apply and verify the complete patch series
+      - name: Apply and verify the newest patch set
         run: scripts/integration-check.sh "${{ steps.source.outputs.root }}"
 

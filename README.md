@@ -9,9 +9,8 @@ Runeon Wine is the public source-maintenance repository for Runeon's Steam Basel
 ## Baseline and current release
 
 - CodeWeavers source: `crossover-sources-26.3.0.tar.gz`, Wine `11.0`, pinned in [`base/crossover-26.3-wine-11.0.json`](base/crossover-26.3-wine-11.0.json)
-- Current stable source: [`cx26.3-wine11.0-runeon.23`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.23), for seed `2026.10.24` (App `>=1.14 (16)`). Definition in [`patchsets/cx26.3-wine11.0-runeon.23`](patchsets/cx26.3-wine11.0-runeon.23/manifest.json)
 <!-- release-facts:current-patch-set -->
-- Default source definition (historical): `cx26.3-wine11.0-runeon.9`, used when no patch set is selected
+- Current stable source: [`cx26.3-wine11.0-runeon.23`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.23), for seed `2026.10.24` (App `>=1.14 (16)`). Definition in [`patchsets/cx26.3-wine11.0-runeon.23`](patchsets/cx26.3-wine11.0-runeon.23/manifest.json)
 - Upstream reviewed through: `wine-11.15` (complete audit), `wine-11.20` (filtered sweeps); see [MAINTENANCE.md](MAINTENANCE.md#review-records)
 
 ## Repository layout
@@ -19,8 +18,7 @@ Runeon Wine is the public source-maintenance repository for Runeon's Steam Basel
 | Path | Contents |
 |---|---|
 | `base/` | Pinned source archive URL, SHA-256 and source root |
-| `patchsets/<id>/` | `series` and `manifest.json` for one patch set; select it with `RUNEON_WINE_PATCHSET_DEFINITION=patchsets/<id>` |
-| `series`, `patches/manifest.json` | The historical default definition (`.9`) |
+| `patchsets/<id>/` | `series` and `manifest.json` for one patch set. Scripts use the newest one unless `RUNEON_WINE_PATCHSET_DEFINITION=patchsets/<id>` selects another; `.2`–`.8` exist only at their tags |
 | `patches/upstream/`, `patches/runeon/` | WineHQ backports and Runeon patches |
 | `release-manifests/` | Commit, Release URL, asset names, sizes, SHA-256 and state of every published Release |
 | `tests/`, `scripts/` | Probes and checks; fetch, apply, verify and bundle scripts |
@@ -53,7 +51,7 @@ scripts/build-source-bundle.sh "$source_root" dist
 scripts/build-patchset-bundle.sh dist
 ```
 
-To rebuild an earlier patch set, select its definition the same way, or check out its tag. The full build procedure is in [BUILDING.md](BUILDING.md).
+To rebuild an earlier patch set, select its definition the same way, or check out its tag (required for `.2`–`.8`). The full build procedure is in [BUILDING.md](BUILDING.md).
 
 ## Release history
 
@@ -75,7 +73,7 @@ Each Release carries the patch-set bundle, the complete corresponding source and
 | [`.12`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.12) | pre-release | `2026.09.27` | Dev candidate, never in Production |
 | [`.11`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.11) | stable | `2026.09.26` | Superseded, retained |
 | [`.10`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.10) | stable | `2026.09.22` | Superseded, retained |
-| [`.9`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.9) | stable | `2026.09.13` | Superseded, retained; default definition |
+| [`.9`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.9) | stable | `2026.09.13` | Superseded, retained |
 | [`.8`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.8) | stable | `2026.09.06` | Superseded, retained |
 | [`.7`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.7) | pre-release | — | **Does not compile**; never build it (fixed in `.8`) |
 | [`.6`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.6) | stable | `2026.08.11.1` | Superseded, retained |

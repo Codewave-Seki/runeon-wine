@@ -15,7 +15,7 @@ scripts/apply-series.sh "$source_root"
 scripts/verify-source.sh "$source_root"
 ```
 
-Patches must be applied in [`series`](series) order. Already-applied patches, partial application, SHA drift, and baseline mismatches must fail rather than being skipped silently.
+Patches must be applied in the order of the selected patch set's `series`. Already-applied patches, partial application, SHA drift, and baseline mismatches must fail rather than being skipped silently.
 
 ## 3. Runeon macOS WoW64 configuration boundary
 
@@ -48,7 +48,7 @@ Dependency preparation, GStreamer, MoltenVK, SDL2, GnuTLS, the Rockstar-scoped D
 scripts/build-source-bundle.sh "$source_root" dist
 ```
 
-The output contains the patched Wine source, base and patch manifests, patch files, [`series`](series), maintenance scripts, the license, and build instructions. For a Release, record the generated SHA-256 values, upload both bundles and their `.sha256` files to the public GitHub Release for the same tag, and place the immutable asset URLs in Runeon runtime component metadata and the public source offer.
+The output contains the patched Wine source, base and patch manifests, patch files, `series`, maintenance scripts, the license, and build instructions. For a Release, record the generated SHA-256 values, upload both bundles and their `.sha256` files to the public GitHub Release for the same tag, and place the immutable asset URLs in Runeon runtime component metadata and the public source offer.
 
 ## 5. Build the patch-set bundle used by the product
 
@@ -56,7 +56,7 @@ The output contains the patched Wine source, base and patch manifests, patch fil
 scripts/build-patchset-bundle.sh dist
 ```
 
-The Runeon product repository downloads and verifies this smaller bundle, then applies [`series`](series) to the CrossOver archive at the pinned SHA. The patch-set bundle and complete corresponding-source bundle must come from the same tag and must not be rebuilt independently and mixed.
+The Runeon product repository downloads and verifies this smaller bundle, then applies `series` to the CrossOver archive at the pinned SHA. The patch-set bundle and complete corresponding-source bundle must come from the same tag and must not be rebuilt independently and mixed.
 
 Candidate tags must be published as GitHub Pre-releases. The same immutable tag may become a stable Release only after the matching runtime passes Dev validation and is actually promoted to Production. Production builds must not use branch archives or `latest` URLs.
 

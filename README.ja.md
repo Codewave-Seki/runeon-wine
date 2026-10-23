@@ -9,9 +9,8 @@ Runeon Wine は、Runeon の Steam Baseline runtime のソースを公開で管�
 ## ベースラインと現行版
 
 - CodeWeavers ソース：`crossover-sources-26.3.0.tar.gz`、Wine `11.0`。[`base/crossover-26.3-wine-11.0.json`](base/crossover-26.3-wine-11.0.json) で固定
-- 現在の正式ソース：[`cx26.3-wine11.0-runeon.23`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.23)。seed `2026.10.24`（App `>=1.14 (16)`）に対応。定義は [`patchsets/cx26.3-wine11.0-runeon.23`](patchsets/cx26.3-wine11.0-runeon.23/manifest.json)
 <!-- release-facts:current-patch-set -->
-- 既定のソース定義（過去分）：`cx26.3-wine11.0-runeon.9`。パッチセットを選ばない場合に使用
+- 現在の正式ソース：[`cx26.3-wine11.0-runeon.23`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.23)。seed `2026.10.24`（App `>=1.14 (16)`）に対応。定義は [`patchsets/cx26.3-wine11.0-runeon.23`](patchsets/cx26.3-wine11.0-runeon.23/manifest.json)
 - 上流のレビュー範囲：完全な監査は `wine-11.15` まで、絞り込みスイープは `wine-11.20` まで。[MAINTENANCE.md](MAINTENANCE.md#review-records) を参照
 
 ## リポジトリ構成
@@ -19,8 +18,7 @@ Runeon Wine は、Runeon の Steam Baseline runtime のソースを公開で管�
 | パス | 内容 |
 |---|---|
 | `base/` | 固定したソースアーカイブの URL、SHA-256、ソースルート |
-| `patchsets/<id>/` | 1 つのパッチセットの `series` と `manifest.json`。`RUNEON_WINE_PATCHSET_DEFINITION=patchsets/<id>` で選択 |
-| `series`、`patches/manifest.json` | 過去の既定定義（`.9`） |
+| `patchsets/<id>/` | 1 つのパッチセットの `series` と `manifest.json`。スクリプトは最新のものを使い、`RUNEON_WINE_PATCHSET_DEFINITION=patchsets/<id>` で別のものを選べます。`.2`–`.8` は各タグにのみ存在 |
 | `patches/upstream/`、`patches/runeon/` | WineHQ からのバックポートと Runeon のパッチ |
 | `release-manifests/` | 公開した各 Release のコミット、Release URL、アセット名、サイズ、SHA-256、状態 |
 | `tests/`、`scripts/` | プローブとチェック。取得、適用、検証、バンドル用スクリプト |
@@ -53,7 +51,7 @@ scripts/build-source-bundle.sh "$source_root" dist
 scripts/build-patchset-bundle.sh dist
 ```
 
-以前のパッチセットを再構築するには、同じようにその定義を選ぶか、タグをチェックアウトします。ビルド手順の全体は [BUILDING.md](BUILDING.md) にあります。
+以前のパッチセットを再構築するには、同じようにその定義を選ぶか、タグをチェックアウトします（`.2`–`.8` はタグのチェックアウトが必要）。ビルド手順の全体は [BUILDING.md](BUILDING.md) にあります。
 
 ## リリース履歴
 
@@ -75,7 +73,7 @@ scripts/build-patchset-bundle.sh dist
 | [`.12`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.12) | プレリリース | `2026.09.27` | Dev 候補。Production では未使用 |
 | [`.11`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.11) | 正式版 | `2026.09.26` | 置き換え済み、保持 |
 | [`.10`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.10) | 正式版 | `2026.09.22` | 置き換え済み、保持 |
-| [`.9`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.9) | 正式版 | `2026.09.13` | 置き換え済み、保持。既定の定義 |
+| [`.9`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.9) | 正式版 | `2026.09.13` | 置き換え済み、保持 |
 | [`.8`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.8) | 正式版 | `2026.09.06` | 置き換え済み、保持 |
 | [`.7`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.7) | プレリリース | — | **コンパイルできません**。ビルドしないでください（`.8` で修正） |
 | [`.6`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.6) | 正式版 | `2026.08.11.1` | 置き換え済み、保持 |

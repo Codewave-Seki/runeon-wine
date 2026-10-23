@@ -12,6 +12,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Validate manifests, patch hashes, and shell syntax
-        run: scripts/static-check.sh
+      - name: Validate manifests, patch hashes, and shell syntax of every patch set
+        run: for d in patchsets/*/; do RUNEON_WINE_PATCHSET_DEFINITION="${d%/}" scripts/static-check.sh; done
 
