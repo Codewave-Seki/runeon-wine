@@ -1,15 +1,23 @@
 # runeon-wine — CLAUDE.md
 
-Coding and contribution conventions for this public repository. `AGENTS.md` is a symlink to this file; do not create a separate copy. User-facing documentation lives in [README.md](README.md), [BUILDING.md](BUILDING.md) and [MAINTENANCE.md](MAINTENANCE.md); review records and patch notes are the two files under `docs/`.
+Conventions for working in this public repository, complete on their own: they apply whether or not the work started from another repository. `AGENTS.md` is a symlink to this file; do not create a separate copy. User-facing documentation lives in [README.md](README.md), [BUILDING.md](BUILDING.md) and [MAINTENANCE.md](MAINTENANCE.md); review records and patch notes are the two files under `docs/`.
+
+## 0. Before you start
+
+- Read the parts of `MAINTENANCE.md` that apply: risk levels, the gates for entering a patch set, and the opt-in exceptions table.
+- Find the newest patch set under `patchsets/` and check whether it is tagged (`git tag -l` and `release-manifests/`). Tagged patch sets are frozen; new work goes into a new, untagged patch-set ID.
+- For a backport, read the latest section of `docs/upstream-reviews.md` and follow the same rules.
+- If a request conflicts with these rules, stop and ask the maintainer before doing anything.
 
 ## 1. Public repository boundary
 
 This repository holds a pinned CrossOver/Wine source baseline plus ordered patch series, manifests, tests and scripts. It never holds a Wine source tree, build output, runtime archives, prefixes or proprietary components.
 
-Write every commit, patch, manifest entry and document for an outside reader:
+Write every commit, patch, manifest entry, Release note and document in English, for an outside reader:
 
-- Do not mention closed-source product internals: private repository paths, source files, internal tickets or documents, release channels, accounts, services or credentials.
+- Do not mention closed-source product internals: private repository paths, source files, internal task numbers or documents, release channels, accounts, services or credentials.
 - Do not include diagnostics, logs, user data or machine-specific paths such as home directories.
+- Never download, mirror or commit `D3DMetal.framework`, `libd3dshared.dylib`, GPTK overlays or other Apple private components.
 
 ## 2. Layout
 
@@ -26,7 +34,16 @@ Write every commit, patch, manifest entry and document for an outside reader:
 
 Scripts use the newest patch set unless `RUNEON_WINE_PATCHSET_DEFINITION=patchsets/<id>` selects another. CI runs the static check for every patch set and the integration check for the newest.
 
-## 3. C code in patches
+## 3. What may enter a patch set
+
+- WineHQ upstream fixes are the trusted source. A fix from another fork or downstream project is adopted only after its defect is reproduced on this base, and only if its licence is LGPL-compatible.
+- Backport only user-mode fixes in DLLs that Steam, launchers, installers or games load: crashes, memory safety, leaks, hangs and error paths. Features, refactors, test-only commits, toolchain and translation changes stay out.
+- `ntdll`, `server`, `wow64`, the loader, `winemac.drv`, `win32u`, Unix library and server protocols, and graphics interfaces are ABI-sensitive and excluded. A single small fix there needs the maintainer's individual approval, recorded in its review section and manifest `summary`.
+- For every candidate, confirm the defect exists in the pinned base (same code, or a reachable path). A clean apply alone proves nothing; a commit that does not apply cleanly is not forced in.
+- Record every review decision, including exclusions and why, in a new section of `docs/upstream-reviews.md`.
+- Downstream behaviour follows §4: opt-in, never keyed on game identity. The only exceptions are individually approved fixes listed in `MAINTENANCE.md`; an approval covers that patch alone and is never a precedent.
+
+## 4. C code in patches
 
 - Follow the style of the Wine file you change: indentation, brace placement, spacing inside parentheses and naming. Do not reformat surrounding code.
 - Use Wine facilities rather than new ones. That means debug channels (`TRACE`/`WARN`/`FIXME`/`ERR`), `ARRAY_SIZE`, `wcs*`/`Rtl*` helpers, and existing headers and imports. Add no external dependencies. Every symbol, constant or header you use must exist in the pinned base.
@@ -34,25 +51,28 @@ Scripts use the newest patch set unless `RUNEON_WINE_PATCHSET_DEFINITION=patchse
 - Preserve API contracts. Keep `GetLastError`/`SetLastError` semantics, HRESULT and NTSTATUS values, reference counting and output-pointer initialisation on failure paths.
 - Validate lengths and pointers crossing a trust boundary, and bound every buffer. Prefer an explicit overflow check to a silent truncation.
 - Downstream behaviour must be opt-in through a value the caller sets explicitly, such as an environment variable or an `AppDefaults` registry value. Without the opt-in, behaviour is identical to the unpatched base, and any failure to evaluate the condition falls back to it.
-- The only exception is a specific fix that the maintainer approves individually and that is listed under "Product patches without an opt-in" in `MAINTENANCE.md`, with why it is not opt-in and where it stops stated there or in its manifest entry. Approving one patch never covers another, and an existing exception is not a precedent.
-- Never match on game names, Steam AppIDs or game executable names.
-- Keep each patch small and focused on one behaviour. Changes must compile for both i386 and x86_64 in the WoW64 configuration described in `BUILDING.md`.
+- The only exception is a specific fix that the maintainer approves individually and that is listed under "Product patches without an opt-in" in `MAINTENANCE.md`, with why it is not opt-in and where it stops stated there or in its manifest entry.
+- Never match on game names, Steam AppIDs or game executable names. Middleware may be matched by its process name.
+- Keep each patch small and focused on one behaviour. Changes must compile and link for both i386 and x86_64 in the WoW64 configuration described in `BUILDING.md`; a compiled object file is not enough, because a DLL can still fail to link.
 
-## 4. Patch files and manifests
+## 5. Patch files and manifests
 
 - Patches are `-p1` unified diffs with `a/` and `b/` prefixes. Each starts with a `From:` / `Subject:` header and a short English description. It must apply with zero fuzz on top of the pinned archive plus every earlier entry in its series.
 - Keep test-only hunks out of a patch unless the tests are carried on purpose and compile.
 - Keep `series` order and manifest `order` identical. Every entry records `path`, `sha256`, `kind`, `status`, `risk`, `summary` and `verification`. Upstream-derived entries also record `firstWineRelease`, full 40-character `upstreamCommits` and, if production code differs, `adaptation`. Entries using third-party code record `provenance` (`repository`, `commit`, `author`, `note`).
-- `verification` anchors (`{path, contains}`) must match exactly one location in the patched tree.
-- After editing a patch, update its `sha256`. Never edit a patch that belongs to a tagged patch set.
+- `verification` anchors (`{path, contains}`) must be absent from the base and match exactly one location in the patched tree.
+- After editing a patch, update its `sha256`. Never edit a patch or manifest that belongs to a tagged patch set.
 - Port only code whose licence permits it, and keep original authorship and copyright headers.
 
-## 5. Scripts and tests
+## 6. Scripts and tests
 
 - Scripts are Bash with `set -euo pipefail` and source `scripts/common.sh`. Fail with `die` rather than skipping silently. Quote paths.
 - Checks under `tests/` are self-contained. They use a C probe built with MinGW, or Python using only the standard library and the system compiler. They clean up their temporary files and state exactly what they do and do not cover.
+- C compiled by a check must build with both clang (macOS) and GCC (CI, Ubuntu) under the check's warning flags. GCC rejects things clang accepts, such as a statement on the same line after a single-line `for` body under `-Werror`.
 
-## 6. Checks before every commit
+## 7. Validation and evidence
+
+Before every commit:
 
 ```bash
 export RUNEON_WINE_PATCHSET_DEFINITION=patchsets/<id>   # only if not the newest
@@ -62,9 +82,23 @@ unset RUNEON_WINE_PATCHSET_DEFINITION
 for d in patchsets/*/; do RUNEON_WINE_PATCHSET_DEFINITION="${d%/}" scripts/static-check.sh; done   # as CI runs it
 ```
 
-These checks prove that patches apply. Only a complete build proves that they compile, and a patch set must build before it is tagged. Keep `.work/`, `dist/` and build directories out of Git.
+These checks prove that patches apply, nothing more:
 
-## 7. Documentation
+- A patch set must pass a complete i386/x86_64 WoW64 build before it is tagged.
+- Check runtime behaviour against the previous patch set, not in isolation: run Wine's own tests for the affected modules, and the probes in `tests/`, on both runtimes, and treat only new failures as regressions. A test hunk that fails before and passes after confirms a fix.
+- When running Wine tests in bulk: use a fresh prefix per runtime, disable the crash debugger (`WINEDLLOVERRIDES=winedbg.exe=d`), enforce timeouts in the shell rather than through system binaries such as `/usr/bin/perl` (macOS strips `DYLD_*` from them), skip tests that need an interactive window, and stop every Wine process of the prefix afterwards.
+- Say what was not verified. A fix checked only by code review, or a probe that did not reproduce the original defect, is reported as such.
+- Without local evidence a cause is a hypothesis. Online reports and other projects' discussions are leads, not evidence about this base.
+
+## 8. Releases
+
+- A patch-set ID is immutable once tagged. The tag points to the exact commit the runtime was built from, and is an annotated tag named after the patch-set ID.
+- A Release carries the patch-set bundle, the complete corresponding source and both `.sha256` files. Build bundles of a published patch set from its tag checkout; `build-patchset-bundle.sh` refuses otherwise.
+- A Release stays a Pre-release until its runtime is in Production. Marking it stable or latest is a maintainer decision and changes only its state and notes; the tag, commit, asset names, sizes and digests never change.
+- After publishing, confirm the server-side asset digests and sizes match `release-manifests/`, and that an anonymous download reproduces the SHA-256.
+- Record the Release in one commit: its `release-manifests/` file, plus the README current line and release-table row (§9).
+
+## 9. Documentation
 
 - The root holds only `README.md`, `BUILDING.md`, `MAINTENANCE.md`, `SECURITY.md` and this file. Do not add another document, at the root or under `docs/`; `static-check.sh` rejects it.
 - Only the README is translated. `README.md` is authoritative; `README.zh-CN.md` and `README.ja.md` are complete translations, updated in the same commit. Everything else is English only.
@@ -72,9 +106,17 @@ These checks prove that patches apply. Only a complete build proves that they co
 - Publishing a patch set changes the README in two places only: the current-release line and one row of the release history table. Release details belong in the GitHub Release notes and `release-manifests/`; do not repeat them in `MAINTENANCE.md`.
 - Keep lines readable: one fact per bullet or table row, no paragraph-long list items. State validation limits plainly.
 
-## 8. Git
+## 10. Git
 
 - **Commit messages are in English.** Use an imperative subject of 72 characters or fewer and a body wrapped at about 72 columns that explains what and why. Keep trailers such as `Co-Authored-By` at the end.
-- One topic per commit. Run `git status --short` and `git diff --check` before committing.
-- Published history is never rewritten; earlier commits keep their original messages. Never force-push `main`, and never move, recreate or delete a tag, Release or Release asset. Fix mistakes with a new commit or a new patch-set ID.
-- Pushing, tagging and publishing Releases are explicit maintainer decisions.
+- One topic per commit. Run `git status --short` and `git diff --check` before committing, and stage specific paths.
+- Published history is never rewritten; earlier commits keep their original messages. An unpushed commit may be amended. Never force-push `main`, and never move, recreate or delete a tag, Release or Release asset. Fix mistakes with a new commit or a new patch-set ID.
+- Pushing, tagging and publishing or promoting Releases are explicit maintainer decisions, taken one at a time.
+- After a push, check that CI ran and passed. Confirm the workflow's `paths` filter covers what you changed; if it does not, the change was not tested.
+
+## 11. Working practice
+
+- Change only what the task needs; do not refactor or tidy unrelated files.
+- Change one variable per experiment, and prefer a clean prefix; an existing prefix is only a comparison.
+- Keep `.work/`, `dist/`, build trees and test prefixes out of Git, and remove them when the work is done, together with any Wine processes they started.
+- Report results as they are: failed checks with their output, skipped steps as skipped, and completed work without hedging.
