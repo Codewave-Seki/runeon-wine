@@ -7,6 +7,7 @@ on:
       - "patches/**"
       - "scripts/**"
       - "patchsets/**"
+      - "tests/**"
       - ".github/workflows/integration.yml"
   pull_request:
     paths:
@@ -14,6 +15,7 @@ on:
       - "patches/**"
       - "scripts/**"
       - "patchsets/**"
+      - "tests/**"
       - ".github/workflows/integration.yml"
   workflow_dispatch:
 
