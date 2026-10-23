@@ -22,7 +22,9 @@ Runeon Wine 同时接受主动上游审计和 diagnostics 驱动调查两类输�
 
 ## 当前 Wine 11.x 审查基线
 
-当前正式源码：[`cx26.3-wine11.0-runeon.22`](patchsets/cx26.3-wine11.0-runeon.22/manifest.json)（正式版/latest），搭配 seed `2026.10.20`（App `>=1.13 (10)`）、MoltenVK `1.4.2` 与 SDL2 `2.32.10`。保留 `.21`，新增 `0091`（WineHQ 11.11 的 `GetIntegratedDisplaySize()` 桩）与 `0124`–`0133`：macOS 上以任务内存占用作为提交内存（`0124`）；宿主凭据库没有匹配时保留注册表中的凭据（`0125`）；unix loader 从游戏类别的 app bundle 运行，使 macOS 可启用游戏模式，并保留各程序的菜单名（`0126`、`0127`）；空间音频静态对象按 `WAVEFORMATEXTENSIBLE` 声道顺序排列（`0128`）；render 流的 I/O 缓冲保持在半个周期以内（`0129`）；旧式 OpenGL 上下文提供 `GL_ARB_ES2_compatibility` 的调用（`0130`）；macOS 上按线程报告 CPU 时间（`0131`）；应用包查询从注册表回答（`0132`）；媒体引擎回调在引擎锁之外调用（`0133`）。`0129` 只验证了缓冲调整，未针对可听见的断音验证；`0133` 保持同一线程产生的事件顺序，但不同线程的回调不再串行。已通过 x86_64/WoW64 完整构建、静态与集成检查、探针，以及本地与 Dev 验收；Production 使用 Dev 已验证的同一份产物字节。不可变附件记录在 [release manifest](release-manifests/cx26.3-wine11.0-runeon.22.source-archive.json)。
+当前正式源码：[`cx26.3-wine11.0-runeon.23`](patchsets/cx26.3-wine11.0-runeon.23/manifest.json)（正式版/latest），搭配 seed `2026.10.24`（App `>=1.14 (16)`）、MoltenVK `1.4.2` 与 SDL2 `2.32.10`。保留 `.22`，新增 `0134`（Retina 模式下屏幕 DC 的 `HORZRES`/`VERTRES` 不再翻倍，`RetinaMode` 关闭时行为不变）与 `0135`（wine-11.20 首发或其所需的 37 个上游提交的定向回移：Steam、启动器、安装程序和游戏会加载的用户态 DLL 中的崩溃、内存安全、泄漏、挂起与错误路径修复，涉及 msvcp60/90/140、msvcrt、dinput、winegstreamer 等；另含单独批准的 ntdll 与 winemac.drv 两项小修复，见 [11.20 回移说明](BACKPORTS-11.20-SWEEP.zh-CN.md)）。已通过 x86_64/WoW64 完整构建、静态与集成检查、探针、受影响模块的 Wine 自带测试（与 `.22` 对比），以及本地与 Dev 验收；Production 使用 Dev 已验证的同一份产物字节。不可变附件记录在 [release manifest](release-manifests/cx26.3-wine11.0-runeon.23.source-archive.json)。
+
+上一正式源码，已由 `.23` 接替，保留用于回滚：[`cx26.3-wine11.0-runeon.22`](patchsets/cx26.3-wine11.0-runeon.22/manifest.json)（正式版），对应 seed `2026.10.20`，该 seed 只分发给低于 `1.14 (16)` 的 App。保留 `.21` 并新增 `0091` 与 `0124`–`0133`。不可变附件记录在[发布清单](release-manifests/cx26.3-wine11.0-runeon.22.source-archive.json)。
 
 上一正式源码，已由 `.22` 接替，保留用于回滚：[`cx26.3-wine11.0-runeon.21`](patchsets/cx26.3-wine11.0-runeon.21/manifest.json)（正式版），对应 seed `2026.10.18`，该 seed 已不再分发。保留 `.20` 并新增 `0121`、`0122` 与 `0123`。不可变附件记录在[发布清单](release-manifests/cx26.3-wine11.0-runeon.21.source-archive.json)。
 
