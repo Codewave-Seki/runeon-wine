@@ -1,9 +1,5 @@
 # Upstream Maintenance Policy
 
-[English](MAINTENANCE.md) | [Chinese](MAINTENANCE.zh-CN.md) | [Japanese](MAINTENANCE.ja.md)
-
-> This English document is authoritative. The Chinese and Japanese documents are complete translations for convenience.
-
 Runeon Wine accepts input from proactive upstream audits and diagnostics-driven investigation. Neither path may bypass the same validation gates.
 
 ## Proactive audits
@@ -20,41 +16,25 @@ Runeon Wine accepts input from proactive upstream audits and diagnostics-driven 
 - `subsystem-sensitive`: graphics, media, windowing, input, build-system, or multi-module changes.
 - `abi-sensitive`: changes to `ntdll`, `server`, `wow64`, `loader`, `winemac.drv`, `win32u`, Unix library/server protocols, or D3DMetal interfaces. These are not ordinary backport candidates by default.
 
-## Current Wine 11.x review baseline
+## Review records
 
-Current stable source: [`cx26.3-wine11.0-runeon.23`](patchsets/cx26.3-wine11.0-runeon.23/manifest.json) (stable/latest), paired with seed `2026.10.24` (App `>=1.14 (16)`), MoltenVK `1.4.2` and SDL2 `2.32.10`. It preserves `.22` and adds `0134`, which stops doubling the screen DC's `HORZRES`/`VERTRES` in retina mode (unchanged with `RetinaMode` off), and `0135`, 37 targeted upstream commits first released in or required by wine-11.20: crash, memory-safety, leak, hang and error-path fixes in user-mode DLLs used by Steam, launchers, installers and games, including msvcp60/90/140, msvcrt, dinput and winegstreamer, plus two individually approved small ntdll and winemac.drv fixes (see [the 11.20 sweep](BACKPORTS-11.20-SWEEP.md)). A complete x86_64/WoW64 build, static and integration checks, probes, Wine's own tests for the affected modules compared against `.22`, and local and Dev acceptance passed; Production uses the exact artifact bytes verified in Dev. Immutable assets are recorded in [the release manifest](release-manifests/cx26.3-wine11.0-runeon.23.source-archive.json).
+Release status lives in the [README](README.md) table, the GitHub Releases and `release-manifests/`; this file does not repeat it. Each upstream review is a section of [docs/upstream-reviews.md](docs/upstream-reviews.md), in English:
 
-Previous stable source, superseded by `.23` and retained for rollback: [`cx26.3-wine11.0-runeon.22`](patchsets/cx26.3-wine11.0-runeon.22/manifest.json) (stable), paired with seed `2026.10.20`, which is delivered only to App builds below `1.14 (16)`. It preserves `.21` and adds `0091` and `0124`–`0133`. Immutable assets are recorded in [the release manifest](release-manifests/cx26.3-wine11.0-runeon.22.source-archive.json).
+| Record | Scope | First patch set |
+|---|---|---|
+| [AUDIT-11.0-11.14](docs/upstream-reviews.md#audit-11.0-11.14) | Complete commit-by-commit review, wine-11.1 to 11.14 | `.2` |
+| [AUDIT-11.0-11.15](docs/upstream-reviews.md#audit-11.0-11.15) | Extends the complete review through wine-11.15 | `.6` |
+| [BACKPORTS-11.16-11.17](docs/upstream-reviews.md#backports-11.16-11.17) | Targeted wine-11.16/11.17 backports | `.9` |
+| [BACKPORTS-11.16-11.18-SWEEP](docs/upstream-reviews.md#backports-11.16-11.18-sweep) | Filtered user-mode sweep, wine-11.16 to 11.18 | `.11` |
+| [BACKPORTS-11.19-SWEEP](docs/upstream-reviews.md#backports-11.19-sweep) | Filtered user-mode sweep, wine-11.19 | `.15` |
+| [BACKPORTS-11.1-11.19-STUBS](docs/upstream-reviews.md#backports-11.1-11.19-stubs) | Compatibility stubs, wine-11.1 to 11.19 | `.18` |
+| [BACKPORTS-11.20-SWEEP](docs/upstream-reviews.md#backports-11.20-sweep) | Filtered user-mode sweep, wine-11.20 | `.23` |
 
-Previous stable source, superseded by `.22` and retained for rollback: [`cx26.3-wine11.0-runeon.21`](patchsets/cx26.3-wine11.0-runeon.21/manifest.json) (stable), paired with seed `2026.10.18`, which is no longer delivered. It preserves `.20` and adds `0121`, `0122` and `0123`. Immutable assets are recorded in [the release manifest](release-manifests/cx26.3-wine11.0-runeon.21.source-archive.json).
+The complete audit boundary is `wine-11.15`; later releases were reviewed with the filtered sweep rules. An audit is a point-in-time decision record, not a permanent allowlist: a deferred commit may enter a later patch set once its dependency chain, tests, probe and Runeon impact are established, and inclusion in an audit does not authorize publishing a runtime.
 
-Previous stable source, superseded by `.21` and retained for rollback: [`cx26.3-wine11.0-runeon.20`](patchsets/cx26.3-wine11.0-runeon.20/manifest.json) (stable), paired with seed `2026.10.16.1`, which is no longer delivered. It preserves `.19` and adds `0089`, `0090` and `0120`. Immutable assets are recorded in [the release manifest](release-manifests/cx26.3-wine11.0-runeon.20.source-archive.json).
+Design notes for individual downstream patches are in [docs/patch-notes.md](docs/patch-notes.md) ([DXGI-DRIVER-VERSION](docs/patch-notes.md#dxgi-driver-version), [FLSGETVALUE2](docs/patch-notes.md#flsgetvalue2), [GSTREAMER-VIDEO-POOL](docs/patch-notes.md#gstreamer-video-pool), [LAUNCH-PREPARE](docs/patch-notes.md#launch-prepare), [NWJS-AUTO-LAUNCH](docs/patch-notes.md#nwjs-auto-launch)). New patches carry their rationale in the patch header and manifest entry instead.
 
-`cx26.3-wine11.0-runeon.19` (Pre-release) was the Dev candidate for Dev seed `2026.10.16`; it was superseded by `.20` and never used in Production. Immutable assets are recorded in [the release manifest](release-manifests/cx26.3-wine11.0-runeon.19.source-archive.json).
-
-Retained stable source still delivered to App `>=1.12 (6)`, before `1.13 (10)`: [`cx26.3-wine11.0-runeon.18`](patchsets/cx26.3-wine11.0-runeon.18/manifest.json) (stable), paired with seed `2026.10.14`. It preserves `.17` and adds `0081`–`0087` and `0118`. Immutable assets are recorded in [the release manifest](release-manifests/cx26.3-wine11.0-runeon.18.source-archive.json).
-
-`cx26.3-wine11.0-runeon.17` (stable) for seed `2026.10.10`, App `>=1.10 (3)` before `1.12 (6)`, is retained for rollback; it adds `0112`–`0117` to `.16`.
-
-`cx26.3-wine11.0-runeon.16` (stable) for seed `2026.10.06`, App `>=1.10 (0)`, is retained for rollback; it adds `0111`, an opt-in Steam downlevel D3D12 preparation gate, to `.15`.
-
-`cx26.3-wine11.0-runeon.15` (stable) for seed `2026.10.04`, App `>=1.10 (0)`, is retained for rollback; it adds the dwrite emoji system fallback (`0110`) and targeted `wine-11.19` fixes (`0079`) to `.14`.
-
-`cx26.3-wine11.0-runeon.14` (stable) for seed `2026.10.02`, App `>=1.10 (0)`, is retained for rollback; it adds per-process graphics backend routing (`0109`) to `.13`.
-
-Earlier Apps (`>=1.8 (0)`) keep [`cx26.3-wine11.0-runeon.13`](patchsets/cx26.3-wine11.0-runeon.13/manifest.json) (stable) for seed `2026.09.28.1`. `.13` adds the upstream `RtlVirtualUnwind2` NULL-output fix, twelve further ntdll fixes and the opt-in Rosetta self-modifying code policy (`0107`, `0108`) to `.11`; the user authorized it for Production on 2026-09-28. Seed `2026.09.28.1` rebuilds the same `.13` source with SDL enabled and ships SDL2 `2.32.10`; real-controller acceptance is still pending. `.12` (seed `2026.09.27`) is a superseded Dev candidate, retained unchanged.
-
-Historical `.11` delivery (2026-09-26; retained rollback): [`cx26.3-wine11.0-runeon.11`](BACKPORTS-11.16-11.18-SWEEP.md) (stable/latest) for seed `2026.09.26`, App gate `>=1.8 (0)`. It adds the filtered Wine 11.16–11.18 sweep, the winegstreamer video-pool fallback and two opt-in hooks to `.10`. Build, signing, readiness and Dev/Production distribution checks passed; the user reported no issues in Dev and authorized Production on 2026-09-26. Production promotes the exact signed Dev archive without rebuilding.
-
-Historical `.10` delivery (2026-09-23; retained rollback): [`cx26.3-wine11.0-runeon.10`](FLSGETVALUE2.md) (stable/latest), paired with seed `2026.09.22` and MoltenVK `1.4.2`, App gate `>=1.8 (0)`. Production promotes the exact signed Dev archive without rebuilding. Select the independent `patchsets/` definition explicitly; the default series remains the historical `.9`. Validation: API and isolated-prefix checks, signing and release readiness passed. The user reported no issues in Dev and authorized Production on 2026-09-23. This general acceptance does not establish independent coverage of every Steam/CEF, game or App interaction scenario. App installers and distribution verification are managed by the product repository.
-
-Historical `.9` delivery and validation (2026-09-14; retained rollback): The active `.9` patch set preserves the `.8` baseline and its product patches. Its [targeted Wine 11.16/11.17 review](BACKPORTS-11.16-11.17.md) adds 10 patch files carrying 13 upstream commits; it does not extend the complete audit beyond `wine-11.15`. Seed `2026.09.13` uses `.9` with MoltenVK `1.4.2` in Dev and Production, with a minimum App gate of `1.8 (0)`. Production reuses the exact signed archive verified in Dev. Build, API regression, signing, readiness, authenticated feed/ticket and full-download verification are complete. The user confirmed component updates, runtime preparation and Steam startup with the current Xcode Dev source build. Distribution was checked for `1.8 (0-3)`; per-build game, stop/restart interaction and clean-prefix acceptance were not repeated. Published App installers remain `1.8 (3)`. The source Release is stable; tag, commit and all four asset bytes, sizes and digests are unchanged. `.8` / seed `2026.09.06` is retained history.
-
-`cx26.3-wine11.0-runeon.8` carries `patches/runeon/0102-vuplex-accelerated-paint-policy.patch`. (`.7` carried an earlier form of the same patch that does not compile — it was tagged before a full build had been run. `static-check.sh` and `integration-check.sh` verify that patches apply, not that the result builds, so a product patch must go through a complete build before it is tagged.) It gives Wine the ability to make a Vuplex 3D WebView CEF host fall back from `OnAcceleratedPaint()` to CPU `OnPaint()`, and nothing more: the switch is only appended when the calling application has opted in through `HKCU\Software\Wine\AppDefaults\<image>\Runeon`, value `DisableVuplexAcceleratedPaint`. No game name or Steam AppID appears anywhere in Wine — the policy is written by the caller, so which titles need the fallback stays outside this repository. The host is matched on the image the command line will actually run ending in `.vuplex`, carrying `--vx-graphics-api=d3d11` and no `--type=`, so neither Chromium child processes nor a stray `.vuplex` path inside some other argument can trigger it. Falling back costs a CPU copy per painted frame, which is why it is opt-in rather than always on.
-
-The shipped `cx26.3-wine11.0-runeon.8` patch set is based on a commit-by-commit review through `wine-11.15`; see [the complete audit](AUDIT-11.0-11.15.md) and the earlier [11.0 to 11.14 audit](AUDIT-11.0-11.14.md) it extends. The review selected 42 localized correctness and stability fixes in addition to the two previously accepted upstream backports. It did not attempt to copy every upstream commit. Feature work, broad refactors, ABI-sensitive changes, subsystem migrations, fixes already present in CrossOver 26.3, and fixes whose dependency or regression surface was not yet bounded remain deferred.
-
-The audit is a point-in-time decision record, not a permanent allowlist. A deferred commit may enter a later immutable patch set after its dependency chain, affected tests, independent probe, and Runeon impact are established. Conversely, inclusion in the audit does not authorize publishing a runtime: the complete build and product smoke gates below still apply.
+Until 2026-10-24 each record and note was a separate root file with Chinese and Japanese translations; each section keeps its old file name as its anchor. Manifests of published patch sets still name the old root paths; those paths remain valid at each patch set's tag.
 
 ## Diagnostics-driven investigation
 

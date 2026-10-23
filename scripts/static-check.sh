@@ -34,48 +34,39 @@ for shell_script in "$repo_root"/scripts/*.sh; do
   bash -n "$shell_script"
 done
 
-for english_document in "$repo_root"/*.md; do
-  case "$english_document" in
-    *.zh-CN.md|*.ja.md) continue ;;
-    # Agent instructions, not user documentation; English only.
-    */CLAUDE.md|*/AGENTS.md) continue ;;
+# Documents are a fixed set: review records and patch notes are sections of the
+# two files under docs/, in English. Only the README is translated.
+for root_document in "$repo_root"/*.md; do
+  case "$(basename "$root_document")" in
+    README.md|README.zh-CN.md|README.ja.md|BUILDING.md|MAINTENANCE.md|SECURITY.md|CLAUDE.md|AGENTS.md) ;;
+    *) die "unexpected root document (add a section to a docs/ file instead): $root_document" ;;
   esac
+done
+while IFS= read -r docs_document; do
+  case "${docs_document#"$repo_root"/}" in
+    docs/upstream-reviews.md|docs/patch-notes.md) ;;
+    *) die "unexpected document under docs/ (add a section instead): $docs_document" ;;
+  esac
+done < <(find "$repo_root/docs" -name '*.md')
 
-  document_stem="${english_document%.md}"
-  chinese_document="$document_stem.zh-CN.md"
-  japanese_document="$document_stem.ja.md"
-  english_name="$(basename "$english_document")"
-  chinese_name="$(basename "$chinese_document")"
-  japanese_name="$(basename "$japanese_document")"
-
-  require_file "$chinese_document"
-  require_file "$japanese_document"
-
-  for document in "$english_document" "$chinese_document" "$japanese_document"; do
-    grep -Fq "$english_name" "$document" \
-      || die "documentation language link is missing $english_name: $document"
-    grep -Fq "$chinese_name" "$document" \
-      || die "documentation language link is missing $chinese_name: $document"
-    grep -Fq "$japanese_name" "$document" \
-      || die "documentation language link is missing $japanese_name: $document"
+readme_names=(README.md README.zh-CN.md README.ja.md)
+for readme in "${readme_names[@]}"; do
+  require_file "$repo_root/$readme"
+  for name in "${readme_names[@]}"; do
+    grep -Fq "($name)" "$repo_root/$readme" \
+      || die "README language link is missing $name: $readme"
   done
+done
 
+while IFS= read -r english_document; do
   if perl -CSD -ne '$found ||= /\p{Han}|\p{Hiragana}|\p{Katakana}/; END { exit($found ? 0 : 1) }' "$english_document"; then
-    die "authoritative English documentation contains Chinese or Japanese text: $english_document"
+    die "English documentation contains Chinese or Japanese text: $english_document"
   fi
-  perl -CSD -ne '$found ||= /\p{Han}/; END { exit($found ? 0 : 1) }' "$chinese_document" \
-    || die "Chinese documentation does not contain Chinese text: $chinese_document"
-  perl -CSD -ne '$found ||= /\p{Hiragana}|\p{Katakana}/; END { exit($found ? 0 : 1) }' "$japanese_document" \
-    || die "Japanese documentation does not contain Japanese text: $japanese_document"
-done
-
-for translated_document in "$repo_root"/*.zh-CN.md "$repo_root"/*.ja.md; do
-  case "$translated_document" in
-    *.zh-CN.md) english_document="${translated_document%.zh-CN.md}.md" ;;
-    *.ja.md) english_document="${translated_document%.ja.md}.md" ;;
-  esac
-  require_file "$english_document"
-done
+done < <(find "$repo_root" -maxdepth 1 -name '*.md' ! -name '*.zh-CN.md' ! -name '*.ja.md'; find "$repo_root/docs" -name '*.md')
+perl -CSD -ne '$found ||= /\p{Han}/; END { exit($found ? 0 : 1) }' "$repo_root/README.zh-CN.md" \
+  || die "Chinese README does not contain Chinese text"
+perl -CSD -ne '$found ||= /\p{Hiragana}|\p{Katakana}/; END { exit($found ? 0 : 1) }' "$repo_root/README.ja.md" \
+  || die "Japanese README does not contain Japanese text"
 
 for release_manifest in "$repo_root"/release-manifests/*.source-archive.json; do
   require_file "$release_manifest"

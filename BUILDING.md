@@ -1,9 +1,5 @@
 # Building and Source Bundles
 
-[English](BUILDING.md) | [Chinese](BUILDING.zh-CN.md) | [Japanese](BUILDING.ja.md)
-
-> This English document is authoritative. The Chinese and Japanese documents are complete translations for convenience.
-
 ## 1. Fetch the pinned baseline
 
 ```bash
@@ -116,4 +112,4 @@ wait "$fixture_pid" 2>/dev/null || true
 
 Execute the PE probes through the Runeon product's supported managed launch path, with a genuine gatekeeper grant and isolated test prefix. An ordinary direct Wine invocation can be rejected by managed launch validation; that is not evidence that a DLL test failed. This public repository does not contain the private App test launcher or bypass the gate. Use matching builtin Wine DLLs, record the exact runtime and prefix, compare old and candidate builds, and remove temporary probe binaries after retaining lightweight results.
 
-Probe compilation, function-level fault injection, Windows API execution, affected-module tests, and product graphics/Steam smoke are separate checks. Their current status is recorded in [the targeted review](BACKPORTS-11.16-11.17.md); none alone authorizes a runtime release.
+Probe compilation, function-level fault injection, Windows API execution, affected-module tests, and product graphics/Steam smoke are separate checks. Their current status is recorded in [the targeted review](docs/upstream-reviews.md#backports-11.16-11.17); none alone authorizes a runtime release.

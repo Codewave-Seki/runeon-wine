@@ -1,73 +1,41 @@
 # Runeon Wine
 
-[英文](README.md) | [简体中文](README.zh-CN.md) | [日本語](README.ja.md)
+[English](README.md) | [Chinese](README.zh-CN.md) | [Japanese](README.ja.md)
 
-> 英文文档是权威版本；简体中文与日语文档均为完整译本。
+> 英文版为准，中文与日文为完整译本，仅供参考。
 
-Runeon Wine 是 Runeon Steam Baseline runtime 的公开源码维护仓库，保存固定的 Wine/CrossOver Wine 基线、上游回移植、产品级补丁和可复现的对应源码构建入口。本仓库不构成通用兼容性承诺，也不包含 Runeon App、Steam、游戏或 Apple 私有图形组件。
+Runeon Wine 是 Runeon Steam Baseline runtime 的公开源码维护仓库，包含固定的 CrossOver Wine 基线、上游回移、Runeon 补丁，以及能为每个已发布 runtime 重建完全对应源码的脚本。本仓库不作通用兼容承诺，也不包含 Runeon App、Steam、游戏或 Apple 私有图形组件。
 
-## 当前基线
+## 基线与当前版本
 
-- CodeWeavers 源码：`crossover-sources-26.3.0.tar.gz`
-- Wine 基线：`Wine version 11.0`
+- CodeWeavers 源码：`crossover-sources-26.3.0.tar.gz`，Wine `11.0`，固定于 [`base/crossover-26.3-wine-11.0.json`](base/crossover-26.3-wine-11.0.json)
+- 当前正式源码：[`cx26.3-wine11.0-runeon.23`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.23)，对应 seed `2026.10.24`（App `>=1.14 (16)`）。定义见 [`patchsets/cx26.3-wine11.0-runeon.23`](patchsets/cx26.3-wine11.0-runeon.23/manifest.json)
 <!-- release-facts:current-patch-set -->
-- 默认源码定义（历史）：`cx26.3-wine11.0-runeon.9`，搭配保留的 seed `2026.09.13` 与 MoltenVK `1.4.2`
-- 当前正式源码：[`cx26.3-wine11.0-runeon.23`](patchsets/cx26.3-wine11.0-runeon.23/manifest.json)（正式版/latest），搭配 seed `2026.10.24`（App `>=1.14 (16)`）、MoltenVK `1.4.2` 与 SDL2 `2.32.10`。保留 `.22`，新增 `0134`（Retina 模式下屏幕 DC 的 `HORZRES`/`VERTRES` 不再翻倍，`RetinaMode` 关闭时行为不变）与 `0135`（wine-11.20 首发或其所需的 37 个上游提交的定向回移：Steam、启动器、安装程序和游戏会加载的用户态 DLL 中的崩溃、内存安全、泄漏、挂起与错误路径修复，涉及 msvcp60/90/140、msvcrt、dinput、winegstreamer 等；另含单独批准的 ntdll 与 winemac.drv 两项小修复，见 [11.20 回移说明](BACKPORTS-11.20-SWEEP.zh-CN.md)）。已通过 x86_64/WoW64 完整构建、静态与集成检查、探针、受影响模块的 Wine 自带测试（与 `.22` 对比），以及本地与 Dev 验收；Production 使用 Dev 已验证的同一份产物字节。不可变附件记录在 [release manifest](release-manifests/cx26.3-wine11.0-runeon.23.source-archive.json)。
-- 上一正式源码，已由 `.23` 接替，保留用于回滚：[`cx26.3-wine11.0-runeon.22`](patchsets/cx26.3-wine11.0-runeon.22/manifest.json)（正式版），对应 seed `2026.10.20`，该 seed 只分发给低于 `1.14 (16)` 的 App。保留 `.21` 并新增 `0091` 与 `0124`–`0133`。不可变附件记录在[发布清单](release-manifests/cx26.3-wine11.0-runeon.22.source-archive.json)。
-- 上一正式源码，已由 `.22` 接替，保留用于回滚：[`cx26.3-wine11.0-runeon.21`](patchsets/cx26.3-wine11.0-runeon.21/manifest.json)（正式版），对应 seed `2026.10.18`，该 seed 已不再分发。保留 `.20` 并新增 `0121`、`0122` 与 `0123`。不可变附件记录在[发布清单](release-manifests/cx26.3-wine11.0-runeon.21.source-archive.json)。
-- 上一正式源码，已由 `.21` 接替，保留用于回滚：[`cx26.3-wine11.0-runeon.20`](patchsets/cx26.3-wine11.0-runeon.20/manifest.json)（正式版），对应 seed `2026.10.16.1`，该 seed 已不再分发。保留 `.19` 并新增 `0089`、`0090` 与 `0120`。不可变附件记录在[发布清单](release-manifests/cx26.3-wine11.0-runeon.20.source-archive.json)。
+- 默认源码定义（历史）：`cx26.3-wine11.0-runeon.9`，未选择补丁集时使用
+- 上游审查范围：完整审计至 `wine-11.15`，筛选回移至 `wine-11.20`；见 [MAINTENANCE.md](MAINTENANCE.md#review-records)
 
-- 保留的正式源码，仍分发给 App `>=1.12 (6)`、`1.13 (10)` 之前：[`cx26.3-wine11.0-runeon.18`](patchsets/cx26.3-wine11.0-runeon.18/manifest.json)（正式版），对应 seed `2026.10.14`。保留 `.17` 并新增 `0081`–`0087` 与 `0118`。不可变附件记录在[发布清单](release-manifests/cx26.3-wine11.0-runeon.18.source-archive.json)。
-- 验证：`.15` 通过了完整 x86_64/WoW64 构建、patch set 与源码校验、`tests/emoji-fallback-check.py`、回移涉及的全部模块的 i386 与 x86_64 构建、签名、release readiness，以及 App `1.9 (1)` 与 `1.10 (0)` 在 Dev 和 Production 的鉴权 feed/票据/完整下载检查。用户反馈本机与 Dev 验收未发现问题，并于 2026-10-04 授权 Production。这项总体验收不代表每款游戏或每种 App 交互场景都经过了独立测试。
-- 较早的 App（`>=1.8 (0)`、早于 `1.10 (0)`）继续使用 seed `2026.09.28.1`，由 [`cx26.3-wine11.0-runeon.13`](patchsets/cx26.3-wine11.0-runeon.13/manifest.json)（正式版）构建。它在 `.11` 基础上新增上游 `RtlVirtualUnwind2` 空输出修复、另外 12 个 ntdll 修复与可选的 Rosetta 自修改代码开关（`0107`、`0108`）；开关只有 App 通过兼容性 recipe 按游戏启用时才生效。Wine 以 SDL 支持配置，seed 随附官方 SDL2 `2.32.10`（SHA-256 `5f5993c530f084535c65a6879e9b26ad441169b3e25d789d83287040a9ca5165`），`winebus.sys` 通过 SDL 向游戏提供手柄；见 [BUILDING.zh-CN.md](BUILDING.zh-CN.md)。真实手柄验收仍待进行。此前的 seed `2026.09.28`（同一源码、未启用 SDL）保留用于回滚。
-- 验证：`.14` 已通过完整 x86_64/WoW64 构建、补丁集与源码校验、`tests/graphics-route-check.py`、干净 prefix 下路由与未路由进程的模块身份探针（14 项均符合预期）、签名、release readiness，以及 App `1.9 (1)` 与 `1.10 (0)` 的鉴权 Dev 与 Production feed/ticket/完整下载检查。用户反馈 Dev（含原地升级）未发现问题，并于 2026-10-02 授权 Production；该概括验收不代表每个游戏或 App 交互场景均已独立实测。
-- 验证：`.13` 已通过完整 x86_64/WoW64 构建、开关关/开下的上游 ntdll `unwind` 与 `exception` 套件、自修改代码与多线程竞争探针、签名、release readiness，以及受支持 build 的鉴权 Dev 与 Production feed/ticket/完整下载检查。用户于 2026-09-28 反馈 Dev 未发现问题并授权 Production；该概括验收不代表每项 Steam/CEF、游戏或 App 交互均已独立实测。
-- Production 保留回滚源码：seed `2026.10.10` 对应 `cx26.3-wine11.0-runeon.17`，seed `2026.10.06` 对应 `cx26.3-wine11.0-runeon.16`，seed `2026.10.04` 对应 `cx26.3-wine11.0-runeon.15`，seed `2026.10.02` 对应 `cx26.3-wine11.0-runeon.14`，seed `2026.09.26` 对应 `cx26.3-wine11.0-runeon.11`，seed `2026.09.22` 对应 `cx26.3-wine11.0-runeon.10`，seed `2026.09.13` 对应 `cx26.3-wine11.0-runeon.9`，seed `2026.09.06` 对应 `cx26.3-wine11.0-runeon.8`，seed `2026.08.11.1` 对应 `cx26.3-wine11.0-runeon.6`，seed `2026.08.03.2` 对应 `cx26.3-wine11.0-runeon.5`
-- 上游已审计至：`wine-11.15`（完整审计）；筛选回移覆盖至 `wine-11.19`
+## 仓库结构
 
-[`base/crossover-26.3-wine-11.0.json`](base/crossover-26.3-wine-11.0.json) 是基线 URL、SHA-256 和源码根目录的唯一机器可读来源。[`series`](series) 定义补丁顺序；[`patches/manifest.json`](patches/manifest.json) 记录来源、风险和完整 upstream commit。
+| 路径 | 内容 |
+|---|---|
+| `base/` | 固定源码包的 URL、SHA-256 与源码根目录 |
+| `patchsets/<id>/` | 单个补丁集的 `series` 与 `manifest.json`；用 `RUNEON_WINE_PATCHSET_DEFINITION=patchsets/<id>` 选择 |
+| `series`、`patches/manifest.json` | 历史默认定义（`.9`） |
+| `patches/upstream/`、`patches/runeon/` | WineHQ 回移与 Runeon 补丁 |
+| `release-manifests/` | 每个已发布 Release 的提交、Release URL、附件名、大小、SHA-256 与状态 |
+| `tests/`、`scripts/` | 探针与检查；获取、应用、校验与打包脚本 |
+| `docs/` | 上游审查记录与补丁设计说明（英文） |
 
 ## 范围与边界
 
-- 本仓库不提交完整 Wine 源码、编译目录、runtime archive 或 Wine prefix。
-- 本仓库不下载、镜像或分发 `D3DMetal.framework`、`libd3dshared.dylib` 或 GPTK 私有 PE/Unix overlay。
-- 上游提交必须先进入审计清单；能够 clean apply 不代表可以自动进入 active series。
-- `ntdll`、`server`、`wow64`、`loader`、`winemac.drv`、`win32u`、Unix library/server protocol 和 D3DMetal 接口改动默认属于 ABI-sensitive，必须走独立基线升级或更强验证。
-- Runeon 产品仓库继续负责 component packaging、Developer ID 签名、Dev/Production feed、下载校验和 release readiness。
-- 本仓库及其 GitHub Release assets 公开。每个实际分发的 Production runtime 必须对应一个不可变正式 Release，并同时包含精确 patch-set bundle、完整对应源码和 SHA-256 文件；尚未提升至 Production 的候选必须保持 Pre-release。
-- `patchsets/cx26.3-wine11.0-runeon.0` 是 Production seed `2026.07.22` 的精确历史源码定义；`patchsets/cx26.3-wine11.0-runeon.1` 冻结了第一版未发布的 Escape 修复候选。默认 [`series`](series) 描述历史 Production seed `2026.09.13` 使用的 `.9` 源码。要重建任何更早的 patch set，必须检出承载它的那个提交，而不是当前工作树。
-- `release-manifests/` 记录每个公开 bundle 的 commit、Release URL、文件名、size、SHA-256、stable/prerelease 状态和永久保留规则。Production runtime 只能引用 `stable` manifest；Pre-release 不代表其中修复已提供给 Production 用户。
+- 不提交 Wine 源码树、构建产物、runtime 归档、prefix、用户数据或诊断信息。
+- 从不下载、镜像或分发 `D3DMetal.framework`、`libd3dshared.dylib` 与 GPTK 私有 overlay。
+- 能干净应用不等于进入补丁集，每个上游提交都先经审查。改动 `ntdll`、`server`、`wow64`、loader、`winemac.drv`、`win32u` 或 Unix/server 协议属于 ABI 敏感，除非单独批准，否则不纳入。
+- Runeon 补丁须由调用方显式开启，从不按游戏名或 AppID 匹配；例外列在 [MAINTENANCE.md](MAINTENANCE.md#product-patches-without-an-opt-in)。
+- 每个进入 Production 的 runtime 都有不可变的正式版 Release，含完全一致的补丁集包、完整对应源码与 SHA-256 文件。候选保持预发布。tag 与 Release 附件从不移动、替换或删除。
+- runtime 的打包、签名与分发由 Runeon 产品仓库负责。
 
-## 发布状态
-
-- [`cx26.3-wine11.0-runeon.0`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.0) 是保留的旧 seed `2026.07.22` 对应的历史正式源码 Release。
-- [`cx26.3-wine11.0-runeon.1`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.1) 是第一版包含 Escape `cfgmgr32` backport 的未上线候选，未随 Dev 或 Production runtime 发布，保持 Pre-release。
-- `cx26.3-wine11.0-runeon.2` 新增了 33 个从 Wine 11.1 至 11.14 人工评审的稳定性与正确性 backport。纳入、等价和延期决定见 [`AUDIT-11.0-11.14.zh-CN.md`](AUDIT-11.0-11.14.zh-CN.md)。
-- `cx26.3-wine11.0-runeon.3` 在 `.2` 基础上首次加入受管理的 Steam 启动验证，并作为不可变历史候选保留。
-- `cx26.3-wine11.0-runeon.4` 作为不可变历史候选保留。
-- [`cx26.3-wine11.0-runeon.5`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.5) 是 Production 保留 rollback seed `2026.08.03.2` 对应的正式源码 Release：继承 `.4`，精简受管理的 Steam 启动验证，并与已发布 assets、checksum 一起保持不可变。
-- [`cx26.3-wine11.0-runeon.6`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.6) 是 Production 保留 rollback seed `2026.08.11.1` 对应的正式源码 Release：继承 `.5`，新增 9 个来自 Wine 11.15 的评审 backport，并把审计范围推进到 `wine-11.15`；纳入、等价和延期决定见 [`AUDIT-11.0-11.15.zh-CN.md`](AUDIT-11.0-11.15.zh-CN.md)。构建、签名、readiness、鉴权下载和产品路径验证均已完成，Production 使用在 Dev 验证过的完全相同 artifact bytes。
-
-- [`cx26.3-wine11.0-runeon.7`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.7) 加入了 Vuplex 能力但**无法编译**：`dlls/kernelbase/process.c` 使用了注册表 API 却未包含 `winreg.h`。它在完整构建之前就被打了 tag，作为不可变历史候选保留，不得构建进任何 runtime。
-- [`cx26.3-wine11.0-runeon.8`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.8) 是 `.7` 补上该 include 的版本，**打 tag 前已通过完整 x86_64/WoW64 构建验证**。它是保留回滚 Production seed `2026.09.06` 对应的正式源码 Release，Production 使用在 Dev 验证过的完全相同 artifact bytes。
-
-- `.9` 历史交付与验证（2026-09-14，保留回滚）：[`cx26.3-wine11.0-runeon.9`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.9): Dev 与 Production seed `2026.09.13` 均使用 `.9` 与 MoltenVK `1.4.2`，App 门槛为 `1.8 (0)`。Production 复用在 Dev 验证过的同一份签名归档。构建、API 回归、签名、readiness、鉴权 feed/ticket 与完整下载验证已完成；用户已确认当前 Xcode Dev 源码版的组件更新、runtime 准备和 Steam 启动。分发已覆盖 `1.8 (0～3)`；没有逐 build 重跑游戏、停止重启交互与全新 prefix 验收。已发布 App 安装包保持 `1.8 (3)`。源码 Release 已正式发布，tag、commit 及四个附件的字节、大小、摘要均未变；`.8` / seed `2026.09.06` 保留为历史。 它保留 `.8` 并新增承载 13 个 Wine 11.16/11.17 提交的 10 个定向 backport 文件。不可变源码信息见[发布 manifest](release-manifests/cx26.3-wine11.0-runeon.9.source-archive.json)，选择与验证限制见[定向审查](BACKPORTS-11.16-11.17.zh-CN.md)；完整审计边界仍为 `wine-11.15`。
-- [`cx26.3-wine11.0-runeon.10`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.10) 是保留回滚 Production seed `2026.09.22` 对应的正式源码 Release。
-- [`cx26.3-wine11.0-runeon.11`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.11) 是保留回滚 Production seed `2026.09.26` 对应的正式源码 Release。不可变源码详情见 [release manifest](release-manifests/cx26.3-wine11.0-runeon.11.source-archive.json)。
-- [`cx26.3-wine11.0-runeon.12`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.12) 是 seed `2026.09.27` 对应、已被取代的 Pre-release Dev 候选，保持不变保留，从未用于 Production。不可变源码详情见 [release manifest](release-manifests/cx26.3-wine11.0-runeon.12.source-archive.json)。
-- [`cx26.3-wine11.0-runeon.13`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.13) 是 seed `2026.09.28.1`（仍分发给早于 `1.10 (0)` 的 App）及保留的 seed `2026.09.28` 对应的正式源码 Release；Production 使用 Dev 已验证的同一份产物字节。不可变源码详情见 [release manifest](release-manifests/cx26.3-wine11.0-runeon.13.source-archive.json)。
-- [`cx26.3-wine11.0-runeon.14`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.14) 是保留的 Production 回滚 seed `2026.10.02`（App `>=1.10 (0)`）对应的正式源码 Release。不可变源码详情见 [release manifest](release-manifests/cx26.3-wine11.0-runeon.14.source-archive.json)。
-- [`cx26.3-wine11.0-runeon.15`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.15) 是保留的 Production 回滚 seed `2026.10.04`（App `>=1.10 (0)`）对应的正式源码 Release。不可变源码详情见 [release manifest](release-manifests/cx26.3-wine11.0-runeon.15.source-archive.json)。
-- [`cx26.3-wine11.0-runeon.16`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.16) 是保留的 Production 回滚 seed `2026.10.06`（App `>=1.10 (0)`）对应的正式源码 Release。不可变源码详情见 [release manifest](release-manifests/cx26.3-wine11.0-runeon.16.source-archive.json)。
-- [`cx26.3-wine11.0-runeon.17`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.17) 是保留的 Production 回滚 seed `2026.10.10`（App `>=1.10 (3)`，`1.12 (6)` 之前）对应的正式源码 Release。不可变源码详情见 [release manifest](release-manifests/cx26.3-wine11.0-runeon.17.source-archive.json)。
-- [`cx26.3-wine11.0-runeon.18`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.18) 是保留的 Production seed `2026.10.14`（仍分发给 App `>=1.12 (6)`、`1.13 (10)` 之前）对应的正式源码 Release。不可变源码详情见 [release manifest](release-manifests/cx26.3-wine11.0-runeon.18.source-archive.json)。
-- [`cx26.3-wine11.0-runeon.19`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.19) 是 Pre-release，曾是 Dev seed `2026.10.16` 的 Dev 候选，已由 `.20` 接替，未用于 Production。不可变源码详情见 [release manifest](release-manifests/cx26.3-wine11.0-runeon.19.source-archive.json)。
-- [`cx26.3-wine11.0-runeon.20`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.20) 是保留的 Production seed `2026.10.16.1` 对应的正式源码 Release，已由 `.21` 接替，不再分发。不可变源码详情见 [release manifest](release-manifests/cx26.3-wine11.0-runeon.20.source-archive.json)。
-- [`cx26.3-wine11.0-runeon.21`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.21) 是保留的 Production seed `2026.10.18` 对应的正式源码 Release，已由 `.22` 接替，不再分发。不可变源码详情见 [release manifest](release-manifests/cx26.3-wine11.0-runeon.21.source-archive.json)。
-- [`cx26.3-wine11.0-runeon.22`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.22) 是 Production seed `2026.10.20` 对应的正式源码 Release，该 seed 只分发给低于 `1.14 (16)` 的 App；已由 `.23` 接替，保留用于回滚。保留 `.21`，新增 `GetIntegratedDisplaySize()` 桩（`0091`），macOS 提交内存、凭据、线程时间与应用包相关修复（`0124`、`0125`、`0131`、`0132`），游戏模式 loader bundle（`0126`、`0127`），音频声道顺序与缓冲调整（`0128`、`0129`），旧式 OpenGL 上下文的 ES2 兼容调用（`0130`），以及在引擎锁之外调用的媒体引擎回调（`0133`）。不可变源码详情见 [release manifest](release-manifests/cx26.3-wine11.0-runeon.22.source-archive.json)。
-- [`cx26.3-wine11.0-runeon.23`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.23) 是当前 Production seed `2026.10.24`（App `>=1.14 (16)`）对应的正式源码 Release；Production 使用 Dev 已验证的同一份产物字节。保留 `.22`，新增 Retina 模式下 `HORZRES`/`VERTRES` 的修复（`0134`）与 37 个 wine-11.20 用户态定向修复（`0135`）。不可变源码详情见 [release manifest](release-manifests/cx26.3-wine11.0-runeon.23.source-archive.json)。
-
-## 快速验证
+## 校验与构建
 
 ```bash
 scripts/static-check.sh
@@ -75,40 +43,54 @@ source_root="$(scripts/fetch-source.sh)"
 scripts/integration-check.sh "$source_root"
 ```
 
-`integration-check.sh` 会把固定基线复制到临时目录，按顺序应用全部补丁，验证最终 marker，并确认同一 series 不能被静默重复应用。它不会修改缓存中的原始源码。
-
-## 生成对应源码包
+`integration-check.sh` 把全部补丁按顺序应用到固定基线的临时副本，检查校验标记，并确认同一 series 不能重复应用。为 Release 构建源码包：
 
 ```bash
-source_root="$(scripts/fetch-source.sh)"
-scripts/apply-series.sh "$source_root"
-scripts/build-source-bundle.sh "$source_root" dist
-```
-
-Release 使用的 source bundle 必须与 runtime artifact 使用相同 base SHA 和 patch set。对应 tag 的 GitHub Release 必须同时包含 source bundle、patch-set bundle 和两份 SHA-256 文件。构建、发布与维护规则见 [`BUILDING.zh-CN.md`](BUILDING.zh-CN.md) 和 [`MAINTENANCE.zh-CN.md`](MAINTENANCE.zh-CN.md)。
-
-Runeon 产品仓库消费较小的 patch-set bundle：
-
-```bash
-scripts/build-patchset-bundle.sh dist
-```
-
-其中包含固定基线 manifest、补丁、series、验证脚本和许可证。Runeon 构建仍从 CodeWeavers 获取固定 SHA 的完整 Wine 与相关源码 archive。
-
-重建保留的旧 seed `2026.07.22` 的精确源码时必须显式选择 `.0`，不能用任何后续 patch set（包括 `.8` 或 `.9`）代替：
-
-```bash
-export RUNEON_WINE_PATCHSET_DEFINITION=patchsets/cx26.3-wine11.0-runeon.0
+export RUNEON_WINE_PATCHSET_DEFINITION=patchsets/cx26.3-wine11.0-runeon.23
 source_root="$(scripts/fetch-source.sh)"
 scripts/apply-series.sh "$source_root"
 scripts/build-source-bundle.sh "$source_root" dist
 scripts/build-patchset-bundle.sh dist
-scripts/build-source-archive-manifest.sh \
-  dist/runeon-wine-patchset-cx26.3-wine11.0-runeon.0.tar.gz \
-  dist/runeon-wine-source-cx26.3-wine11.0-runeon.0.tar.gz \
-  dist/cx26.3-wine11.0-runeon.0.source-archive.json
 ```
 
-## 许可证
+重建更早的补丁集时，同样选择它的定义，或检出它的 tag。完整构建步骤见 [BUILDING.md](BUILDING.md)。
 
-Wine 以及本仓库基于 Wine/CrossOver Wine 形成的修改遵循 LGPL-2.1-or-later，许可证文本见 [`LICENSE`](LICENSE)。各上游提交保留原作者和 Wine 项目历史；Runeon App 本身的许可方式不因本仓库而改变。
+## 版本历史
+
+每个 Release 都附有补丁集包、完整对应源码与两个 SHA-256 文件，说明中写有该补丁集新增的内容。「分发给」表示产品仍向所列 App 版本提供该 seed。
+
+| 补丁集 | 状态 | Seed | 说明 |
+|---|---|---|---|
+| [`.23`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.23) | 正式版，latest | `2026.10.24` | 当前版本；分发给 App `>=1.14 (16)` |
+| [`.22`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.22) | 正式版 | `2026.10.20` | 分发给 App `1.13 (10)`–`1.13 (15)` |
+| [`.21`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.21) | 正式版 | `2026.10.18` | 已被接替，保留 |
+| [`.20`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.20) | 正式版 | `2026.10.16.1` | 已被接替，保留 |
+| [`.19`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.19) | 预发布 | `2026.10.16` | Dev 候选，未用于 Production |
+| [`.18`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.18) | 正式版 | `2026.10.14` | 分发给 App `1.12 (6)`–`1.13 (9)` |
+| [`.17`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.17) | 正式版 | `2026.10.10` | 分发给 App `1.10 (3)`–`1.11 (4)` |
+| [`.16`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.16) | 正式版 | `2026.10.06` | 分发给 App `1.10 (0)`–`1.10 (2)` |
+| [`.15`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.15) | 正式版 | `2026.10.04` | 已被接替，保留 |
+| [`.14`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.14) | 正式版 | `2026.10.02` | 已被接替，保留 |
+| [`.13`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.13) | 正式版 | `2026.09.28.1`, `2026.09.28` | `2026.09.28.1` 分发给 App `1.8 (0)` 及以上、`1.10 (0)` 之前 |
+| [`.12`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.12) | 预发布 | `2026.09.27` | Dev 候选，未用于 Production |
+| [`.11`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.11) | 正式版 | `2026.09.26` | 已被接替，保留 |
+| [`.10`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.10) | 正式版 | `2026.09.22` | 已被接替，保留 |
+| [`.9`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.9) | 正式版 | `2026.09.13` | 已被接替，保留；默认定义 |
+| [`.8`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.8) | 正式版 | `2026.09.06` | 已被接替，保留 |
+| [`.7`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.7) | 预发布 | — | **无法编译**，切勿构建（`.8` 已修正） |
+| [`.6`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.6) | 正式版 | `2026.08.11.1` | 已被接替，保留 |
+| [`.5`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.5) | 正式版 | `2026.08.03.2` | 已被接替，保留 |
+| [`.2`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.2)–[`.4`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.4) | 预发布 | — | 历史候选，未发布 |
+| [`.1`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.1) | 预发布 | — | 首个候选，未发布 |
+| [`.0`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.0) | 正式版 | `2026.07.22` | 已被接替，保留 |
+
+## 文档
+
+- [BUILDING.md](BUILDING.md)：构建 runtime 与源码包
+- [MAINTENANCE.md](MAINTENANCE.md)：上游审查、补丁准入、免开关例外与发布政策
+- [SECURITY.md](SECURITY.md)：安全问题报告
+- [docs/upstream-reviews.md](docs/upstream-reviews.md) 与 [docs/patch-notes.md](docs/patch-notes.md)：审查记录与补丁设计说明
+
+## 许可
+
+本仓库中的 Wine 及源自 Wine/CrossOver Wine 的修改以 LGPL-2.1-or-later 授权，见 [`LICENSE`](LICENSE)。上游提交保留原作者信息。本仓库不改变 Runeon App 的许可。

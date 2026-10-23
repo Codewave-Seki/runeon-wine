@@ -4,70 +4,38 @@
 
 > This English document is authoritative. The Chinese and Japanese documents are complete translations for convenience.
 
-Runeon Wine is the public source-maintenance repository for Runeon's Steam Baseline runtime. It preserves a pinned Wine/CrossOver Wine baseline, upstream backports, product-specific patches, and reproducible corresponding-source build entry points. This repository does not create a general compatibility promise and does not contain the Runeon App, Steam, games, or Apple private graphics components.
+Runeon Wine is the public source-maintenance repository for Runeon's Steam Baseline runtime. It holds a pinned CrossOver Wine baseline, upstream backports, Runeon patches, and the scripts that rebuild the exact corresponding source of every shipped runtime. It makes no general compatibility promise, and it does not contain the Runeon App, Steam, games or Apple private graphics components.
 
-## Current baseline
+## Baseline and current release
 
-- CodeWeavers source: `crossover-sources-26.3.0.tar.gz`
-- Wine baseline: `Wine version 11.0`
+- CodeWeavers source: `crossover-sources-26.3.0.tar.gz`, Wine `11.0`, pinned in [`base/crossover-26.3-wine-11.0.json`](base/crossover-26.3-wine-11.0.json)
+- Current stable source: [`cx26.3-wine11.0-runeon.23`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.23), for seed `2026.10.24` (App `>=1.14 (16)`). Definition in [`patchsets/cx26.3-wine11.0-runeon.23`](patchsets/cx26.3-wine11.0-runeon.23/manifest.json)
 <!-- release-facts:current-patch-set -->
-- Default source definition (historical): `cx26.3-wine11.0-runeon.9`, paired with retained seed `2026.09.13` and MoltenVK `1.4.2`
-- Current stable source: [`cx26.3-wine11.0-runeon.23`](patchsets/cx26.3-wine11.0-runeon.23/manifest.json) (stable/latest), paired with seed `2026.10.24` (App `>=1.14 (16)`), MoltenVK `1.4.2` and SDL2 `2.32.10`. It preserves `.22` and adds `0134`, which stops doubling the screen DC's `HORZRES`/`VERTRES` in retina mode (unchanged with `RetinaMode` off), and `0135`, 37 targeted upstream commits first released in or required by wine-11.20: crash, memory-safety, leak, hang and error-path fixes in user-mode DLLs used by Steam, launchers, installers and games, including msvcp60/90/140, msvcrt, dinput and winegstreamer, plus two individually approved small ntdll and winemac.drv fixes (see [the 11.20 sweep](BACKPORTS-11.20-SWEEP.md)). A complete x86_64/WoW64 build, static and integration checks, probes, Wine's own tests for the affected modules compared against `.22`, and local and Dev acceptance passed; Production uses the exact artifact bytes verified in Dev. Immutable assets are recorded in [the release manifest](release-manifests/cx26.3-wine11.0-runeon.23.source-archive.json).
-- Previous stable source, superseded by `.23` and retained for rollback: [`cx26.3-wine11.0-runeon.22`](patchsets/cx26.3-wine11.0-runeon.22/manifest.json) (stable), paired with seed `2026.10.20`, which is delivered only to App builds below `1.14 (16)`. It preserves `.21` and adds `0091` and `0124`–`0133`. Immutable assets are recorded in [the release manifest](release-manifests/cx26.3-wine11.0-runeon.22.source-archive.json).
-- Previous stable source, superseded by `.22` and retained for rollback: [`cx26.3-wine11.0-runeon.21`](patchsets/cx26.3-wine11.0-runeon.21/manifest.json) (stable), paired with seed `2026.10.18`, which is no longer delivered. It preserves `.20` and adds `0121`, `0122` and `0123`. Immutable assets are recorded in [the release manifest](release-manifests/cx26.3-wine11.0-runeon.21.source-archive.json).
-- Previous stable source, superseded by `.21` and retained for rollback: [`cx26.3-wine11.0-runeon.20`](patchsets/cx26.3-wine11.0-runeon.20/manifest.json) (stable), paired with seed `2026.10.16.1`, which is no longer delivered. It preserves `.19` and adds `0089`, `0090` and `0120`. Immutable assets are recorded in [the release manifest](release-manifests/cx26.3-wine11.0-runeon.20.source-archive.json).
+- Default source definition (historical): `cx26.3-wine11.0-runeon.9`, used when no patch set is selected
+- Upstream reviewed through: `wine-11.15` (complete audit), `wine-11.20` (filtered sweeps); see [MAINTENANCE.md](MAINTENANCE.md#review-records)
 
-- Retained stable source still delivered to App `>=1.12 (6)`, before `1.13 (10)`: [`cx26.3-wine11.0-runeon.18`](patchsets/cx26.3-wine11.0-runeon.18/manifest.json) (stable), paired with seed `2026.10.14`. It preserves `.17` and adds `0081`–`0087` and `0118`. Immutable assets are recorded in [the release manifest](release-manifests/cx26.3-wine11.0-runeon.18.source-archive.json).
-- Validation: `.15` passed a complete x86_64/WoW64 build, patch-set and source verification, `tests/emoji-fallback-check.py`, i386 and x86_64 builds of every module the backports touch, signing, release readiness, and authenticated Dev and Production feed/ticket/full-download checks for App `1.9 (1)` and `1.10 (0)`. The user reported no issues in local and Dev acceptance and authorized Production on 2026-10-04. This general acceptance does not establish independent coverage of every game or App interaction scenario.
-- Earlier Apps (`>=1.8 (0)`, before `1.10 (0)`) keep seed `2026.09.28.1`, built from [`cx26.3-wine11.0-runeon.13`](patchsets/cx26.3-wine11.0-runeon.13/manifest.json) (stable). It adds the upstream `RtlVirtualUnwind2` NULL-output fix, twelve further ntdll fixes and the opt-in Rosetta self-modifying code policy (`0107`, `0108`) to `.11`; the policy stays inert unless the App enables it per game through a compatibility recipe. Wine is configured with SDL, and the seed ships the official SDL2 `2.32.10` release (SHA-256 `5f5993c530f084535c65a6879e9b26ad441169b3e25d789d83287040a9ca5165`) so `winebus.sys` exposes game controllers through SDL; see [BUILDING.md](BUILDING.md). Real-controller acceptance is still pending. The earlier seed `2026.09.28` (same source, without SDL) is retained for rollback.
-- Validation: `.14` passed a complete x86_64/WoW64 build, patch-set and source verification, `tests/graphics-route-check.py`, clean-prefix module identity probes for routed and unrouted processes (14 of 14 as expected), signing, release readiness, and authenticated Dev and Production feed/ticket/full-download checks for App `1.9 (1)` and `1.10 (0)`. The user reported no issues in Dev, including an in-place upgrade, and authorized Production on 2026-10-02. This general acceptance does not establish independent coverage of every game or App interaction scenario.
-- Validation: `.13` passed a complete x86_64/WoW64 build, the upstream ntdll `unwind` and `exception` suites with the policy off and on, self-modifying-code and multi-thread race probes, signing, release readiness, and authenticated Dev and Production feed/ticket/full-download checks for supported builds. The user reported no issues in Dev and authorized Production on 2026-09-28. This general acceptance does not establish independent coverage of every Steam/CEF, game or App interaction scenario.
-- Retained Production rollback sources: `cx26.3-wine11.0-runeon.17` for seed `2026.10.10`, `cx26.3-wine11.0-runeon.16` for seed `2026.10.06`, `cx26.3-wine11.0-runeon.15` for seed `2026.10.04`, `cx26.3-wine11.0-runeon.14` for seed `2026.10.02`, `cx26.3-wine11.0-runeon.11` for seed `2026.09.26`, `cx26.3-wine11.0-runeon.10` for seed `2026.09.22`, `cx26.3-wine11.0-runeon.9` for seed `2026.09.13`, `cx26.3-wine11.0-runeon.8` for seed `2026.09.06`, `cx26.3-wine11.0-runeon.6` for seed `2026.08.11.1`, and `cx26.3-wine11.0-runeon.5` for seed `2026.08.03.2`
-- Upstream audited through: `wine-11.15` (complete audit); filtered sweep through `wine-11.19`
+## Repository layout
 
-[`base/crossover-26.3-wine-11.0.json`](base/crossover-26.3-wine-11.0.json) is the single machine-readable source for the baseline URL, SHA-256, and source root. [`series`](series) defines patch order. [`patches/manifest.json`](patches/manifest.json) records provenance, risk, and full upstream commit identifiers.
+| Path | Contents |
+|---|---|
+| `base/` | Pinned source archive URL, SHA-256 and source root |
+| `patchsets/<id>/` | `series` and `manifest.json` for one patch set; select it with `RUNEON_WINE_PATCHSET_DEFINITION=patchsets/<id>` |
+| `series`, `patches/manifest.json` | The historical default definition (`.9`) |
+| `patches/upstream/`, `patches/runeon/` | WineHQ backports and Runeon patches |
+| `release-manifests/` | Commit, Release URL, asset names, sizes, SHA-256 and state of every published Release |
+| `tests/`, `scripts/` | Probes and checks; fetch, apply, verify and bundle scripts |
+| `docs/` | Upstream review records and patch design notes (English) |
 
 ## Scope and boundaries
 
-- The repository does not commit complete Wine source trees, build directories, runtime archives, or Wine prefixes.
-- It does not download, mirror, or distribute `D3DMetal.framework`, `libd3dshared.dylib`, or GPTK private PE/Unix overlays.
-- Upstream commits enter an audit list first. A clean apply does not automatically place a commit in the active series.
-- Changes to `ntdll`, `server`, `wow64`, `loader`, `winemac.drv`, `win32u`, Unix library/server protocols, or D3DMetal interfaces are ABI-sensitive by default and require a separate baseline upgrade or stronger validation.
-- The Runeon product repository remains responsible for component packaging, Developer ID signing, Dev/Production feeds, download verification, and release readiness.
-- This repository and its GitHub Release assets are public. Every distributed Production runtime must have an immutable stable Release containing the exact patch-set bundle, complete corresponding source, and SHA-256 files. Candidates awaiting Production promotion must remain Pre-releases.
-- `patchsets/cx26.3-wine11.0-runeon.0` is the exact historical source definition for Production seed `2026.07.22`. `patchsets/cx26.3-wine11.0-runeon.1` freezes the first unreleased Escape-fix candidate. The default [`series`](series) describes the `.9` source used by historical Production seed `2026.09.13`. Rebuilding any earlier patch set means checking out the commit that carried it, not the current working tree.
-- `release-manifests/` records each public bundle's commit, Release URL, file name, size, SHA-256, stable/prerelease state, and permanent-retention rule. A Production runtime may reference only a `stable` manifest. A Pre-release does not mean that its fixes are available to Production users.
+- No Wine source trees, build output, runtime archives, prefixes, user data or diagnostics are committed.
+- `D3DMetal.framework`, `libd3dshared.dylib` and GPTK private overlays are never downloaded, mirrored or distributed.
+- A clean apply does not put an upstream commit into a patch set; every commit is reviewed first. Changes to `ntdll`, `server`, `wow64`, the loader, `winemac.drv`, `win32u` or Unix/server protocols are ABI-sensitive and excluded unless individually approved.
+- Runeon patches are opt-in, never match game names or AppIDs, and the exceptions are listed in [MAINTENANCE.md](MAINTENANCE.md#product-patches-without-an-opt-in).
+- Every runtime shipped to Production has an immutable stable Release with the exact patch-set bundle, complete corresponding source and SHA-256 files. Candidates stay Pre-releases. Tags and Release assets are never moved, replaced or deleted.
+- Packaging, signing and distribution of the runtime are done by the Runeon product repository.
 
-## Release status
-
-- [`cx26.3-wine11.0-runeon.0`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.0) is the historical stable corresponding-source Release for retained legacy seed `2026.07.22`.
-- [`cx26.3-wine11.0-runeon.1`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.1) is the first unreleased candidate containing the Escape `cfgmgr32` backport. It did not ship in a Dev or Production runtime and remains a Pre-release.
-- `cx26.3-wine11.0-runeon.2` adds 33 manually reviewed stability and correctness backports from Wine 11.1 through 11.14. Its decisions and exclusions are recorded in [`AUDIT-11.0-11.14.md`](AUDIT-11.0-11.14.md).
-- `cx26.3-wine11.0-runeon.3` introduced managed Steam launch validation on top of `.2` and remains an immutable historical candidate.
-- `cx26.3-wine11.0-runeon.4` remains an immutable historical candidate.
-- [`cx26.3-wine11.0-runeon.5`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.5) is the stable corresponding-source Release for retained Production rollback seed `2026.08.03.2`. It inherited `.4`, streamlined managed Steam launch validation, and remains immutable together with its published assets and checksums.
-- [`cx26.3-wine11.0-runeon.6`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.6) is the stable corresponding-source Release for retained Production rollback seed `2026.08.11.1`. It inherits `.5` and adds nine reviewed backports from Wine 11.15, extending the audit through `wine-11.15`; its decisions and exclusions are recorded in [`AUDIT-11.0-11.15.md`](AUDIT-11.0-11.15.md). Build, signing, readiness, authenticated download, and product-path validation are complete, and Production uses the exact artifact bytes verified in Dev.
-
-- [`cx26.3-wine11.0-runeon.7`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.7) added the Vuplex capability but **does not compile**: `dlls/kernelbase/process.c` uses the registry API without including `winreg.h`. It was tagged before a full build had been run, remains an immutable historical candidate, and must not be built into any runtime.
-- [`cx26.3-wine11.0-runeon.8`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.8) is `.7` with that include added, verified by a complete x86_64/WoW64 build before tagging. It is the stable corresponding-source Release for retained Production rollback seed `2026.09.06`, and Production uses the exact artifact bytes verified in Dev.
-
-- Historical `.9` delivery and validation (2026-09-14; retained rollback): [`cx26.3-wine11.0-runeon.9`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.9): Seed `2026.09.13` uses `.9` with MoltenVK `1.4.2` in Dev and Production, with a minimum App gate of `1.8 (0)`. Production reuses the exact signed archive verified in Dev. Build, API regression, signing, readiness, authenticated feed/ticket and full-download verification are complete. The user confirmed component updates, runtime preparation and Steam startup with the current Xcode Dev source build. Distribution was checked for `1.8 (0-3)`; per-build game, stop/restart interaction and clean-prefix acceptance were not repeated. Published App installers remain `1.8 (3)`. The source Release is stable; tag, commit and all four asset bytes, sizes and digests are unchanged. `.8` / seed `2026.09.06` is retained history. It preserves `.8` and adds 10 targeted backport files carrying 13 Wine 11.16/11.17 commits. Immutable source details are in [the release manifest](release-manifests/cx26.3-wine11.0-runeon.9.source-archive.json); selection and validation limits are in [the targeted review](BACKPORTS-11.16-11.17.md). The complete audit boundary remains `wine-11.15`.
-- [`cx26.3-wine11.0-runeon.10`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.10) is the stable corresponding-source Release for retained Production rollback seed `2026.09.22`.
-- [`cx26.3-wine11.0-runeon.11`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.11) is the stable corresponding-source Release for retained Production rollback seed `2026.09.26`. Immutable source details are in [the release manifest](release-manifests/cx26.3-wine11.0-runeon.11.source-archive.json).
-- [`cx26.3-wine11.0-runeon.12`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.12) is a superseded Pre-release Dev candidate for seed `2026.09.27`, retained unchanged and never used in Production. Immutable source details are in [the release manifest](release-manifests/cx26.3-wine11.0-runeon.12.source-archive.json).
-- [`cx26.3-wine11.0-runeon.13`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.13) is the stable corresponding-source Release for seed `2026.09.28.1`, still delivered to Apps before `1.10 (0)`, and the retained seed `2026.09.28`; Production uses the exact artifact bytes verified in Dev. Immutable source details are in [the release manifest](release-manifests/cx26.3-wine11.0-runeon.13.source-archive.json).
-- [`cx26.3-wine11.0-runeon.14`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.14) is the stable corresponding-source Release for the retained Production rollback seed `2026.10.02` (App `>=1.10 (0)`). Immutable source details are in [the release manifest](release-manifests/cx26.3-wine11.0-runeon.14.source-archive.json).
-- [`cx26.3-wine11.0-runeon.15`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.15) is the stable corresponding-source Release for the retained Production rollback seed `2026.10.04` (App `>=1.10 (0)`). Immutable source details are in [the release manifest](release-manifests/cx26.3-wine11.0-runeon.15.source-archive.json).
-- [`cx26.3-wine11.0-runeon.16`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.16) is the stable corresponding-source Release for the retained Production rollback seed `2026.10.06` (App `>=1.10 (0)`). Immutable source details are in [the release manifest](release-manifests/cx26.3-wine11.0-runeon.16.source-archive.json).
-- [`cx26.3-wine11.0-runeon.17`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.17) is the stable corresponding-source Release for the retained Production rollback seed `2026.10.10` (App `>=1.10 (3)`, before `1.12 (6)`). Immutable source details are in [the release manifest](release-manifests/cx26.3-wine11.0-runeon.17.source-archive.json).
-- [`cx26.3-wine11.0-runeon.18`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.18) is the stable corresponding-source Release for the retained Production seed `2026.10.14`, still delivered to App `>=1.12 (6)` before `1.13 (10)`. Immutable source details are in [the release manifest](release-manifests/cx26.3-wine11.0-runeon.18.source-archive.json).
-- [`cx26.3-wine11.0-runeon.19`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.19) is a Pre-release that was the Dev candidate for Dev seed `2026.10.16`; it was superseded by `.20` and never used in Production. Immutable source details are in [the release manifest](release-manifests/cx26.3-wine11.0-runeon.19.source-archive.json).
-- [`cx26.3-wine11.0-runeon.20`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.20) is the stable corresponding-source Release for the retained Production seed `2026.10.16.1`, superseded by `.21` and no longer delivered. Immutable source details are in [the release manifest](release-manifests/cx26.3-wine11.0-runeon.20.source-archive.json).
-- [`cx26.3-wine11.0-runeon.21`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.21) is the stable corresponding-source Release for the retained Production seed `2026.10.18`, superseded by `.22` and no longer delivered. Immutable source details are in [the release manifest](release-manifests/cx26.3-wine11.0-runeon.21.source-archive.json).
-- [`cx26.3-wine11.0-runeon.22`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.22) is the stable corresponding-source Release for Production seed `2026.10.20`, which is delivered only to App builds below `1.14 (16)`; it is superseded by `.23` and retained for rollback. It preserves `.21` and adds a `GetIntegratedDisplaySize()` stub (`0091`), macOS commit-charge, credential, thread-time and app-package fixes (`0124`, `0125`, `0131`, `0132`), a Game Mode loader bundle (`0126`, `0127`), audio channel-order and buffer changes (`0128`, `0129`), ES2 compatibility calls in legacy OpenGL contexts (`0130`) and media engine callbacks outside the engine lock (`0133`). Immutable source details are in [the release manifest](release-manifests/cx26.3-wine11.0-runeon.22.source-archive.json).
-- [`cx26.3-wine11.0-runeon.23`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.23) is the stable corresponding-source Release for current Production seed `2026.10.24` (App `>=1.14 (16)`); Production uses the exact artifact bytes verified in Dev. It preserves `.22` and adds a retina-mode `HORZRES`/`VERTRES` fix (`0134`) and 37 targeted wine-11.20 user-mode fixes (`0135`). Immutable source details are in [the release manifest](release-manifests/cx26.3-wine11.0-runeon.23.source-archive.json).
-
-## Quick verification
+## Verify and build
 
 ```bash
 scripts/static-check.sh
@@ -75,40 +43,54 @@ source_root="$(scripts/fetch-source.sh)"
 scripts/integration-check.sh "$source_root"
 ```
 
-`integration-check.sh` copies the pinned baseline to a temporary tree, applies every patch in order, verifies final markers, and confirms that the same series cannot be silently applied twice. It does not modify the cached original source.
-
-## Build corresponding-source bundles
+`integration-check.sh` applies every patch in order to a temporary copy of the pinned baseline, checks the verification markers, and confirms that the series cannot be applied twice. To build the bundles for a Release:
 
 ```bash
-source_root="$(scripts/fetch-source.sh)"
-scripts/apply-series.sh "$source_root"
-scripts/build-source-bundle.sh "$source_root" dist
-```
-
-The source bundle used for a Release must use the same base SHA and patch set as the runtime artifact. Each tagged GitHub Release must contain the source bundle, patch-set bundle, and both SHA-256 files. See [`BUILDING.md`](BUILDING.md) and [`MAINTENANCE.md`](MAINTENANCE.md) for the build, release, and maintenance policies.
-
-The Runeon product repository consumes the smaller patch-set bundle:
-
-```bash
-scripts/build-patchset-bundle.sh dist
-```
-
-It contains the pinned baseline manifest, patches, series, verification scripts, and license. The Runeon build still obtains the complete Wine and related source archive from CodeWeavers at the pinned SHA.
-
-To rebuild the exact source for retained legacy seed `2026.07.22`, select `.0` explicitly. Do not substitute any later patch set, including `.8` or `.9`:
-
-```bash
-export RUNEON_WINE_PATCHSET_DEFINITION=patchsets/cx26.3-wine11.0-runeon.0
+export RUNEON_WINE_PATCHSET_DEFINITION=patchsets/cx26.3-wine11.0-runeon.23
 source_root="$(scripts/fetch-source.sh)"
 scripts/apply-series.sh "$source_root"
 scripts/build-source-bundle.sh "$source_root" dist
 scripts/build-patchset-bundle.sh dist
-scripts/build-source-archive-manifest.sh \
-  dist/runeon-wine-patchset-cx26.3-wine11.0-runeon.0.tar.gz \
-  dist/runeon-wine-source-cx26.3-wine11.0-runeon.0.tar.gz \
-  dist/cx26.3-wine11.0-runeon.0.source-archive.json
 ```
+
+To rebuild an earlier patch set, select its definition the same way, or check out its tag. The full build procedure is in [BUILDING.md](BUILDING.md).
+
+## Release history
+
+Each Release carries the patch-set bundle, the complete corresponding source and both SHA-256 files; its notes describe what the patch set adds. "Delivered" means the product still serves that seed to the App builds shown.
+
+| Patch set | State | Seed | Status |
+|---|---|---|---|
+| [`.23`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.23) | stable, latest | `2026.10.24` | Current; delivered to App `>=1.14 (16)` |
+| [`.22`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.22) | stable | `2026.10.20` | Delivered to App `1.13 (10)`–`1.13 (15)` |
+| [`.21`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.21) | stable | `2026.10.18` | Superseded, retained |
+| [`.20`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.20) | stable | `2026.10.16.1` | Superseded, retained |
+| [`.19`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.19) | pre-release | `2026.10.16` | Dev candidate, never in Production |
+| [`.18`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.18) | stable | `2026.10.14` | Delivered to App `1.12 (6)`–`1.13 (9)` |
+| [`.17`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.17) | stable | `2026.10.10` | Delivered to App `1.10 (3)`–`1.11 (4)` |
+| [`.16`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.16) | stable | `2026.10.06` | Delivered to App `1.10 (0)`–`1.10 (2)` |
+| [`.15`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.15) | stable | `2026.10.04` | Superseded, retained |
+| [`.14`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.14) | stable | `2026.10.02` | Superseded, retained |
+| [`.13`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.13) | stable | `2026.09.28.1`, `2026.09.28` | `2026.09.28.1` delivered to App `1.8 (0)` and later, before `1.10 (0)` |
+| [`.12`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.12) | pre-release | `2026.09.27` | Dev candidate, never in Production |
+| [`.11`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.11) | stable | `2026.09.26` | Superseded, retained |
+| [`.10`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.10) | stable | `2026.09.22` | Superseded, retained |
+| [`.9`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.9) | stable | `2026.09.13` | Superseded, retained; default definition |
+| [`.8`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.8) | stable | `2026.09.06` | Superseded, retained |
+| [`.7`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.7) | pre-release | — | **Does not compile**; never build it (fixed in `.8`) |
+| [`.6`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.6) | stable | `2026.08.11.1` | Superseded, retained |
+| [`.5`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.5) | stable | `2026.08.03.2` | Superseded, retained |
+| [`.2`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.2)–[`.4`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.4) | pre-release | — | Historical candidates, never shipped |
+| [`.1`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.1) | pre-release | — | First candidate, never shipped |
+| [`.0`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.0) | stable | `2026.07.22` | Superseded, retained |
+
+## Documentation
+
+- [BUILDING.md](BUILDING.md): building the runtime and the source bundles
+- [MAINTENANCE.md](MAINTENANCE.md): upstream review, patch gates, opt-in exceptions and release policy
+- [SECURITY.md](SECURITY.md): reporting security issues
+- [docs/upstream-reviews.md](docs/upstream-reviews.md) and [docs/patch-notes.md](docs/patch-notes.md): review records and patch design notes
 
 ## License
 
-Wine and the modifications derived from Wine/CrossOver Wine in this repository are licensed under LGPL-2.1-or-later. See [`LICENSE`](LICENSE). Upstream commits retain their original authorship and Wine project history. The Runeon App's license is not changed by this repository.
+Wine and the modifications derived from Wine/CrossOver Wine in this repository are licensed under LGPL-2.1-or-later. See [`LICENSE`](LICENSE). Upstream commits keep their original authorship. This repository does not change the license of the Runeon App.
