@@ -117,3 +117,4 @@ patches/runeon/0131-ntdll-macos-thread-times.patch
 patches/runeon/0132-kernelbase-app-packages-from-registry.patch
 patches/runeon/0133-mfmediaengine-events-off-engine-lock.patch
 patches/runeon/0134-winemac-retina-horzres-not-doubled.patch
+patches/upstream/0135-wine-11.20-targeted-fixes.patch

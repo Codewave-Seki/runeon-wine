@@ -2742,6 +2742,67 @@
           "contains": "        return dev->funcs->pGetDeviceCaps( dev, cap );"
         }
       ]
+    },
+    {
+      "order": 165,
+      "path": "patches/upstream/0135-wine-11.20-targeted-fixes.patch",
+      "sha256": "dcceba09aa90ef762806b3d2a12f37af4555d9270b997a8a106c01b538aec27e",
+      "kind": "upstream-backport",
+      "status": "active",
+      "risk": "medium",
+      "firstWineRelease": "wine-11.20",
+      "runeonTasks": [
+        "T948"
+      ],
+      "upstreamCommits": [
+        "5e5ca9fefcc84c91edf60f93cdf121b06ce47413",
+        "076438fa7c5b6ea0ea726d5cc96c95cf15b14224",
+        "6f14a8ea458bb69d009f301bc19fd92e612aa687",
+        "16c13088f938aa3b02813367003e026df38751b1",
+        "547e01858de66d3771734f2802ec335cdb3d801f",
+        "73cc740a01b39ca073780d33d5d06a6c88648775",
+        "d7c49769d9471681ceea7f0745ad8231ab0ba280",
+        "33fba6fc266cadabd43bd277c8325008bced861a",
+        "52f8e6b5a5df081a5247cb247edd3aaeec0ae2fd",
+        "774cb470c50c17fd46d84b6d72b8f309d88f0f4b",
+        "90e98d3d9426fb4bb65d70bc257f51fb1daa022f",
+        "146fbbe78baa2a46ab7e15181a2174b693ae27d6",
+        "9eb4614ad7a021758af39656bc68d88fa5cfbdb3",
+        "f564234cb2322cd4f43feafe800cc95c3e6e537b",
+        "436ec312c34721cc8ec3f2f43e45c435b3a3ae06",
+        "86b80d02b665acd262c004dae4bec49001c96296",
+        "bf9b5e567c7289f3b6af3c4478e25bbedb1660be",
+        "07c33a0e9248a054c3472892b18dc8bdf3ce1132",
+        "0e7224e8522e8dab5aab43c73b94778891c035c8",
+        "baa7c5d335abee2059f175a4899ea61d25ab692c",
+        "0740f549897e43f8b7971bdac74af183720100dd",
+        "f011c203a045282743c9a0fb2afc142e7a363e9c",
+        "f0fef9fef7fc4bee42f952e76e810313ba9c4263",
+        "00469cf5cfcdbdb075fa69903034f2eb48b56344",
+        "43b83b580fe1dca161eae4c4f97bf999be31af3c",
+        "3d27b08dde0a3563921b6e109de56e38a9faa972",
+        "c54fd1eac552fd08cc7af1002f584a8a42953ea6",
+        "c9173a6c5d4352165be6757181179cfd32b122a9",
+        "fb997bf426d02fcf4868133ad330e39e74530fe1",
+        "794feb9289322e4d640fed0ef6e36a7c7b91130c",
+        "ad23bc1551878392405dfb4fa5847953841d716e",
+        "0875da63b70b6c24a39d2a66b07a61d8643c27c7",
+        "81e52628b25ac173d04796e8a9b9cda637d3e233",
+        "48e2d50404d0b67f30cf0a149df361f4d50eac64"
+      ],
+      "summary": "Squashed user-mode fixes first released in wine-11.20 for DLLs used by Steam, launchers, installers and games (crash, memory-safety, leak, hang and error-path fixes), plus two wine-11.12 msvcp60 prerequisites; ABI-sensitive, driver-identity, feature series and behaviour changes without a stability benefit excluded.",
+      "testStrategy": "Every commit applies in upstream order without fuzz on top of patches 0001-0134, except those documented as adapted; every affected module and every module sharing its sources builds for i386 and x86_64; full Wine build and product smoke validation. Upstream test hunks are omitted.",
+      "verification": [
+        {
+          "path": "dlls/msvcrt/handler4.c",
+          "contains": "static int thread_get_trylevel(void)"
+        },
+        {
+          "path": "dlls/winemac.drv/window.c",
+          "contains": "*style_mask = *ex_style_mask = 0;"
+        }
+      ],
+      "adaptation": "146fbbe78b is applied to dlls/dmband/bandtrack.c, where the base still keeps the band track (upstream moved it to dmusic in 220b4e7ff6); 48e2d50404 is the same one-line change below the CrossOver Quicken hack in macdrv_GetWindowStyleMasks()."
     }
   ],
   "targetedReview": {
