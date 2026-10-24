@@ -1,0 +1,77 @@
+From: Runeon Contributors <dev@runeon.com>
+Subject: [PATCH] msvcp100: Keep the state of a failed stream in basic_istream::seekg.
+
+Native msvcp100 leaves the stream state unchanged when either seekg()
+overload is called on a stream that has failed; Wine cleared it to goodbit
+instead. The wchar_t overloads share the code and change the same way; only
+the char ones were compared with native. A program that inlines basic_ifstream
+from the Visual C++ 2010 headers seeks after opening the file and only then
+tests fail(), so with Wine a missing file looked like an open, empty one.
+
+Only msvcp100 changes. msvcp60 to msvcp90 keep clearing the state, as there is
+no native comparison for them yet, and msvcp110 and later take the other
+branch. Successful seeks still clear the state as before.
+
+--- a/dlls/msvcp90/ios.c
++++ b/dlls/msvcp90/ios.c
+@@ -8926,8 +8926,12 @@
+         else
+             basic_ios_char_clear(base, IOSTATE_goodbit);
+         return this;
+-    }else
+-        basic_ios_char_clear(base, IOSTATE_goodbit);
++    }
++#if _MSVCP_VER < 100
++    basic_ios_char_clear(base, IOSTATE_goodbit);
++#else
++    /* msvcp100 leaves the state of a failed stream unchanged. */
++#endif
+ #endif
+     return this;
+ }
+@@ -8970,8 +8974,12 @@
+         else
+             basic_ios_char_clear(base, IOSTATE_goodbit);
+         return this;
+-    }else
+-        basic_ios_char_clear(base, IOSTATE_goodbit);
++    }
++#if _MSVCP_VER < 100
++    basic_ios_char_clear(base, IOSTATE_goodbit);
++#else
++    /* msvcp100 leaves the state of a failed stream unchanged. */
++#endif
+ #endif
+     return this;
+ }
+@@ -10496,8 +10504,12 @@
+         else
+             basic_ios_wchar_clear(base, IOSTATE_goodbit);
+         return this;
+-    }else
+-        basic_ios_wchar_clear(base, IOSTATE_goodbit);
++    }
++#if _MSVCP_VER < 100
++    basic_ios_wchar_clear(base, IOSTATE_goodbit);
++#else
++    /* msvcp100 leaves the state of a failed stream unchanged. */
++#endif
+ #endif
+     return this;
+ }
+@@ -10542,9 +10554,13 @@
+         else
+             basic_ios_wchar_clear(base, IOSTATE_goodbit);
+         return this;
+-    }else
+-        basic_ios_wchar_clear(base, IOSTATE_goodbit);
++    }
++#if _MSVCP_VER < 100
++    basic_ios_wchar_clear(base, IOSTATE_goodbit);
++#else
++    /* msvcp100 leaves the state of a failed stream unchanged. */
+ #endif
++#endif
+     return this;
+ }
+ 
