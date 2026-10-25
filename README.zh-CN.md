@@ -59,6 +59,8 @@ scripts/build-patchset-bundle.sh dist
 
 | 补丁集 | 状态 | Seed | 说明 |
 |---|---|---|---|
+| [`.26`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.26) | 预发布 | `2026.10.25.2` | Dev 候选，适用 App `>=1.14 (16)`；尚未进入 Production |
+| [`.25`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.25) | 预发布 | `2026.10.25.1` | Dev 候选，已被 `.26` 接替，未用于 Production |
 | [`.24`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.24) | 正式版，latest | `2026.10.25` | 当前版本；分发给 App `>=1.14 (16)` |
 | [`.23`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.23) | 正式版 | `2026.10.24` | 已被接替，保留 |
 | [`.22`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.22) | 正式版 | `2026.10.20` | 分发给 App `1.13 (10)`–`1.13 (15)` |
