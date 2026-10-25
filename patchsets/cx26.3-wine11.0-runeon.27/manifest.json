@@ -3015,7 +3015,7 @@
     {
       "order": 175,
       "path": "patches/upstream/0145-wine-11.17-macos-fixes.patch",
-      "sha256": "02f78ccb602c19943bff270ffc359b41dcce9e734f6142b3faa82130988fe9f9",
+      "sha256": "d81d255a854f4e99274e6c5ae1b03c535cafa0a6ef1979800f5681896932ad60",
       "kind": "upstream-backport",
       "status": "active",
       "risk": "medium",
@@ -3023,20 +3023,22 @@
       "upstreamCommits": [
         "98a370e5e1877e011880e582126958755bcfd455",
         "7d29860d06455c5455d94d7d9910ab4a7d0f3a02",
-        "92df8e37e51c9da318d70dd96c50774a5f7fe662",
         "4f1ecabee97838b197b71c75d3f6512add68ba64",
         "c8b715068001cbae25f72372e71c70db1a06d381",
-        "1bfb493cd027041b84dc5202d4125aeb02e64e37",
         "d56f36c1aa0927a19d74bef66586572ad57322de",
         "eefbbc07a838ffc9e71a963fa3aec14c9cb5a1a2",
         "53a91cdcbe21125913b24a48cf0f429597017d6a"
       ],
-      "summary": "First batch under the macOS-fix rule (maintainer decision 2026-10-26): nine WineHQ commits applied unchanged. Free disk space now reports the space macOS makes available for important data, with a statfs fallback when that is 0 on non-APFS volumes; the clipboard registers formats through NtUserRegisterWindowMessage and no longer leaks pasteboard data; GetKeyNameText no longer matches scan code 0; ClipCursor with reset releases the clip; a window that becomes invalid between WM_QUERYENDSESSION and WM_ENDSESSION no longer blocks the session end; a window restored from the Dock is activated before SC_RESTORE, as on Windows (d56f36c1aa, which also reverts win32u and winex11 code macOS does not reach, individually approved). 92df8e37e5 is an ordinary gdiplus parameter-check fix.",
-      "testStrategy": "No self-contained check. A complete WoW64 build and an application run are required before tagging: the Steam client and several games (WineD3D, DXMT, D3DMetal) still present, take keyboard and mouse input and exit normally; copy and paste text between a Windows program and macOS both ways; a game that confines the cursor releases it when it should; a fullscreen game minimised to the Dock and restored returns to fullscreen; free space reported by Steam for its library drive matches Finder; quitting Runeon with Steam running ends the session normally.",
+      "summary": "First batch under the macOS-fix rule (maintainer decision 2026-10-26): seven WineHQ commits. Free disk space now reports the space macOS makes available for important data, with a statfs fallback when that is 0 on non-APFS volumes; registered clipboard formats are registered through NtUserRegisterWindowMessage, and drag-and-drop import no longer leaks pasteboard data; GetKeyNameText no longer matches scan code 0; ClipCursor with reset releases the clip; a window restored from the Dock is activated before SC_RESTORE, as on Windows (d56f36c1aa, which also reverts win32u and winex11 code macOS does not reach, individually approved).",
+      "testStrategy": "No self-contained check. A complete WoW64 build and an application run are required before tagging: the Steam client and several games (WineD3D, DXMT, D3DMetal) still present, take keyboard and mouse input and exit normally; rich text (RTF or HTML) copied from a macOS app pastes with formatting into a Windows program that reads registered formats, and back; files or text dragged from Finder into a Windows program are received (drag-and-drop import, where the leak fix applies); a game that confines the cursor releases it when it should; a fullscreen game minimised to the Dock and restored returns to fullscreen; free space Steam reports for its library drive matches Finder. Not covered: a volume whose free-space property is absent, the case the adaptation guards.",
       "verification": [
         {
           "path": "dlls/ntdll/unix/file.c",
           "contains": "static LONGLONG get_free_bytes_for_important_data(int fd)"
+        },
+        {
+          "path": "dlls/ntdll/unix/file.c",
+          "contains": "&num, NULL ) || !num) goto done;"
         },
         {
           "path": "dlls/ntdll/unix/file.c",
@@ -3052,21 +3054,12 @@
           "occurrences": 2
         },
         {
-          "path": "dlls/gdiplus/imageattributes.c",
-          "contains": "if(!imageattr || !is_valid_ColorAdjustType(type) || flags < ColorMatri"
-        },
-        {
           "path": "dlls/winemac.drv/keyboard.c",
           "contains": "if (thread_data->keyc2scan[keyc] == scan && scan)"
         },
         {
           "path": "dlls/winemac.drv/mouse.c",
           "contains": "    if (!reset && clip)"
-        },
-        {
-          "path": "dlls/winemac.drv/dllmain.c",
-          "contains": "BOOL invalid = (error == ERROR_INVALID_WINDOW_HANDLE);",
-          "occurrences": 2
         },
         {
           "path": "dlls/win32u/message.c",
@@ -3077,7 +3070,8 @@
           "contains": "        NtUserSetActiveWindow(hwnd);",
           "occurrences": 2
         }
-      ]
+      ],
+      "adaptation": "One Runeon change to 98a370e5e1: get_free_bytes_for_important_data() also falls back to statfs when CFURLCopyResourcePropertyForKey() succeeds without returning a value, which CoreFoundation allows; upstream passes that NULL to CFNumberGetValue(). No volume returning that was observed. The other six commits are applied unchanged."
     }
   ],
   "targetedReview": {

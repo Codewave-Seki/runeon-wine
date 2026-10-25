@@ -1,41 +1,30 @@
 From: Wine upstream contributors (see commit list)
 Subject: [PATCH] Carry WineHQ fixes for macOS-specific behaviour.
 
-Nine WineHQ commits from wine-11.2 to wine-11.17, applied unchanged in
-upstream order; test-only hunks are omitted. Seven are the first batch
-carried under the macOS-fix rule in CLAUDE.md section 3: each fixes a
-defect present in the pinned base, touches only Wine code that CrossOver
-keeps unchanged, and changes no protocol or shared structure. 92df8e37e5
-(gdiplus) is an ordinary user-mode fix. d56f36c1aa also changes win32u
-and winex11 code that macOS does not reach; it was approved individually
-and is carried unchanged. See docs/upstream-reviews.md, "macOS fix
-batch 1".
+Seven WineHQ commits from wine-11.2 to wine-11.17, in upstream order;
+test-only hunks are omitted. They are the first batch carried under the
+macOS-fix rule in CLAUDE.md section 3: each fixes a defect present in the
+pinned base, touches only Wine code that CrossOver keeps unchanged, and
+changes no protocol or shared structure. d56f36c1aa also changes win32u
+and winex11 code that macOS does not reach; it was approved individually.
+
+All are applied unchanged except one Runeon adaptation in
+get_free_bytes_for_important_data() (98a370e5e1): CoreFoundation allows
+CFURLCopyResourcePropertyForKey() to succeed without returning a value,
+and upstream then passes NULL to CFNumberGetValue(). The result is now
+also checked, so that case falls back to statfs like any other failure.
+See docs/upstream-reviews.md, "macOS fix batch 1".
 
   98a370e5e1 (wine-11.2, Tim Clem): ntdll: Report free space for "important" data on macOS.
   7d29860d06 (wine-11.3, Rémi Bernon): winemac: Register clipboard format with NtUserRegisterWindowMessage.
-  92df8e37e5 (wine-11.3, Esme Povirk): gdiplus: Remove an assumption that an enum type is unsigned.
   4f1ecabee9 (wine-11.5, Marc-Aurel Zent): winemac: Avoid matching scan code 0 in GetKeyNameText.
   c8b7150680 (wine-11.7, Tim Clem): ntdll: Fall back to statfs if "important" free space is 0 on macOS.
-  1bfb493cd0 (wine-11.7, Tim Clem): winemac.drv: Handle windows becoming invalid between WM_QUERYENDSESSION and WM_ENDSESSION.
   d56f36c1aa (wine-11.8, Zhiyi Zhang): Revert "win32u: Don't forcefully activate windows before restoring them.".
   eefbbc07a8 (wine-11.10, Feifan He): winemac: Handle reset parameter in ClipCursor.
   53a91cdcbe (wine-11.17, Brendan Shanks): winemac: Fix memory leak in get_format_entries().
 
-diff --git a/dlls/gdiplus/imageattributes.c b/dlls/gdiplus/imageattributes.c
-index 34299df..2881bee 100644
---- a/dlls/gdiplus/imageattributes.c
-+++ b/dlls/gdiplus/imageattributes.c
-@@ -153,7 +153,7 @@ GpStatus WINGDIPAPI GdipSetImageAttributesColorMatrix(GpImageAttributes *imageat
-     TRACE("(%p,%u,%i,%p,%p,%u)\n", imageattr, type, enableFlag, colorMatrix,
-         grayMatrix, flags);
- 
--    if(!imageattr || !is_valid_ColorAdjustType(type) || flags > ColorMatrixFlagsAltGray)
-+    if(!imageattr || !is_valid_ColorAdjustType(type) || flags < ColorMatrixFlagsDefault || flags > ColorMatrixFlagsAltGray)
-         return InvalidParameter;
- 
-     if (enableFlag)
 diff --git a/dlls/ntdll/unix/file.c b/dlls/ntdll/unix/file.c
-index ac2619f..2840b43 100644
+index ac2619f..11dd793 100644
 --- a/dlls/ntdll/unix/file.c
 +++ b/dlls/ntdll/unix/file.c
 @@ -103,6 +103,9 @@
@@ -48,7 +37,7 @@ index ac2619f..2840b43 100644
  #include <time.h>
  #include <unistd.h>
  
-@@ -2176,6 +2179,35 @@ static NTSTATUS server_get_name_info( HANDLE handle, FILE_NAME_INFORMATION *info
+@@ -2176,6 +2179,36 @@ static NTSTATUS server_get_name_info( HANDLE handle, FILE_NAME_INFORMATION *info
  }
  
  
@@ -63,7 +52,8 @@ index ac2619f..2840b43 100644
 +    if (!(path = malloc( MAXPATHLEN ))) goto done;
 +    if (fcntl( fd, F_GETPATH, path ) == -1) goto done;
 +    if (!(url = CFURLCreateFromFileSystemRepresentation( NULL, (UInt8 *)path, strlen(path), false ))) goto done;
-+    if (!CFURLCopyResourcePropertyForKey( url, kCFURLVolumeAvailableCapacityForImportantUsageKey, &num, NULL )) goto done;
++    /* Runeon: the call may succeed without a value; fall back to statfs then. */
++    if (!CFURLCopyResourcePropertyForKey( url, kCFURLVolumeAvailableCapacityForImportantUsageKey, &num, NULL ) || !num) goto done;
 +    CFNumberGetValue( num, kCFNumberLongLongType, &space );
 +    if (space == 0)
 +    {
@@ -84,7 +74,7 @@ index ac2619f..2840b43 100644
  static NTSTATUS get_full_size_info(int fd, FILE_FS_FULL_SIZE_INFORMATION *info) {
      struct stat st;
      ULONGLONG bsize;
-@@ -2186,6 +2218,10 @@ static NTSTATUS get_full_size_info(int fd, FILE_FS_FULL_SIZE_INFORMATION *info)
+@@ -2186,6 +2219,10 @@ static NTSTATUS get_full_size_info(int fd, FILE_FS_FULL_SIZE_INFORMATION *info)
      struct statfs stfs;
  #endif
  
@@ -95,7 +85,7 @@ index ac2619f..2840b43 100644
      if (fstat( fd, &st ) < 0) return errno_to_status( errno );
      if (!S_ISREG(st.st_mode) && !S_ISDIR(st.st_mode)) return STATUS_INVALID_DEVICE_REQUEST;
  
-@@ -2197,6 +2233,12 @@ static NTSTATUS get_full_size_info(int fd, FILE_FS_FULL_SIZE_INFORMATION *info)
+@@ -2197,6 +2234,12 @@ static NTSTATUS get_full_size_info(int fd, FILE_FS_FULL_SIZE_INFORMATION *info)
      if (fstatfs( fd, &stfs ) < 0) return errno_to_status( errno );
      bsize = stfs.f_bsize;
  #endif
@@ -154,29 +144,6 @@ index c1e6ebb..e9fde9c 100644
      }
  
      CFRelease(types);
-diff --git a/dlls/winemac.drv/dllmain.c b/dlls/winemac.drv/dllmain.c
-index 2d15f12..9897f80 100644
---- a/dlls/winemac.drv/dllmain.c
-+++ b/dlls/winemac.drv/dllmain.c
-@@ -157,9 +157,15 @@ static void CALLBACK quit_callback(HWND hwnd, UINT msg, ULONG_PTR data, LRESULT
-                 if (!SendMessageCallbackW(qi->wins[i], WM_ENDSESSION, qi->result, qi->flags,
-                                           quit_callback, (ULONG_PTR)qi))
-                 {
--                    WARN("failed to send WM_ENDSESSION to win %p; error 0x%08lx\n",
--                         qi->wins[i], RtlGetLastWin32Error());
--                    quit_callback(qi->wins[i], WM_ENDSESSION, (ULONG_PTR)qi, 0);
-+                    DWORD error = RtlGetLastWin32Error();
-+                    BOOL invalid = (error == ERROR_INVALID_WINDOW_HANDLE);
-+                    if (invalid)
-+                        TRACE("failed to send WM_ENDSESSION to win %p because it's invalid; assuming success\n",
-+                            qi->wins[i]);
-+                    else
-+                        WARN("failed to send WM_ENDSESSION to win %p; error 0x%08lx; assuming refusal\n",
-+                            qi->wins[i], error);
-+                    quit_callback(qi->wins[i], WM_ENDSESSION, (ULONG_PTR)qi, invalid);
-                 }
-             }
-         }
 diff --git a/dlls/winemac.drv/keyboard.c b/dlls/winemac.drv/keyboard.c
 index 7b00fed..f698283 100644
 --- a/dlls/winemac.drv/keyboard.c
