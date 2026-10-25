@@ -666,3 +666,51 @@ Known differences: with a wined3d `SampleCount` registry override, a lockable ba
 ### Verification required before tagging
 
 No self-contained check. A complete WoW64 build and an application run must show that several WineD3D games (D3D8, D3D9, D3D11, and a DirectDraw title if one is available) render, present and enter and leave fullscreen as before, and that a game controller over USB or Bluetooth is detected, reads axes, buttons and the hat switch correctly, and survives being unplugged and replugged.
+
+<a id="ntdll-win32u-server-fixes"></a>
+
+## ntdll, win32u and server fixes (Wine 11.1 to master)
+
+Candidate patch set `cx26.3-wine11.0-runeon.27` also adds `patches/upstream/0148`: forty WineHQ commits applied unchanged in upstream order, test-only hunks omitted, carried under the `ntdll`/`win32u`/`server` exception in §3 of `CLAUDE.md` (maintainer decision 2026-10-26). One, `06c0cb5c5e`, is on master after `wine-11.20` and not yet in a release.
+
+### Selection
+
+Of the 753 commits in `wine-11.0..master` that change `dlls/ntdll`, `dlls/win32u` or `server`, 202 apply with zero fuzz on top of `0001`–`0147`; 62 of those read as defect fixes from their message. The maintainer reviewed them in groups and approved the behaviour fixes games and launchers reach together with the smaller ones; each was then checked:
+
+- no hunk within three lines of a CrossOver change (compared with `wine-11.0`) or of an earlier Runeon patch (compared with the base plus `0001`–`0147`);
+- no later upstream commit names it;
+- no change to `protocol.def`, `server_protocol.h`, a unix-call table, an exported prototype or a structure shared between modules (`93939c0659` adds a status name to `request_trace.h`, the server's trace table);
+- every identifier its added lines use exists in the patched tree;
+- it applies in upstream order after the others.
+
+### Taken
+
+| Area | Commits |
+|---|---|
+| Time | `f6c53a242a` threadpool timers across a system time change; `9c027fac91`, `bfae6eb8b4` time zones with inverse DST (wineserver and ntdll) |
+| Locale | `32324bf1ef` `LOCALE_CUSTOM_UI_DEFAULT` returns the user UI language; `b4622e972d` win32u `get_locale_data()` table lookup |
+| Files and volumes | `1ebcc3fb9b` anonymous files; `c403790475` empty volume information instead of failure; `e8781e7c8d` Unix paths without a drive (WineHQ bug 60021); `2ecc2f84b4` `NtQueryFullAttributesFile` status; `93939c0659` `NtUnlockFile` on an unlocked range (WineHQ bug 59711); `dab7d8deda`, `5f881b67ea` directory entries fully initialized; `bf98c93e00` file mode mask comparison |
+| Processes and synchronisation | `c69173c460` zero-length process memory reads; `720ea07775`, `ca175f340c` no context access or debug events for system threads; `8c1dcfc77d` `LdrLoadDll` leaves the output handle alone on error; `06c0cb5c5e` semaphore errors ignored when releasing a critical section; `5f47658c5c` fiber data starts at 0x1e00 as on Windows |
+| Windows and drawing | `5aa9e20efe` 32-bit DIB alpha ignored; `66a1d04995` glyph outline size (WineHQ bug 58314); `63f8091369` freeing unlinked windows; `3e132b3cbb` `NtUserGetAtomName` overflow; `27aad48fa8` class registration thread safety (a deadlock upstream saw); `4d6a6cd036`, `65a3d0cf1c` window shape and surface flushing; `9ad182656c` D3D present rect in screen coordinates; `79e718d7bf` `WM_PRINT` clip for children; `336df56a67` tool-window minimum width (WineHQ bug 60276); `e45f9ad9bd` signed drag-and-drop coordinates (winemac packs them the same way); `1c4cb6c6bf` monitors without an id; `da3b638c85` DirectX registry value sizes; `0405e200e2` renderer query sizes; `730d06d7b7` DPI awareness contexts when reparenting; `b1a9794b14` builtin class id for menus |
+| Network and server | `864ca426a3` AFD connect failure events (WineHQ bug 53574); `fc5dd34cc3` IPv6 MTU discovery (WineHQ bug 60241); `5bb70f23d1` kernel notification events' initial state; `51f87a11a1` d3dkmt leak; `1fe3600b16` a sizeof fix |
+
+### Left out after review
+
+| Commits | Reason |
+|---|---|
+| `e44e721ca9` (menu name ANSI conversion) | Its `user32/class.c` hunk sits next to `0063`. |
+| `5e50024ec7`, `bf2a7ffd7a` (`LdrLoadDll` and `NtFlushVirtualMemory` prototypes) | Change prototypes in `winternl.h` and spec files shared between modules. |
+| `f5e390911f` | ARM64EC only. |
+| `f35078da93` (d3dkmt keyed-mutex wait handle) | Relies on newer in-process synchronisation caching, and D3DKMT is near CrossOver's D3DMetal path. |
+| `e5abb7c03a` (revert of a `RaiseException` register change) | Upstream reverted because Windows 11 25H2 behaves differently; the behaviour depends on the Windows version. |
+| `3e182735ea` (`NtReleaseSemaphore` argument check) | In `ntdll/unix/sync.c`, next to CrossOver's synchronisation code. |
+| `ec61f02ccf` (normal window position) | Its hunks overlap code earlier Runeon patches change. |
+| `4ac0555e55`, `67a26bddad`, `60c5ce0263`, `4c18d96e9b`, `96b01aea7a` (address-space reservation and DLL mapping layout) | Layout changes under Rosetta; reviewed one by one later. |
+| `c50fc02868`, `399898d604`, `e5968847f5` | Compiler warnings or OpenBSD only. |
+| `88f02a2c45`, `93442cbaee`, `9606d8c53a` | EGL and Linux dma-buf, not used on macOS. |
+| `ce72727a65`, `a081733d48` | Old-WoW64 mode only. |
+| The 140 applying commits whose message does not read as a fix, and the 479 that do not apply | Not reviewed one by one in this batch. |
+
+### Verification required before tagging
+
+No self-contained check. A complete WoW64 build and an application run must show that the Steam client logs in, downloads and launches several games of each graphics route; an installer reports free space; a launcher with child and tool windows draws them; text renders in a GDI-drawn game or launcher; and the time a game shows matches the system clock.

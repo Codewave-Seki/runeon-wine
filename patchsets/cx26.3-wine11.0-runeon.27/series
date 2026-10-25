@@ -130,3 +130,4 @@ patches/upstream/0144-wine-11.4-winemac-present-on-swap.patch
 patches/upstream/0145-wine-11.17-macos-fixes.patch
 patches/upstream/0146-wine-11.20-game-graphics-input-fixes.patch
 patches/upstream/0147-wine-11.18-winemac-flush-on-context-switch.patch
+patches/upstream/0148-wine-11.20-ntdll-win32u-server-fixes.patch
