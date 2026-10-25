@@ -1,0 +1,27 @@
+From: Rémi Bernon <rbernon@codeweavers.com>
+Subject: [PATCH] winemac: Flush GL commands when activating another context.
+
+Backport of WineHQ commit 1c144117a8 (wine-11.18), adapted. Upstream adds
+the flush to macdrv_context_activate(), a function a later upstream
+refactor split out of the base's macdrv_make_current(); upstream reaches
+it both when another context is made current and when the thread releases
+its context. The same line is placed at the start of
+macdrv_make_current(), before the release path, while
+NtCurrentTeb()->glReserved2 still holds the context being left, so both
+cases flush. On the base this matters when a thread switches between
+shared contexts or releases one before another thread samples what it
+drew, and for the internal context wglBindTexImageARB pushes.
+
+diff --git a/dlls/winemac.drv/opengl.c b/dlls/winemac.drv/opengl.c
+index 2fd17ac..deb6d40 100644
+--- a/dlls/winemac.drv/opengl.c
++++ b/dlls/winemac.drv/opengl.c
+@@ -2304,6 +2304,8 @@ static BOOL macdrv_make_current(struct opengl_drawable *draw_base, struct opengl
+ 
+     TRACE("draw %s, read %s, context %p\n", debugstr_opengl_drawable(draw_base), debugstr_opengl_drawable(read_base), private);
+ 
++    if (NtCurrentTeb()->glReserved2) funcs->p_glFlush();
++
+     if (!private)
+     {
+         macdrv_make_context_current(NULL, NULL, CGRectNull);

@@ -3076,14 +3076,14 @@
     {
       "order": 176,
       "path": "patches/upstream/0146-wine-11.20-game-graphics-input-fixes.patch",
-      "sha256": "e98f32b14c4c1ffb78496ef9fe572f8afd0cb5de0c0c1ef6755881705c259ed9",
+      "sha256": "0c966184096ecd08a636499f4c9ec586785edebedc8188f948b6585da6b3787a",
       "kind": "upstream-backport",
       "status": "active",
       "risk": "medium",
       "firstWineRelease": "wine-11.20",
       "upstreamCommits": [
-        "88e775dbdc3b1e977d231ad8f1a5eccdd5c4d2b6",
         "8df796f0f8bd19e1f623b1ec5c67f51914af4eed",
+        "88e775dbdc3b1e977d231ad8f1a5eccdd5c4d2b6",
         "7f29964c1579cee7e657622f5d78d04be8f5eea5",
         "dec086456298e112dcac5f72ad3b89be4a14d0f6",
         "f4626afec7c18e9e504bcee00484fdcba3ac9397",
@@ -3093,43 +3093,39 @@
         "7df175a66faef1804ee84e278feecbd69a30cf37",
         "24df29db0999f4aa21bcf5f593ab9009a840a472",
         "0e1616f1f6676471ecaf61a473e9ae005442198e",
-        "58af62eb909e761bdfd443c749b7b0ac980cb233",
-        "824d95cae5061e07ccfa0ac00cc796be2973cd5d",
         "0ff2188fb1148ad10511980eb85c49c21bc47ef5",
+        "824d95cae5061e07ccfa0ac00cc796be2973cd5d",
+        "b0642a4c6edb5c0e9dbcc869f5c9d09728dcc062",
+        "78e5d7a1b6962e4443817b75da0f4d6ef81bde77",
+        "58af62eb909e761bdfd443c749b7b0ac980cb233",
         "a7277ba021c2a443d60055b816af3132d99438a0",
-        "6481c2060313698b04606a8db28da6cf67559f07",
         "303b7903766e15ab898611bc5ab8660fa1839eb1",
         "77d56ec16f60b513b6958d2055cc0f9616ba0e6f",
-        "52792007123b0844c8cde24091a419e0717f3c5e",
         "b58c2216302dcdb5fce33ab34af79ae0ce6eae13",
+        "52792007123b0844c8cde24091a419e0717f3c5e",
         "6b486ec7830ae245241fe406d95330b7d7078a31",
         "4377bdebd6b94ee8539b99599f4abaf1ad7e1904",
         "ea50539dae7497b69f30f112a7a775eb8d728d6c",
-        "1b79d86f735795860f249e02f5552052c6003010",
         "4241f00fb77a762e255d0e25d6d23760137295aa",
+        "1b79d86f735795860f249e02f5552052c6003010",
         "2b116971642ef53494ed8b84435bc96d5283d771",
-        "c7720f8698e3dd21a079cfee7cff6ca473f3b26c",
         "135ae829199108e7168662c740fc076b0d841bce",
-        "94f82f44e9f01f5f9ac0c8612b832ce247b6b1d9",
         "020cbce1a9272618c1c638cf57c82e11cde5b21d",
-        "1ec446b9aed3fd838ea9be0a8f492f7c6b22c9ee",
+        "c6e627b6d17e3f71d07e8199b5a4f25ae355cec9",
+        "94f82f44e9f01f5f9ac0c8612b832ce247b6b1d9",
         "c5cb1e789e82d178194d4f14ba62fec295534c37",
         "b45d928aa12f6059035a57619e577d99b4434f97",
-        "da5cdc1bde64210a5183d9b5bd08c2a7ab587907",
         "5335bc65518519eda3888c0359277b50a4b33d79",
+        "da5cdc1bde64210a5183d9b5bd08c2a7ab587907",
         "365e610147db65eb96fd84c725eb7e323bf237aa",
         "6b17d73c04a217ca14c8b5413362e82c3aeede68"
       ],
-      "summary": "Thirty-seven WineHQ fixes for rendering and input behaviour that games reach, applied unchanged (maintainer decision 2026-10-26 to carry correctness fixes in these game-facing DLLs, not only crash, leak and hang fixes). wined3d: sphere-map texture coordinates in GLSL, backup DC state after reset, the right pixel format in GL present, raw and non-colour blits and resolves, self-blits with FX, texelFetchOffset on buffers and multisample textures, locking multisampled back buffers, swapchain latency. d3d9: the device vtbl initialization sequence hooks expect. ddraw: the ramp device, material activation, no rendering to the clipping window in exclusive fullscreen, render-target flags on v1 swapchain surfaces, execute-buffer vertices staged at execute time, system-memory depth fills. dxgi: fullscreen descriptions and invalid fullscreen modes, the WARP adapter. Input: dinput Escape and disconnected joysticks, HID link collections and hat switches, xinput controller removal and state, hidclass device type and write-report length, winebus axis report sizes for SDL, windows.gaming.input axis mapping and early callbacks.",
+      "summary": "Thirty-seven WineHQ fixes for rendering and input behaviour that games reach, applied unchanged (maintainer decision 2026-10-26 to carry correctness fixes in these game-facing DLLs, not only crash, leak and hang fixes). wined3d: sphere-map texture coordinates in GLSL, backup DC state after reset, the right pixel format in GL present, the raw/colour/depth blit and resolve series, self-blits with FX, texelFetchOffset on buffers and multisample textures, locking multisampled back buffers refused as on Windows. ddraw: the ramp device, material activation, no rendering to the clipping window in exclusive fullscreen, render-target flags on v1 swapchain surfaces, execute-buffer vertices staged at execute time, system-memory depth fills. dxgi: fullscreen descriptions as created, a windowed swapchain for invalid fullscreen scanline order or scaling (as Windows does), the WARP adapter. Input: dinput Escape and disconnected joysticks, HID link collections and hat switches, xinput controller removal, hidclass device type and write-report length, winebus axis report sizes for SDL with the winexinput inversion fix, windows.gaming.input axis mapping and early callbacks. Known differences from upstream context: with a wined3d SampleCount override, a lockable back buffer becomes unlockable; hidclass's new FileFsDeviceInformation path reports Characteristics 0 because the base lacks b606598745 and d2b0290d6a; windows.gaming.input may report no gamepads to a game that reads the list once right after activation, as Windows can.",
       "testStrategy": "No self-contained check. A complete WoW64 build and an application run are required before tagging: several WineD3D games (D3D8, D3D9, D3D11 and a DirectDraw title if available) render and present as before, enter and leave fullscreen, and a game controller connected over USB or Bluetooth is detected, reads axes, buttons and the hat switch correctly in a game, and survives being unplugged and replugged.",
       "verification": [
         {
           "path": "dlls/d3d8/device.c",
           "contains": "            | WINED3D_SWAPCHAIN_ALLOW_MS_LOCKABLE_BACKBUFFER;"
-        },
-        {
-          "path": "dlls/d3d9/device.c",
-          "contains": "/* BFME Online Arena hooks the IDirect3DDevice9 vtbl. Instead of getting the"
         },
         {
           "path": "dlls/ddraw/ddraw.c",
@@ -3173,7 +3169,7 @@
         },
         {
           "path": "dlls/dxgi/swapchain.c",
-          "contains": "        DXGI_SWAP_CHAIN_FULLSCREEN_DESC test_fullscreen_desc = swapchain->fullscreen_desc;"
+          "contains": "BOOL dxgi_validate_swapchain_fullscreen_desc(const DXGI_SWAP_CHAIN_FULLSCREEN_DESC *desc)"
         },
         {
           "path": "dlls/hidclass.sys/device.c",
@@ -3243,17 +3239,17 @@
     },
     {
       "order": 177,
-      "path": "patches/upstream/0147-wine-11.17-winemac-flush-on-context-switch.patch",
-      "sha256": "f2633197472650e49734d42bb8f4d0ccb4afe89edad52045ccdfa5ed9b51e58c",
+      "path": "patches/upstream/0147-wine-11.18-winemac-flush-on-context-switch.patch",
+      "sha256": "00577768d210150bfd6fc5b99924e82423f331b7ac60bb66995b62ed72aabdfa",
       "kind": "upstream-backport",
       "status": "active",
       "risk": "low",
-      "firstWineRelease": "wine-11.17",
+      "firstWineRelease": "wine-11.18",
       "upstreamCommits": [
         "1c144117a874dac1ab136fab23b809f4bc7e4a82"
       ],
-      "adaptation": "Upstream adds the flush to macdrv_context_activate(), which a later refactor split out of the base's macdrv_make_current(); the same line is placed at the matching point in macdrv_make_current(), after the release path and before the new context is selected, while glReserved2 still holds the context being left.",
-      "summary": "Flush the current OpenGL context's commands before another context becomes current on the thread, so a second context that reads the first one's results sees them.",
+      "adaptation": "Upstream adds the flush to macdrv_context_activate(), which a later refactor split out of the base's macdrv_make_current() and which upstream reaches both when activating another context and when releasing one. The same line is placed at the start of the base's macdrv_make_current(), before the release path, while glReserved2 still holds the context being left.",
+      "summary": "Flush the current OpenGL context's commands before the thread makes another context current or releases it, so a context on another thread or a shared context that reads the results sees them. winemac.drv is ABI-sensitive; taken under the macOS-fix exception: a defect fix that the base shares (shared-context switches, release before another thread samples, the internal context wglBindTexImageARB pushes), in Wine code CrossOver keeps unchanged, with no protocol or structure change.",
       "testStrategy": "No self-contained check; covered by the WineD3D and OpenGL application runs for 0146.",
       "verification": [
         {
