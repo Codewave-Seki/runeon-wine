@@ -3261,7 +3261,7 @@
     {
       "order": 178,
       "path": "patches/upstream/0148-wine-11.20-ntdll-win32u-server-fixes.patch",
-      "sha256": "b3d3188dc5c0c108245495458f68846a6bcf2ab0d16a6187e07a2e790c455302",
+      "sha256": "cbfc542376c31fe80269a72ab9cf07ff8e672d3254271ad0c1d15934db0ad115",
       "kind": "upstream-backport",
       "status": "active",
       "risk": "medium",
@@ -3273,42 +3273,31 @@
         "dab7d8deda7a26552077bdc94abe1861ace0c56f",
         "5f881b67ea060f5c469f75e7c524eda1843f0997",
         "f6c53a242aa58868ef8909f08ad919ecc3f78af6",
-        "9c027fac91f596e6e57449d336bd7e31860fa1e1",
-        "bfae6eb8b4f68e5c1ef451060e05095456c59493",
         "da3b638c859c27d479807c49177ee6bd60c70ca5",
         "27aad48fa80e5422cc6ff27f0f5b00450f667645",
-        "c69173c4606093e73c6772d85d0dfefefbb80249",
         "1ebcc3fb9ba0dc6c318475d179b0bef56467aa97",
-        "720ea07775e97da3486ffddcdb1f1035f65a57d1",
-        "ca175f340c3005c0817e9ca47dbae05dec05422d",
-        "b1a9794b147f356efbbfc90216f7eb413a23bfa1",
         "66a1d04995a85518b6429b4c13d66ff06166c4e3",
         "4d6a6cd0368f11ad6586fb2eaf3dc619699ad618",
         "e45f9ad9bdcfd88140319e51f59861c9b053a3bc",
         "65a3d0cf1c55c92eaa17374f88334e71da854e68",
-        "5f47658c5ca488a518cf0fcd9623d3e4234b1602",
         "93939c065914ba622daa9f06c1fc4544eab1a72e",
         "51f87a11a121a1cff8b15fc7e2700348496424d3",
         "c4037904759846a99f9600748eeb4c81585c3c3a",
         "e8781e7c8d0770186678c2dc7279bfc4506cfcb6",
         "864ca426a36d9e12775b4d7f67c47aa802e0f25b",
         "5bb70f23d1278088d9ea55d44efe7d51f87d35bd",
-        "730d06d7b798d57133eb6e98af0df159d5d6bcfe",
         "b4622e972d6866ff05be8781b673385f6f7171f5",
         "63f8091369cf7411dc9b4745b7527dd11560fa37",
         "2ecc2f84b45ec42afbf1725d756181180a8204b1",
-        "0405e200e2b24aa5a388fb631b420b0a3f51719a",
         "3e132b3cbb99a71d9ce0f61c7f7521438891865c",
         "1fe3600b163de189b3160eb2922bff4bedc7204d",
-        "79e718d7bfe61c8c61cff87f4f3119e1285a96f9",
         "336df56a67e43b1e4cd5c7dd05f2bc8ed4f355f1",
-        "fc5dd34cc3df1b67210b2307d1c4ad07db0ea3e1",
         "bf98c93e001a713dc8586b81d88ee8c0dcd3e828",
         "1c4cb6c6bfc50811de970d566078d00088238d09",
         "06c0cb5c5eccd96a6db306a505d943bef6c6fd08"
       ],
-      "summary": "Thirty-nine WineHQ fixes in ntdll, win32u and wineserver that make them behave as Windows does where games, launchers and installers reach them, applied unchanged; the maintainer approved this group on 2026-10-26 under the rule that it changes no wineserver protocol, unix-call table or structure shared between modules and touches no CrossOver change. Time: threadpool timers across a system time change, time zones with inverse DST in ntdll and wineserver. Locale: win32u locale table lookup. Files: anonymous files, empty volume information instead of failure, Unix paths without a drive, NtQueryFullAttributesFile status, NtUnlockFile on an unlocked range, fully initialized directory entries, file mode masks. Processes and sync: zero-length process memory reads, no context access or debug events for system threads, LdrLoadDll output on error, semaphore errors in critical-section release (master after wine-11.20), fiber data initial value. Windows and drawing: 32-bit DIB alpha, glyph outline size, freeing unlinked windows, NtUserGetAtomName overflow, class registration thread safety, window shape and surface flushing, D3D present rect, WM_PRINT clip, tool-window minimum width, signed drag-and-drop coordinates, monitors without an id, DirectX registry sizes, renderer query sizes, DPI contexts when reparenting. Network and server: AFD connect failure events, IPv6 MTU discovery, kernel notification event state, a d3dkmt leak, a sizeof fix.",
-      "testStrategy": "No self-contained check. A complete WoW64 build and an application run are required before tagging: the Steam client logs in, downloads and launches several games of each graphics route; an installer reports free space; a launcher that opens child windows and tool windows draws them; text renders in a GDI-drawn game or launcher; time shown in a game matches the system clock.",
+      "summary": "Twenty-eight WineHQ fixes in ntdll, win32u and wineserver that make them behave as Windows does where games, launchers and installers reach them on macOS, applied unchanged; the maintainer approved this group on 2026-10-26 under the rule that it changes no wineserver protocol, unix-call table, exported prototype or shared structure and touches no CrossOver or earlier Runeon change. ntdll: threadpool timers across a system time change, anonymous file queries, empty volume information instead of failure, Unix paths without a drive, NtQueryFullAttributesFile status, fully initialized directory entries, LdrLoadDll output on error, semaphore errors when releasing a critical section (06c0cb5c5e, on master after wine-11.20, not yet released). win32u: 32-bit DIB alpha in TransparentBlt, glyph outline size, NtUserGetAtomName overflow, class registration thread safety, window shape and surface flushing, the D3D present rect, tool-window minimum width, signed drag-and-drop coordinates, monitors without an id, DirectX registry sizes, locale table lookup. wineserver: NtUnlockFile on an unlocked range, file mode masks, freeing unlinked windows, kernel notification events, AFD connect failure events, a d3dkmt leak, a sizeof fix.",
+      "testStrategy": "No self-contained check. A complete WoW64 build and an application run are required before tagging: the Steam client logs in, downloads and launches several games of each graphics route; a launcher with child and tool windows draws them; text renders in a GDI-drawn game or launcher; files dragged from Finder onto a window on a second display left of the main one land where dropped.",
       "verification": [
         {
           "path": "dlls/ntdll/loader.c",
@@ -3327,18 +3316,6 @@
           "contains": "            /* Skip the volume mount point (if any). */"
         },
         {
-          "path": "dlls/ntdll/unix/socket.c",
-          "contains": "            return do_setsockopt( handle, io, IPPROTO_IPV6, IPV6_MTU_DISCOVER, &value, sizeof(value) );"
-        },
-        {
-          "path": "dlls/ntdll/unix/system.c",
-          "contains": "    struct tm *tm, tm1, tm2;"
-        },
-        {
-          "path": "dlls/ntdll/unix/virtual.c",
-          "contains": "    teb64->Tib.FiberData = 0x1e00;"
-        },
-        {
           "path": "dlls/win32u/bitblt.c",
           "contains": "    if (NtGdiGetDeviceCaps( hdcDest, BITSPIXEL ) == 32)"
         },
@@ -3355,20 +3332,8 @@
           "contains": "    void *shape_bits, *old_shape = NULL;"
         },
         {
-          "path": "dlls/win32u/defwnd.c",
-          "contains": "                HDC hdc = (HDC)wparam;"
-        },
-        {
           "path": "dlls/win32u/font.c",
           "contains": "            const NLS_LOCALE_LCID_INDEX *entry = &lcids_index[pos];"
-        },
-        {
-          "path": "dlls/win32u/menu.c",
-          "contains": "static HMENU get_control_menu( HWND hwnd )"
-        },
-        {
-          "path": "dlls/win32u/opengl.c",
-          "contains": "    case WGL_RENDERER_VERSION_WINE: memcpy( value, egl->version, sizeof(egl->version) ); return TRUE;"
         },
         {
           "path": "dlls/win32u/sysparams.c",
@@ -3388,23 +3353,11 @@
         },
         {
           "path": "server/fd.c",
-          "contains": "    struct tm *tm, tm1, tm2;"
+          "contains": "    set_error( STATUS_RANGE_NOT_LOCKED );"
         },
         {
           "path": "server/file.c",
           "contains": "        if (!(mode & S_IWUSR) && (mode & (S_IWGRP|S_IWOTH)))"
-        },
-        {
-          "path": "server/mapping.c",
-          "contains": "        if (thread->is_system) continue;"
-        },
-        {
-          "path": "server/process.c",
-          "contains": "    else if (!thread->is_system) generate_debug_event( thread, DbgExitThreadStateChange, thread );"
-        },
-        {
-          "path": "server/ptrace.c",
-          "contains": "    set_error( STATUS_PARTIAL_COPY );"
         },
         {
           "path": "server/request_trace.h",
@@ -3415,12 +3368,8 @@
           "contains": "        if (sock->state == SOCK_UNCONNECTED) /* clear events */"
         },
         {
-          "path": "server/thread.c",
-          "contains": "    if (!current->is_system) generate_debug_event( current, DbgCreateThreadStateChange, &req->entry );"
-        },
-        {
           "path": "server/window.c",
-          "contains": "/* check if DPI awareness contexts are compatible */"
+          "contains": "    LIST_FOR_EACH_ENTRY_SAFE( child, next, &win->unlinked, struct window, entry )"
         }
       ]
     }

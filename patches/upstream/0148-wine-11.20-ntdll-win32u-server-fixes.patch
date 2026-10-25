@@ -1,16 +1,16 @@
 From: Wine upstream contributors (see commit list)
 Subject: [PATCH] Carry WineHQ fixes in ntdll, win32u and server.
 
-Thirty-nine WineHQ commits from wine-11.1 to master after wine-11.20,
+Twenty-eight WineHQ commits from wine-11.1 to master after wine-11.20,
 applied unchanged in upstream order; test-only hunks are omitted. They
 make ntdll, win32u and wineserver behave as Windows does in cases games,
-launchers and installers reach: time zones and timers, locale data, file
-and volume queries, process memory reads, system threads, bitmap alpha,
-glyph outlines, window class and atom handling, window surfaces and drag
-and drop. None changes the wineserver protocol, a unix-call table or a
-structure shared between modules, and none touches code CrossOver
-changed (maintainer decision 2026-10-26). See docs/upstream-reviews.md,
-"ntdll, win32u and server fixes".
+launchers and installers reach on macOS: threadpool timers, locale data,
+file and volume queries, LdrLoadDll errors, critical sections, bitmap
+alpha, glyph outlines, window class and atom handling, window surfaces,
+tool windows, drag and drop and monitors. None changes the wineserver
+protocol, a unix-call table or a structure shared between modules, and
+none touches code CrossOver changed (maintainer decision 2026-10-26).
+See docs/upstream-reviews.md, "ntdll, win32u and server fixes".
 
   8c1dcfc77d (wine-11.1, Paul Gofman): ntdll: Don't fill output handle on error in LdrLoadDll().
   5aa9e20efe (wine-11.3, Zhiyi Zhang): win32u: Ignore alpha channels for 32-bit DIB bitmaps.
@@ -18,36 +18,25 @@ changed (maintainer decision 2026-10-26). See docs/upstream-reviews.md,
   dab7d8deda (wine-11.3, Elizabeth Figura): ntdll: Initialize the entire FileId in FileIdExtdBothDirectoryInformation.
   5f881b67ea (wine-11.3, Elizabeth Figura): ntdll: Initialize LockingTransactionId in FileIdGlobalTxDirectoryInformation.
   f6c53a242a (wine-11.4, Piotr Caban): ntdll: Fix threadpool timer behavior on system time change.
-  9c027fac91 (wine-11.4, Paul Gofman): server: FIx timezone bias for timezones defined with inverse DST on Unix.
-  bfae6eb8b4 (wine-11.4, Paul Gofman): ntdll: Fix get_timezone_info() for timezones defined with inverse DST on Unix.
   da3b638c85 (wine-11.5, Paul Gofman): win32u: Set VendorId / DeviceId in DirectX registry key with correct size.
   27aad48fa8 (wine-11.6, Yongjie Yao): win32u: Fixed thread safety issues with NtUserRegistClassExWOW and NtUserUnregisterClass.
-  c69173c460 (wine-11.6, Paul Gofman): server: Do not return STATUS_ACCESS_DENIED from read_process_memory_vm() for zero read.
   1ebcc3fb9b (wine-11.7, Jinoh Kang): ntdll: Do not fail with STATUS_INVALID_INFO_CLASS for anonymous files.
-  720ea07775 (wine-11.9, Alexandre Julliard): server: Don't allow accessing the context of system threads.
-  ca175f340c (wine-11.9, Alexandre Julliard): server: Don't send debug events for system threads.
-  b1a9794b14 (wine-11.11, Rémi Bernon): user32: Set builtin class FNID for menu controls.
   66a1d04995 (wine-11.11, Kellen Kopp): win32u: Fixed incorrect glyph outline size.
   4d6a6cd036 (wine-11.11, Paul Gofman): win32u: Always consider newly created shape updated in set_surface_shape().
   e45f9ad9bd (wine-11.11, Zhengyong Chen): win32u: Fix signed coordinate extraction in drag_drop_call.
   65a3d0cf1c (wine-11.12, Etaash Mathamsetty): win32u: Always flush the window surface in expose_window_surface.
-  5f47658c5c (wine-11.12, Alexandre Julliard): ntdll: Initialize fiber data to 0x1e00.
   93939c0659 (wine-11.12, Alexandre Julliard): server: Fix returned status for NtUnlockFile on unlocked range.
   51f87a11a1 (wine-11.12, Zhiyi Zhang): server: Fix a memory leak in d3dkmt_share_objects.
   c403790475 (wine-11.14, Rose Hellsing): ntdll: Return empty value instead of failing in NtQueryVolumeInformation.
   e8781e7c8d (wine-11.14, Elizabeth Figura): ntdll: Handle Unix paths with no corresponding drive in get_full_path().
   864ca426a3 (wine-11.14, Bernhard Übelacker): server: Clear connection failure events in IOCTL_AFD_WINE_CONNECT.
   5bb70f23d1 (wine-11.14, Piotr Caban): server: Set kernel notification events initial state.
-  730d06d7b7 (wine-11.16, Rémi Bernon): server: Check DPI awareness contexts when reparenting windows.
   b4622e972d (wine-11.16, Matteo Bruni): win32u: Fix get_locale_data() table entry lookup.
   63f8091369 (wine-11.17, Nikolay Sivov): server: Fix freeing unlinked windows.
   2ecc2f84b4 (wine-11.17, Evan Morse): ntdll: Return the object manager status from NtQueryFullAttributesFile.
-  0405e200e2 (wine-11.17, Rémi Bernon): win32u: Fix some truncated query_renderer_integer memcpy.
   3e132b3cbb (wine-11.17, Rémi Bernon): win32u: Avoid possible buffer overflow in NtUserGetAtomName.
   1fe3600b16 (wine-11.18, Alistair Leslie-Hughes): server: Correct sizeof usage.
-  79e718d7bf (wine-11.18, Zhiyi Zhang): win32u: Set a clip region when handling WM_PRINT PRF_CHILDREN.
   336df56a67 (wine-11.19, Eric Blum): win32u: Fix minimum width of WS_EX_TOOLWINDOW windows.
-  fc5dd34cc3 (wine-11.19, Alex Henrie): ntdll: Set IPV6_MTU_DISCOVER for IPv6, not IPv4, in sock_ioctl.
   bf98c93e00 (wine-11.19, Alistair Leslie-Hughes): server: Correct mode mask compare.
   1c4cb6c6bf (wine-11.20, Etaash Mathamsetty): win32u: Don't return early if no monitor id is present.
   06c0cb5c5e (master after wine-11.20, Paul Gofman): ntdll: Ignore semaphore errors in RtlpUnWaitCriticalSection().
@@ -612,154 +601,6 @@ index 11dd793..936fde3 100644
          io->Information = offsetof( FILE_FS_VOLUME_INFORMATION, VolumeLabel ) + info->VolumeLabelLength;
          status = STATUS_SUCCESS;
          break;
-diff --git a/dlls/ntdll/unix/socket.c b/dlls/ntdll/unix/socket.c
-index 62b5f3a..d313d45 100644
---- a/dlls/ntdll/unix/socket.c
-+++ b/dlls/ntdll/unix/socket.c
-@@ -2394,7 +2394,7 @@ NTSTATUS sock_ioctl( HANDLE handle, HANDLE event, PIO_APC_ROUTINE apc, void *apc
-         {
-             int value = *(DWORD *)in_buffer ? IPV6_PMTUDISC_DO : IPV6_PMTUDISC_DONT;
- 
--            return do_setsockopt( handle, io, IPPROTO_IP, IPV6_MTU_DISCOVER, &value, sizeof(value) );
-+            return do_setsockopt( handle, io, IPPROTO_IPV6, IPV6_MTU_DISCOVER, &value, sizeof(value) );
-         }
- #else
-         {
-diff --git a/dlls/ntdll/unix/system.c b/dlls/ntdll/unix/system.c
-index 438e671..00faaea 100644
---- a/dlls/ntdll/unix/system.c
-+++ b/dlls/ntdll/unix/system.c
-@@ -2674,6 +2674,7 @@ static int weekday_to_mday(int year, int day, int mon, int day_of_week)
-     do
-     {
-         date.tm_mday++;
-+        date.tm_isdst = -1;
-         tmp = mktime(&date);
-     } while (date.tm_wday != day_of_week || date.tm_mon != mon);
- 
-@@ -2686,6 +2687,7 @@ static int weekday_to_mday(int year, int day, int mon, int day_of_week)
-         struct tm *tm;
- 
-         date.tm_mday += 7;
-+        date.tm_isdst = -1;
-         tmp = mktime(&date);
-         tm = localtime(&tmp);
-         if (tm->tm_mon != mon)
-@@ -2927,10 +2929,11 @@ static void get_timezone_info( RTL_DYNAMIC_TIME_ZONE_INFORMATION *tzi )
- {
-     static RTL_DYNAMIC_TIME_ZONE_INFORMATION cached_tzi;
-     static int current_year = -1, current_bias = 65535;
--    struct tm *tm;
-+    struct tm *tm, tm1, tm2;
-     char tz_name[16];
-     time_t year_start, year_end, tmp, dlt = 0, std = 0;
-     int is_dst, bias;
-+    BOOL inverted_dst;
- 
-     mutex_lock( &timezone_mutex );
- 
-@@ -2939,6 +2942,12 @@ static void get_timezone_info( RTL_DYNAMIC_TIME_ZONE_INFORMATION *tzi )
-     bias = (LONG)(mktime(tm) - year_start) / 60;
- 
-     tm = localtime(&year_start);
-+    tm1 = tm2 = *tm;
-+    tm1.tm_isdst = 0;
-+    tm2.tm_isdst = 1;
-+    inverted_dst = mktime(&tm1) < mktime(&tm2);
-+    if (inverted_dst) bias += 60;
-+
-     if (current_year == tm->tm_year && current_bias == bias)
-     {
-         *tzi = cached_tzi;
-@@ -2952,18 +2961,19 @@ static void get_timezone_info( RTL_DYNAMIC_TIME_ZONE_INFORMATION *tzi )
-         tz_name[0] = '\0';
-     }
- 
--    TRACE("tz data will be valid through year %d, bias %d\n", tm->tm_year + 1900, bias);
-+    TRACE("tz data will be valid through year %d, bias %d, inverted_dst %d\n", tm->tm_year + 1900, bias, inverted_dst);
-     current_year = tm->tm_year;
-     current_bias = bias;
- 
-     tzi->Bias = bias;
- 
--    tm->tm_isdst = 0;
-+    tm->tm_isdst = inverted_dst;
-     tm->tm_mday = 1;
-     tm->tm_mon = tm->tm_hour = tm->tm_min = tm->tm_sec = tm->tm_wday = tm->tm_yday = 0;
-     year_start = mktime(tm);
-     TRACE("year_start: %s", ctime(&year_start));
- 
-+    tm->tm_isdst = inverted_dst;
-     tm->tm_mday = tm->tm_wday = tm->tm_yday = 0;
-     tm->tm_mon = 12;
-     tm->tm_hour = 23;
-@@ -2972,12 +2982,14 @@ static void get_timezone_info( RTL_DYNAMIC_TIME_ZONE_INFORMATION *tzi )
-     TRACE("year_end: %s", ctime(&year_end));
- 
-     tmp = find_dst_change(year_start, year_end, &is_dst);
-+    if (inverted_dst) is_dst = !is_dst;
-     if (is_dst)
-         dlt = tmp;
-     else
-         std = tmp;
- 
-     tmp = find_dst_change(tmp, year_end, &is_dst);
-+    if (inverted_dst) is_dst = !is_dst;
-     if (is_dst)
-         dlt = tmp;
-     else
-diff --git a/dlls/ntdll/unix/virtual.c b/dlls/ntdll/unix/virtual.c
-index a6b9af7..4277bfe 100644
---- a/dlls/ntdll/unix/virtual.c
-+++ b/dlls/ntdll/unix/virtual.c
-@@ -4006,6 +4006,7 @@ static TEB *init_teb( void *ptr, BOOL is_wow )
-     teb32->Peb = PtrToUlong( (char *)peb + page_size );
-     teb32->Tib.Self = PtrToUlong( teb32 );
-     teb32->Tib.ExceptionList = ~0u;
-+    teb32->Tib.FiberData = 0x1e00;
-     teb32->ActivationContextStackPointer = PtrToUlong( &teb32->ActivationContextStack );
-     teb32->ActivationContextStack.FrameListCache.Flink =
-         teb32->ActivationContextStack.FrameListCache.Blink =
-@@ -4018,9 +4019,11 @@ static TEB *init_teb( void *ptr, BOOL is_wow )
- #else
-     teb = (TEB *)teb32;
-     teb32->Tib.ExceptionList = ~0u;
-+    teb32->Tib.FiberData = 0x1e00;
-     teb64->Peb = PtrToUlong( (char *)peb - page_size );
-     teb64->Tib.Self = PtrToUlong( teb64 );
-     teb64->Tib.ExceptionList = PtrToUlong( teb32 );
-+    teb64->Tib.FiberData = 0x1e00;
-     teb64->ActivationContextStackPointer = PtrToUlong( &teb64->ActivationContextStack );
-     teb64->ActivationContextStack.FrameListCache.Flink =
-         teb64->ActivationContextStack.FrameListCache.Blink =
-@@ -4037,6 +4040,7 @@ static TEB *init_teb( void *ptr, BOOL is_wow )
-     teb->Peb = peb;
-     teb->Tib.Self = &teb->Tib;
-     teb->Tib.StackBase = (void *)~0ul;
-+    teb->Tib.FiberData = (void *)0x1e00;
-     teb->ActivationContextStackPointer = &teb->ActivationContextStack;
-     InitializeListHead( &teb->ActivationContextStack.FrameListCache );
-     teb->StaticUnicodeString.Buffer = teb->StaticUnicodeBuffer;
-diff --git a/dlls/user32/menu.c b/dlls/user32/menu.c
-index 00031f4..3186754 100644
---- a/dlls/user32/menu.c
-+++ b/dlls/user32/menu.c
-@@ -198,6 +198,7 @@ LRESULT WINAPI PopupMenuWndProcA( HWND hwnd, UINT message, WPARAM wParam, LPARAM
-     case WM_ERASEBKGND:
-     case WM_SHOWWINDOW:
-     case MN_GETHMENU:
-+    case WM_NCCREATE:
-         return NtUserMessageCall( hwnd, message, wParam, lParam,
-                                   NULL, NtUserPopupMenuWndProc, TRUE );
- 
-@@ -223,6 +224,7 @@ LRESULT WINAPI PopupMenuWndProcW( HWND hwnd, UINT message, WPARAM wParam, LPARAM
-     case WM_ERASEBKGND:
-     case WM_SHOWWINDOW:
-     case MN_GETHMENU:
-+    case WM_NCCREATE:
-         return NtUserMessageCall( hwnd, message, wParam, lParam,
-                                   NULL, NtUserPopupMenuWndProc, FALSE );
- 
 diff --git a/dlls/win32u/bitblt.c b/dlls/win32u/bitblt.c
 index 7721d3b..c6021dd 100644
 --- a/dlls/win32u/bitblt.c
@@ -954,51 +795,6 @@ index 7bd8dcb..179e9c9 100644
      free( old_shape );
      return ret;
  }
-diff --git a/dlls/win32u/defwnd.c b/dlls/win32u/defwnd.c
-index 4d55ed5..ad4723d 100644
---- a/dlls/win32u/defwnd.c
-+++ b/dlls/win32u/defwnd.c
-@@ -2858,13 +2858,18 @@ LRESULT default_window_proc( HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam,
- 
-             if (lparam & PRF_CHILDREN)
-             {
-+                HDC hdc = (HDC)wparam;
-                 HWND *list, *child;
-+                HRGN clip_rgn;
-+                int old_clip;
-                 POINT org;
-                 RECT rect;
-                 UINT dpi;
- 
-                 if ((list = list_window_children( hwnd )))
-                 {
-+                    clip_rgn = NtGdiCreateRectRgn( 0, 0, 0, 0 );
-+
-                     for (child = list; *child; child++)
-                     {
-                         if (!(get_window_long( *child, GWL_STYLE ) & WS_VISIBLE))
-@@ -2873,10 +2878,19 @@ LRESULT default_window_proc( HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam,
-                         dpi = NtUserGetDpiForWindow( *child );
-                         NtUserGetClientRect( *child, &rect, dpi );
-                         NtUserMapWindowPoints( *child, hwnd, (POINT *)&rect, 2, dpi );
--                        offset_viewport_org( (HDC)wparam, rect.left, rect.top, &org );
-+
-+                        old_clip = NtGdiGetRandomRgn( hdc, clip_rgn, NTGDI_RGN_MIRROR_RTL | 1 );
-+                        NtGdiIntersectClipRect( hdc, rect.left, rect.top, rect.right, rect.bottom );
-+                        offset_viewport_org( hdc, rect.left, rect.top, &org );
-                         send_message( *child, WM_PRINT, wparam, PRF_NONCLIENT | PRF_CLIENT | PRF_ERASEBKGND | PRF_CHILDREN );
--                        set_viewport_org( (HDC)wparam, org.x, org.y, NULL );
-+                        set_viewport_org( hdc, org.x, org.y, NULL );
-+                        if (old_clip == 0)
-+                            NtGdiExtSelectClipRgn( hdc, NULL, RGN_COPY );
-+                        else if (old_clip == 1)
-+                            NtGdiExtSelectClipRgn( hdc, clip_rgn, RGN_COPY );
-                     }
-+
-+                    NtGdiDeleteObjectApp( clip_rgn );
-                     free( list );
-                 }
-             }
 diff --git a/dlls/win32u/font.c b/dlls/win32u/font.c
 index 449a23c..c12eede 100644
 --- a/dlls/win32u/font.c
@@ -1032,99 +828,6 @@ index 701930c..103e61f 100644
          metrics.horiBearingY = top;
          metrics.height = top - bottom;
  
-diff --git a/dlls/win32u/menu.c b/dlls/win32u/menu.c
-index dda7d11..a700f44 100644
---- a/dlls/win32u/menu.c
-+++ b/dlls/win32u/menu.c
-@@ -160,6 +160,16 @@ static BOOL exit_menu = FALSE;
- static SIZE menucharsize;
- static UINT od_item_height; /* default owner drawn item height */
- 
-+static HMENU get_control_menu( HWND hwnd )
-+{
-+    return (HMENU)NtUserGetPrivateData( hwnd, 0, sizeof(HMENU) );
-+}
-+
-+static HMENU set_control_menu( HWND hwnd, HMENU menu )
-+{
-+    return (HMENU)NtUserSetPrivateData( hwnd, 0, sizeof(HMENU), (LONG_PTR)menu );
-+}
-+
- /**********************************************************************
-  *           NtUserCopyAcceleratorTable   (win32u.@)
-  */
-@@ -2909,7 +2919,7 @@ LRESULT popup_menu_window_proc( HWND hwnd, UINT message, WPARAM wparam, LPARAM l
-     case WM_CREATE:
-         {
-             CREATESTRUCTW *cs = (CREATESTRUCTW *)lparam;
--            NtUserSetWindowLongPtr( hwnd, 0, (LONG_PTR)cs->lpCreateParams, FALSE );
-+            set_control_menu( hwnd, cs->lpCreateParams );
-             return 0;
-         }
- 
-@@ -2920,14 +2930,14 @@ LRESULT popup_menu_window_proc( HWND hwnd, UINT message, WPARAM wparam, LPARAM l
-         {
-             PAINTSTRUCT ps;
-             NtUserBeginPaint( hwnd, &ps );
--            draw_popup_menu( hwnd, ps.hdc, (HMENU)get_window_long_ptr( hwnd, 0, FALSE ));
-+            draw_popup_menu( hwnd, ps.hdc, get_control_menu( hwnd ) );
-             NtUserEndPaint( hwnd, &ps );
-             return 0;
-         }
- 
-     case WM_PRINTCLIENT:
-         {
--            draw_popup_menu( hwnd, (HDC)wparam, (HMENU)get_window_long_ptr( hwnd, 0, FALSE ));
-+            draw_popup_menu( hwnd, (HDC)wparam, get_control_menu( hwnd ) );
-             return 0;
-         }
- 
-@@ -2944,17 +2954,16 @@ LRESULT popup_menu_window_proc( HWND hwnd, UINT message, WPARAM wparam, LPARAM l
-         break;
- 
-     case WM_SHOWWINDOW:
--        if (wparam)
--        {
--            if (!get_window_long_ptr( hwnd, 0, FALSE )) ERR( "no menu to display\n" );
--        }
--        else
--            NtUserSetWindowLongPtr( hwnd, 0, 0, FALSE );
-+        if (!wparam) NtUserSetPrivateData( hwnd, 0, sizeof(LONG_PTR), 0 );
-+        else if (!get_control_menu( hwnd )) ERR( "no menu to display\n" );
-         break;
- 
-     case MN_GETHMENU:
--        return get_window_long_ptr( hwnd, 0, FALSE );
-+        return (LRESULT)get_control_menu( hwnd );
- 
-+    case WM_NCCREATE:
-+        NtUserSetWindowFNID( hwnd, MAKE_FNID(NTUSER_WNDPROC_MENU) );
-+        /* fallthrough */
-     default:
-         return default_window_proc( hwnd, message, wparam, lparam, ansi );
-     }
-@@ -4599,7 +4608,7 @@ BOOL WINAPI NtUserGetMenuBarInfo( HWND hwnd, LONG id, LONG item, MENUBARINFO *in
-             return FALSE;
-         }
- 
--        hmenu = (HMENU)get_window_long_ptr( hwnd, 0, FALSE );
-+        hmenu = get_control_menu( hwnd );
-         break;
-     case OBJID_MENU:
-         hmenu = get_menu( hwnd );
-diff --git a/dlls/win32u/opengl.c b/dlls/win32u/opengl.c
-index 6eb3e3c..6dce5c7 100644
---- a/dlls/win32u/opengl.c
-+++ b/dlls/win32u/opengl.c
-@@ -2390,7 +2390,7 @@ static BOOL query_renderer_integer( struct egl_platform *egl, GLenum attribute,
-     case WGL_RENDERER_DEVICE_ID_WINE: *value = egl->device_id; return TRUE;
-     case WGL_RENDERER_VENDOR_ID_WINE: *value = egl->vendor_id; return TRUE;
-     case WGL_RENDERER_UNIFIED_MEMORY_ARCHITECTURE_WINE: *value = 0; return TRUE;
--    case WGL_RENDERER_VERSION_WINE: memcpy( value, egl->version, 3 ); return TRUE;
-+    case WGL_RENDERER_VERSION_WINE: memcpy( value, egl->version, sizeof(egl->version) ); return TRUE;
-     case WGL_RENDERER_OPENGL_COMPATIBILITY_PROFILE_VERSION_WINE:
-         value[0] = egl->compat_version / 10;
-         value[1] = egl->compat_version % 10;
 diff --git a/dlls/win32u/sysparams.c b/dlls/win32u/sysparams.c
 index 8798fbf..e77aa5b 100644
 --- a/dlls/win32u/sysparams.c
@@ -1268,34 +971,10 @@ index c56c216..8dfab67 100644
  
      /* mappings */
 diff --git a/server/fd.c b/server/fd.c
-index f70bec3..728704a 100644
+index f70bec3..9e2dec9 100644
 --- a/server/fd.c
 +++ b/server/fd.c
-@@ -382,7 +382,7 @@ static void set_user_shared_data_time(void)
-     timeout_t tick_count = monotonic_time / 10000;
-     static timeout_t last_timezone_update;
-     timeout_t timezone_bias;
--    struct tm *tm;
-+    struct tm *tm, tm1, tm2;
-     time_t now;
- 
-     if (monotonic_time - last_timezone_update > TICKS_PER_SEC)
-@@ -391,7 +391,13 @@ static void set_user_shared_data_time(void)
-         tm = gmtime( &now );
-         timezone_bias = mktime( tm ) - now;
-         tm = localtime( &now );
--        if (tm->tm_isdst) timezone_bias -= 3600;
-+        if (tm->tm_isdst)
-+        {
-+            tm1 = tm2 = *tm;
-+            tm1.tm_isdst = 0;
-+            tm2.tm_isdst = 1;
-+            timezone_bias += mktime(&tm1) < mktime(&tm2) ? 3600 : -3600;
-+        }
-         timezone_bias *= TICKS_PER_SEC;
- 
-         atomic_store_long(&user_shared_data->TimeZoneBias.High2Time, timezone_bias >> 32);
-@@ -1565,7 +1571,7 @@ void unlock_fd( struct fd *fd, file_pos_t start, file_pos_t count )
+@@ -1565,7 +1565,7 @@ void unlock_fd( struct fd *fd, file_pos_t start, file_pos_t count )
              return;
          }
      }
@@ -1317,48 +996,6 @@ index cc5acc2..2216ab6 100644
              ace->mask |= FILE_GENERIC_WRITE | DELETE | FILE_DELETE_CHILD;
          ace->mask &= ~STANDARD_RIGHTS_ALL; /* never deny standard rights */
      }
-diff --git a/server/mapping.c b/server/mapping.c
-index cbe3677..1b6696e 100644
---- a/server/mapping.c
-+++ b/server/mapping.c
-@@ -1247,8 +1247,8 @@ void generate_startup_debug_events( struct process *process )
-     /* generate creation events */
-     LIST_FOR_EACH_ENTRY( thread, &process->thread_list, struct thread, proc_entry )
-     {
--        if (thread != first_thread)
--            generate_debug_event( thread, DbgCreateThreadStateChange, NULL );
-+        if (thread->is_system) continue;
-+        if (thread != first_thread) generate_debug_event( thread, DbgCreateThreadStateChange, NULL );
-     }
- 
-     /* generate dll events (in loading order) */
-diff --git a/server/process.c b/server/process.c
-index edc57b1..ccedc8d 100644
---- a/server/process.c
-+++ b/server/process.c
-@@ -1198,7 +1198,8 @@ void remove_process_thread( struct process *process, struct thread *thread )
-         list_remove( &process->entry );
-         process_killed( process );
-     }
--    else generate_debug_event( thread, DbgExitThreadStateChange, thread );
-+    else if (!thread->is_system) generate_debug_event( thread, DbgExitThreadStateChange, thread );
-+
-     release_object( thread );
- }
- 
-diff --git a/server/ptrace.c b/server/ptrace.c
-index c4b71e9..6016e21 100644
---- a/server/ptrace.c
-+++ b/server/ptrace.c
-@@ -367,7 +367,7 @@ static int read_process_memory_vm( struct thread *thread, client_ptr_t ptr, data
-         return -1;
-     }
-     if (len == size) return 1;
--    set_error( len >= 0 ? STATUS_PARTIAL_COPY : STATUS_ACCESS_DENIED );
-+    set_error( STATUS_PARTIAL_COPY );
-     return 0;
- }
- #else
 diff --git a/server/request_trace.h b/server/request_trace.h
 index c635ebe..29a74c8 100644
 --- a/server/request_trace.h
@@ -1396,82 +1033,11 @@ index cb83620..9cc7382 100644
          {
              set_error( STATUS_BUFFER_TOO_SMALL );
              return;
-diff --git a/server/thread.c b/server/thread.c
-index af1f585..c05465c 100644
---- a/server/thread.c
-+++ b/server/thread.c
-@@ -1799,7 +1799,7 @@ DECL_HANDLER(init_thread)
-     current->entry_point = req->entry;
- 
-     init_thread_context( current );
--    generate_debug_event( current, DbgCreateThreadStateChange, &req->entry );
-+    if (!current->is_system) generate_debug_event( current, DbgCreateThreadStateChange, &req->entry );
-     set_thread_base_priority( current, current->base_priority );
-     set_thread_affinity( current, current->affinity );
- 
-@@ -2089,6 +2089,13 @@ DECL_HANDLER(queue_apc)
-             return;
-         }
-         thread = get_thread_from_handle( req->handle, THREAD_SET_CONTEXT );
-+        if (thread->is_system)
-+        {
-+            release_object( apc );
-+            release_object( thread );
-+            set_error( STATUS_ACCESS_DENIED );
-+            return;
-+        }
-         if (thread && call && call->user.flags & SERVER_USER_APC_SPECIAL && is_wow64_process( thread->process ))
-         {
-             release_object( apc );
-@@ -2221,6 +2228,8 @@ DECL_HANDLER(get_thread_context)
-         if (!(thread = get_thread_from_handle( req->handle, THREAD_GET_CONTEXT ))) return;
-         if (req->machine != native_machine && req->machine != thread->process->machine)
-             set_error( STATUS_INVALID_PARAMETER );
-+        else if (thread->is_system)
-+            set_error( STATUS_ACCESS_DENIED );
-         else if (thread->state != RUNNING)
-             set_error( STATUS_UNSUCCESSFUL );
-         else
-@@ -2303,7 +2312,11 @@ DECL_HANDLER(set_thread_context)
-     if (contexts[CTX_NATIVE].machine != native_machine ||
-         (ctx_count == 2 && contexts[CTX_WOW].machine != thread->process->machine))
-         set_error( STATUS_INVALID_PARAMETER );
--    else if (thread->state != TERMINATED)
-+    else if (thread->is_system)
-+        set_error( STATUS_ACCESS_DENIED );
-+    else if (thread->state == TERMINATED)
-+        set_error( STATUS_UNSUCCESSFUL );
-+    else
-     {
-         unsigned int flags = system_flags & contexts[CTX_NATIVE].flags;
- 
-@@ -2338,7 +2351,6 @@ DECL_HANDLER(set_thread_context)
-             }
-         }
-     }
--    else set_error( STATUS_UNSUCCESSFUL );
- 
-     release_object( thread );
- }
 diff --git a/server/window.c b/server/window.c
-index acc4498..2bd9b1b 100644
+index acc4498..310e0c3 100644
 --- a/server/window.c
 +++ b/server/window.c
-@@ -2128,6 +2128,13 @@ static void set_window_region( struct window *win, struct region *region, int re
-     clear_error();  /* we ignore out of memory errors since the region has been set */
- }
- 
-+/* check if DPI awareness contexts are compatible */
-+static bool is_dpi_awareness_compatible( struct window *win, struct window *other )
-+{
-+    unsigned int awareness = NTUSER_DPI_CONTEXT_GET_AWARENESS( win->shared->dpi_context );
-+    return awareness == NTUSER_DPI_CONTEXT_GET_AWARENESS( other->shared->dpi_context );
-+}
-+
- 
- /* destroy a window */
- void free_window_handle( struct window *win )
-@@ -2160,7 +2167,7 @@ void free_window_handle( struct window *win )
+@@ -2160,7 +2160,7 @@ void free_window_handle( struct window *win )
          else
              send_notify_message( child->handle, WM_WINE_DESTROYWINDOW, 0, 0 );
      }
@@ -1480,14 +1046,3 @@ index acc4498..2bd9b1b 100644
      {
          if (!child->handle) continue;
          if (!win->thread || !child->thread || win->thread == child->thread)
-@@ -2290,6 +2297,10 @@ DECL_HANDLER(set_parent)
-     if (!(win = get_window( req->handle ))) return;
-     if (req->parent && !(parent = get_window( req->parent ))) return;
- 
-+    /* reparenting to a window with a different DPI awareness isn't allowed */
-+    if (parent && !is_desktop_window( parent ) && !is_dpi_awareness_compatible( win, parent ))
-+        return set_error( STATUS_INVALID_STATE_TRANSITION );
-+
-     if (is_desktop_window(win) || is_orphan_window( win ) || (parent && is_orphan_window( parent )))
-     {
-         set_error( STATUS_INVALID_PARAMETER );

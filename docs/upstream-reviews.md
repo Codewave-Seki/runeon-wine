@@ -661,6 +661,7 @@ Known differences: with a wined3d `SampleCount` registry override, a lockable ba
 | Features (`3d6a212b68` `DiscardResource()`, `34d085e3e0` video support, `1de2dcda90`/`e980a92009` shared resource flags, PnP and container IDs) | New behaviour rather than fixes. |
 | GPU descriptions, clean-ups, tracing and FIXME changes | Not defect fixes. |
 | OpenGL core-profile contexts (`b7ce33f16d`, `1f6bdd6360`, `fe16726680`, `e7e7825b3c`, `4b70bebd89`, `cc91be7b65`) | They rewrite context creation in `winemac.drv` and `win32u`, where `0080`, `0114` and `0130` already change the same code; adapting them is a rewrite, not a backport. |
+| `ea527b0a9d` (raw resolve flag) | Fixes `2505de4d1f` (Vulkan, not in the base) and changes a wined3d export. |
 | The commits that do not apply | Not adapted in this batch. |
 
 ### Verification required before tagging
@@ -671,34 +672,38 @@ No self-contained check. A complete WoW64 build and an application run must show
 
 ## ntdll, win32u and server fixes (Wine 11.1 to master)
 
-Candidate patch set `cx26.3-wine11.0-runeon.27` also adds `patches/upstream/0148`: thirty-nine WineHQ commits applied unchanged in upstream order, test-only hunks omitted, carried under the `ntdll`/`win32u`/`server` exception in §3 of `CLAUDE.md` (maintainer decision 2026-10-26). One, `06c0cb5c5e`, is on master after `wine-11.20` and not yet in a release.
+Candidate patch set `cx26.3-wine11.0-runeon.27` also adds `patches/upstream/0148`: twenty-eight WineHQ commits applied unchanged in upstream order, test-only hunks omitted, carried under the `ntdll`/`win32u`/`server` exception in §3 of `CLAUDE.md` (maintainer decision 2026-10-26). One, `06c0cb5c5e`, is on master after `wine-11.20` and not yet in a release.
 
 ### Selection
 
-Of the 753 commits in `wine-11.0..master` that change `dlls/ntdll`, `dlls/win32u` or `server`, 202 apply with zero fuzz on top of `0001`–`0147`; 62 of those read as defect fixes from their message. The maintainer reviewed them in groups and approved the behaviour fixes games and launchers reach together with the smaller ones; each was then checked:
+Of the 753 commits in `wine-11.0..master` that change `dlls/ntdll`, `dlls/win32u` or `server`, 202 apply with zero fuzz on top of `0001`–`0147`; 62 of those read as defect fixes from their message. The maintainer approved the behaviour fixes games and launchers reach together with the smaller ones; each was then checked:
 
-- no hunk within three lines of a CrossOver change (compared with `wine-11.0`) or of an earlier Runeon patch (compared with the base plus `0001`–`0147`);
-- no later upstream commit names it;
-- no change to `protocol.def`, `server_protocol.h`, a unix-call table, an exported prototype or a structure shared between modules (`93939c0659` adds a status name to `request_trace.h`, the server's trace table);
-- every identifier its added lines use exists in the patched tree;
-- it applies in upstream order after the others.
+- no hunk within three lines of a CrossOver change (compared with `wine-11.0`) or of an earlier Runeon patch;
+- no later upstream commit names it, and no later commit to the same function fixes the same behaviour;
+- no change to `protocol.def`, `server_protocol.h`, a unix-call table, an exported prototype or a structure shared between modules (`93939c0659` only adds a status name to the server's trace table);
+- the added lines compile against the patched tree: every identifier exists, every call has the argument count of its definition, and every field accessed belongs to the structure it is accessed through. A presence check alone missed `MAKE_FNID` and `thread->is_system`; the independent review caught both;
+- the changed code is reached on macOS x86_64.
 
 ### Taken
 
 | Area | Commits |
 |---|---|
-| Time | `f6c53a242a` threadpool timers across a system time change; `9c027fac91`, `bfae6eb8b4` time zones with inverse DST (wineserver and ntdll) |
-| Locale | `b4622e972d` win32u `get_locale_data()` table lookup |
-| Files and volumes | `1ebcc3fb9b` anonymous files; `c403790475` empty volume information instead of failure; `e8781e7c8d` Unix paths without a drive (WineHQ bug 60021); `2ecc2f84b4` `NtQueryFullAttributesFile` status; `93939c0659` `NtUnlockFile` on an unlocked range (WineHQ bug 59711); `dab7d8deda`, `5f881b67ea` directory entries fully initialized; `bf98c93e00` file mode mask comparison |
-| Processes and synchronisation | `c69173c460` zero-length process memory reads; `720ea07775`, `ca175f340c` no context access or debug events for system threads; `8c1dcfc77d` `LdrLoadDll` leaves the output handle alone on error; `06c0cb5c5e` semaphore errors ignored when releasing a critical section; `5f47658c5c` fiber data starts at 0x1e00 as on Windows |
-| Windows and drawing | `5aa9e20efe` 32-bit DIB alpha ignored; `66a1d04995` glyph outline size (WineHQ bug 58314); `63f8091369` freeing unlinked windows; `3e132b3cbb` `NtUserGetAtomName` overflow; `27aad48fa8` class registration thread safety (a deadlock upstream saw); `4d6a6cd036`, `65a3d0cf1c` window shape and surface flushing; `9ad182656c` D3D present rect in screen coordinates; `79e718d7bf` `WM_PRINT` clip for children; `336df56a67` tool-window minimum width (WineHQ bug 60276); `e45f9ad9bd` signed drag-and-drop coordinates (winemac packs them the same way); `1c4cb6c6bf` monitors without an id; `da3b638c85` DirectX registry value sizes; `0405e200e2` renderer query sizes; `730d06d7b7` DPI awareness contexts when reparenting; `b1a9794b14` builtin class id for menus |
-| Network and server | `864ca426a3` AFD connect failure events (WineHQ bug 53574); `fc5dd34cc3` IPv6 MTU discovery (WineHQ bug 60241); `5bb70f23d1` kernel notification events' initial state; `51f87a11a1` d3dkmt leak; `1fe3600b16` a sizeof fix |
+| ntdll | `f6c53a242a` threadpool timers across a system time change; `1ebcc3fb9b` anonymous files; `c403790475` empty volume information (label, serial) instead of failure; `e8781e7c8d` Unix paths without a drive (WineHQ bug 60021); `2ecc2f84b4` `NtQueryFullAttributesFile` status; `dab7d8deda`, `5f881b67ea` directory entries fully initialized; `8c1dcfc77d` `LdrLoadDll` leaves the output handle alone on error; `06c0cb5c5e` semaphore errors ignored when releasing a critical section |
+| win32u | `5aa9e20efe` `TransparentBlt` to a 32-bit DIB goes through 24 bits, so destination alpha is 0 as on Windows; `66a1d04995` glyph outline size (WineHQ bug 58314); `3e132b3cbb` `NtUserGetAtomName` overflow; `27aad48fa8` class registration thread safety (a deadlock upstream saw); `4d6a6cd036`, `65a3d0cf1c` window shape and surface flushing; `9ad182656c` D3D present rect in screen coordinates; `336df56a67` tool-window minimum width (WineHQ bug 60276); `e45f9ad9bd` signed drag-and-drop coordinates (winemac packs them the same way); `1c4cb6c6bf` monitors without an id; `da3b638c85` DirectX registry value sizes; `b4622e972d` `get_locale_data()` table lookup |
+| wineserver | `93939c0659` `NtUnlockFile` on an unlocked range (WineHQ bug 59711); `bf98c93e00` file mode mask comparison; `63f8091369` freeing unlinked windows; `5bb70f23d1` kernel notification events' initial state; `864ca426a3` AFD connect failure events (WineHQ bug 53574); `51f87a11a1` d3dkmt leak; `1fe3600b16` a sizeof fix |
 
 ### Left out after review
 
 | Commits | Reason |
 |---|---|
-| `32324bf1ef` (`LOCALE_CUSTOM_UI_DEFAULT` returns the user UI language) | Uses `user_ui_languages_default`, added by the preferred-UI-language series (`c1197354df` … `f91f4404dd`) the base lacks; it would not compile. Found by the identifier check. |
+| `b1a9794b14` (menu class id) | Calls the one-argument `MAKE_FNID()` from the FNID rework (`0541c1dfb0`, `e8508add15`); the base macro takes two, so it would not compile, and the base's window private data depends on the old layout. It also changes `user32`. |
+| `720ea07775`, `ca175f340c` (system threads) | Use `thread->is_system`, added by `5155018f6f` with a protocol change; it would not compile, and the base has no system threads, so the defect is not there. |
+| `5f47658c5c` (fiber data starts at 0x1e00) | Needs `ee656e1a1f`, which makes kernelbase stop treating a non-NULL `FiberData` as "already a fiber"; without it `ConvertThreadToFiber` fails on every thread. `ee656e1a1f` touches CrossOver's hack in `ConvertThreadToFiberEx`. |
+| `32324bf1ef` (`LOCALE_CUSTOM_UI_DEFAULT`) | Uses `user_ui_languages_default` from the preferred-UI-language series (`c1197354df` … `f91f4404dd`), a feature the base lacks; it would not compile. |
+| `bfae6eb8b4`, `9c027fac91` (time zones with inverse DST) | Upstream's later `e339429215` removes two `mktime()` calls per `get_timezone_info()` call that `bfae6eb8b4` adds, and it does not apply to the base; the wineserver half is left out with it to keep the two consistent. |
+| `79e718d7bf` (`WM_PRINT` clip for children) | Clips away the non-client area of printed children until `d36039e588` fixes it; left out with it. |
+| `730d06d7b7` (DPI contexts when reparenting) | Windows 10 1803 behaviour, and the base's `SetThreadDpiHostingBehavior` that lets programs opt out is a stub. |
+| `c69173c460`, `fc5dd34cc3`, `0405e200e2` | Not reached on macOS: the `process_vm_readv` path (macOS uses Mach), the IPv4 branch macOS skips because it has `IPV6_DONTFRAG`, and EGL devices. |
 | `e44e721ca9` (menu name ANSI conversion) | Its `user32/class.c` hunk sits next to `0063`. |
 | `5e50024ec7`, `bf2a7ffd7a` (`LdrLoadDll` and `NtFlushVirtualMemory` prototypes) | Change prototypes in `winternl.h` and spec files shared between modules. |
 | `f5e390911f` | ARM64EC only. |
@@ -714,4 +719,4 @@ Of the 753 commits in `wine-11.0..master` that change `dlls/ntdll`, `dlls/win32u
 
 ### Verification required before tagging
 
-No self-contained check. A complete WoW64 build and an application run must show that the Steam client logs in, downloads and launches several games of each graphics route; an installer reports free space; a launcher with child and tool windows draws them; text renders in a GDI-drawn game or launcher; and the time a game shows matches the system clock.
+No self-contained check. A complete WoW64 build and an application run must show that the Steam client logs in, downloads and launches several games of each graphics route; a launcher with child and tool windows draws them; text renders in a GDI-drawn game or launcher; and files dragged from Finder onto a window on a second display left of the main one land where dropped.

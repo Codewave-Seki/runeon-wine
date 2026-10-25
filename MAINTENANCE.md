@@ -33,7 +33,7 @@ Release status lives in the [README](README.md) table, the GitHub Releases and `
 | [GL-PRESENT-ON-SWAP](docs/upstream-reviews.md#gl-present-on-swap) | Show the OpenGL surface being swapped (wine-11.3/11.4), individually approved for `winemac.drv`/`win32u` | `.26` |
 | [MACOS-FIX-BATCH-1](docs/upstream-reviews.md#macos-fix-batch-1) | First batch of upstream macOS fixes under the §3 exception (7 commits) | `.27` |
 | [GAME-GRAPHICS-INPUT-FIXES](docs/upstream-reviews.md#game-graphics-input-fixes) | Graphics and input correctness fixes games reach (37 commits) and the GL flush on context switch | `.27` |
-| [NTDLL-WIN32U-SERVER-FIXES](docs/upstream-reviews.md#ntdll-win32u-server-fixes) | Windows-behaviour fixes in ntdll, win32u and wineserver (39 commits) | `.27` |
+| [NTDLL-WIN32U-SERVER-FIXES](docs/upstream-reviews.md#ntdll-win32u-server-fixes) | Windows-behaviour fixes in ntdll, win32u and wineserver (28 commits) | `.27` |
 
 The complete audit boundary is `wine-11.15`; later releases were reviewed with the filtered sweep rules. An audit is a point-in-time decision record, not a permanent allowlist: a deferred commit may enter a later patch set once its dependency chain, tests, probe and Runeon impact are established, and inclusion in an audit does not authorize publishing a runtime.
 
