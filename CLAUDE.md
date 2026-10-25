@@ -49,6 +49,7 @@ Scripts use the newest patch set unless `RUNEON_WINE_PATCHSET_DEFINITION=patchse
 
   Each batch records every commit taken or left out, with the reason, in `docs/upstream-reviews.md`, and goes through review, local acceptance, Dev and Production as usual. Run a macOS sweep after each upstream release. This exception covers macOS-specific fixes only; other ABI-sensitive changes still need individual approval.
 - For every candidate, confirm the defect exists in the pinned base (same code, or a reachable path). A clean apply alone proves nothing; a commit that does not apply cleanly is not forced in.
+- Before carrying a commit, search upstream master for later commits that name it (`git log --grep=<short hash>`) or fix the same behaviour, in any file, and carry or record them together. `0144` shipped without `1a1d1f3f38`, which fixes a regression of `b5ab3b155a` in another file.
 - Record every review decision, including exclusions and why, in a new section of `docs/upstream-reviews.md`.
 - Downstream behaviour follows §4: opt-in, never keyed on game identity. The only exceptions are individually approved fixes listed in `MAINTENANCE.md`; an approval covers that patch alone and is never a precedent.
 
