@@ -2902,7 +2902,7 @@
       "kind": "runeon-product",
       "status": "active",
       "risk": "medium",
-      "summary": "While the server acknowledges a wait registration, the msync client no longer spins without bound on the slot the pump writes: after a bounded spin it publishes 3 in its tid slot and sleeps on it with a 1 ms ulock timeout, and the pump wakes it when it swaps 3 for 1. Adds WINEMSYNC_SPINS to re-tune the spin count without a rebuild; Runeon does not set it. Performance change, not a defect fix. Opt-in through the existing WINEMSYNC environment variable: every changed line is in msync code that runs only when do_msync() is true, so without WINEMSYNC behaviour is that of the base. Maintainer-approved as part of the msync fix series (ntdll and server are ABI-sensitive). The Mach message format and the unix-call ABI are unchanged.",
+      "summary": "While the server acknowledges a wait registration, the msync client no longer spins without bound on the slot the pump writes: after a bounded spin it publishes 3 in its tid slot and sleeps on it with a 1 ms ulock timeout, and the pump wakes it when it swaps 3 for 1. Performance change, not a defect fix. Opt-in through the existing WINEMSYNC environment variable: every changed line is in msync code that runs only when do_msync() is true, so without WINEMSYNC behaviour is that of the base. Maintainer-approved as part of the msync fix series (ntdll and server are ABI-sensitive). The Mach message format and the unix-call ABI are unchanged.",
       "testStrategy": "tests/msync-wait-probe.c, built for x86_64 and i686 and run under one wineserver with WINEMSYNC=1 (multi mode) compared with the base; measured only as part of the series. A missed wake costs at most the 1 ms bound, which no probe isolates.",
       "provenance": {
         "repository": "https://github.com/dappermint/winecx",
@@ -2920,17 +2920,17 @@
     {
       "order": 171,
       "path": "patches/runeon/0141-msync-skip-wake-without-waiters.patch",
-      "sha256": "43c0ae44818a411f17bfa66970e743c4276ce9c99d582a0f7997af98092044e7",
+      "sha256": "f6df56da88481b7fc4e5a7b927b1cccbe26c7bbb725b0e4a721f92201cb74297",
       "kind": "runeon-product",
       "status": "active",
       "risk": "high",
-      "summary": "Splits the int multiple_waiters of the shared msync objects into two shorts: multiple_waiters still counts threads the server parks on their tid slot, single_waiters counts threads parked on the object's own word, and signalling skips the __ulock_wake syscall when single_waiters is zero. Object size (16 bytes, C_ASSERT) and the offsets of every other field are unchanged; wineserver and ntdll of one runtime build share the layout, so client and server must come from the same patch set. The waiter publishes before its last look at the value and every signal path stores with a full barrier before reading the count, so a signal in the window either sees the waiter or leaves a value ulock compares against. Performance change, not a defect fix. Opt-in through the existing WINEMSYNC environment variable: every changed line is in msync code that runs only when do_msync() is true, so without WINEMSYNC behaviour is that of the base. Maintainer-approved as part of the msync fix series (ntdll and server are ABI-sensitive). The Mach message format and the unix-call ABI are unchanged.",
-      "testStrategy": "tests/msync-wait-probe.c, built for x86_64 and i686 and run under one wineserver with WINEMSYNC=1 (all modes) compared with the base, which exercises auto and manual events, semaphores and multi-object waits. It does not cover mutex abandonment or more than 32767 waiters on one object.",
+      "summary": "Splits the int multiple_waiters of the shared msync objects into two shorts: multiple_waiters still counts threads the server parks on their tid slot, single_waiters counts threads parked on the object's own word, and signalling skips the __ulock_wake syscall when single_waiters is zero. Object size (16 bytes, C_ASSERT) and the offsets of every other field are unchanged; wineserver and ntdll of one runtime build share the layout, so client and server must come from the same patch set (a mixed pair can hang, so a later change to this layout must also rename the msync port). The waiter publishes before its last look at the value and every signal path stores with a full barrier before reading the count, so a signal in the window either sees the waiter or leaves a value ulock compares against. Adapted: msync_abandon_mutexes() stored the new owner with a plain store, and under TSO the following count read may pass it, see no waiter and skip the wake the unconditional wake used to deliver; it now stores the owner with a full barrier. Performance change, not a defect fix. Opt-in through the existing WINEMSYNC environment variable: every changed line is in msync code that runs only when do_msync() is true, so without WINEMSYNC behaviour is that of the base. Maintainer-approved as part of the msync fix series (ntdll and server are ABI-sensitive). The Mach message format and the unix-call ABI are unchanged.",
+      "testStrategy": "tests/msync-wait-probe.c, built for x86_64 and i686 and run under one wineserver with WINEMSYNC=1, compared with the base: ring covers auto-reset events with single-object waiters, multi covers wait-any registrations, and leak covers semaphores in wait-any only. It does not cover single-object waits on semaphores or manual events, ReleaseMutex, mutex abandonment, wait-all, or more than 32767 waiters on one object. A lost wake-up shows only as a hang, so runs need an external timeout. The abandonment adaptation was checked by code review only.",
       "provenance": {
         "repository": "https://github.com/dappermint/winecx",
         "commit": "620d8c542fcd0b3bd8777f1d88f727fbed1c3a09",
         "author": "millia ampora",
-        "note": "Downstream msync change, code unchanged; not in WineHQ, which has no msync."
+        "note": "Downstream msync change, adapted: the owner store in msync_abandon_mutexes() was given a full barrier; otherwise code unchanged. Not in WineHQ, which has no msync."
       },
       "verification": [
         {
@@ -2942,11 +2942,11 @@
     {
       "order": 172,
       "path": "patches/runeon/0142-msync-ntdll-skip-exchange-on-set-event.patch",
-      "sha256": "6256a74683d3804aec984c29ecb5e5d8a12258f478585f06449de42e78a494c3",
+      "sha256": "746ad65acdfe75211b93a6845f9b7f76c1f7b573fb535d75d13cb74fb864ae30",
       "kind": "runeon-product",
       "status": "active",
       "risk": "medium",
-      "summary": "SetEvent on an msync event that is already set now returns after a read instead of an unconditional atomic exchange, which took the cache line exclusive against every waiter. Adapted: a sequentially consistent fence before the read keeps SetEvent a full barrier on that early return, as on Windows; the fence does not take the line exclusive. Performance change, not a defect fix. Opt-in through the existing WINEMSYNC environment variable: every changed line is in msync code that runs only when do_msync() is true, so without WINEMSYNC behaviour is that of the base. Maintainer-approved as part of the msync fix series (ntdll and server are ABI-sensitive). The Mach message format and the unix-call ABI are unchanged.",
+      "summary": "SetEvent on an msync event that is already set now returns after a read instead of an unconditional atomic exchange, which took the cache line exclusive against every waiter. Adapted: a sequentially consistent fence before the read keeps SetEvent a full barrier on that early return, as on Windows; the fence does not take the line exclusive. The argument relies on x86 TSO, which holds for this x86_64 build, under Rosetta too. Performance change, not a defect fix. Opt-in through the existing WINEMSYNC environment variable: every changed line is in msync code that runs only when do_msync() is true, so without WINEMSYNC behaviour is that of the base. Maintainer-approved as part of the msync fix series (ntdll and server are ABI-sensitive). The Mach message format and the unix-call ABI are unchanged.",
       "testStrategy": "tests/msync-wait-probe.c, built for x86_64 and i686 and run under one wineserver with WINEMSYNC=1 (ring mode) compared with the base; measured only as part of the series. The fence was checked by code review only.",
       "provenance": {
         "repository": "https://github.com/dappermint/winecx",
@@ -2957,7 +2957,7 @@
       "verification": [
         {
           "path": "dlls/ntdll/unix/msync.c",
-          "contains": "/* Keep SetEvent a full barrier when it returns early, as on Windows. */"
+          "contains": "    __atomic_thread_fence( __ATOMIC_SEQ_CST );"
         }
       ]
     },
@@ -2968,7 +2968,7 @@
       "kind": "runeon-product",
       "status": "active",
       "risk": "medium",
-      "summary": "Sets the registration spin of 0140 to zero: the author measured any spin as slower because a spinning waiter holds a core the pump needs (M4 Max, 8 threads, 100000 wakeups: 502/564 ms at 0 spins against 854/781 at 32). WINEMSYNC_SPINS still overrides it. Performance change, not a defect fix. Opt-in through the existing WINEMSYNC environment variable: every changed line is in msync code that runs only when do_msync() is true, so without WINEMSYNC behaviour is that of the base. Maintainer-approved as part of the msync fix series (ntdll and server are ABI-sensitive). The Mach message format and the unix-call ABI are unchanged.",
+      "summary": "Sets the registration spin of 0140 to zero: the author measured any spin as slower because a spinning waiter holds a core the pump needs (M4 Max, 8 threads, 100000 wakeups: 502/564 ms at 0 spins against 854/781 at 32). Adds WINEMSYNC_SPINS to re-tune the count without a rebuild; Runeon does not set it. Performance change, not a defect fix. Opt-in through the existing WINEMSYNC environment variable: every changed line is in msync code that runs only when do_msync() is true, so without WINEMSYNC behaviour is that of the base. Maintainer-approved as part of the msync fix series (ntdll and server are ABI-sensitive). The Mach message format and the unix-call ABI are unchanged.",
       "testStrategy": "tests/msync-wait-probe.c, built for x86_64 and i686 and run under one wineserver with WINEMSYNC=1 (multi mode) compared with the base; measured only as part of the series.",
       "provenance": {
         "repository": "https://github.com/dappermint/winecx",

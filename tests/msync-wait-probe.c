@@ -12,7 +12,9 @@
  * Run every mode under one wineserver with WINEMSYNC=1 from its first command.
  *   x86_64-w64-mingw32-gcc -O2 -Wall -Werror -o msync-wait-probe64.exe msync-wait-probe.c
  *   i686-w64-mingw32-gcc -O2 -Wall -Werror -o msync-wait-probe32.exe msync-wait-probe.c
- * It does not separate the effect of each patch, and does not cover mutex
+ * A lost wake-up shows only as a hang: run it under an external timeout.
+ * It does not separate the effect of each patch, and does not cover
+ * single-object waits on semaphores or manual events, ReleaseMutex, mutex
  * abandonment, wait-all or alertable waits. */
 #include <windows.h>
 #include <stdio.h>

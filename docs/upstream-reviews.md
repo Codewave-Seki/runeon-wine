@@ -470,7 +470,7 @@ Each taken commit applies to that tree in upstream order, which shows that the b
 
 Candidate patch set `cx26.3-wine11.0-runeon.25` adds `patches/runeon/0137`–`0143` after `0136`. msync is CrossOver's Mach-based synchronisation path, enabled only when `WINEMSYNC` is set; WineHQ has no msync, so there is no upstream fix to backport. The source is the `wine1119` branch of [dappermint/winecx](https://github.com/dappermint/winecx), a CrossOver 26.3 / Wine 11.0 tree like the pinned base. All seven commits are by millia ampora and apply in branch order, with zero fuzz, to the pinned archive plus `0001`–`0136`. No commit on that branch touched msync after 2026-08-25.
 
-`ntdll` and `server` are ABI-sensitive. The maintainer approved the series as a whole on 2026-10-25; the approval does not widen the rule for other patches. Every changed line is in `server/msync.c` or `dlls/ntdll/unix/msync.c` and runs only when `do_msync()` is true, so without `WINEMSYNC` the runtime behaves as the base. The Mach message format and the Unix-call ABI are unchanged; `0141` changes the meaning of a shared object field (below).
+`ntdll` and `server` are ABI-sensitive. The maintainer approved the series as a whole on 2026-10-25; the approval does not widen the rule for other patches. Every changed line is in `server/msync.c` or `dlls/ntdll/unix/msync.c` and runs only when `do_msync()` is true, so without `WINEMSYNC` the runtime behaves as the base. The Mach message format and the Unix-call ABI are unchanged; `0141` changes the meaning of a shared object field (below). A wineserver and a client from different builds can still connect, so a mixed pair can hang; a later change to this layout must also rename the msync port.
 
 ### Defect reproduced on the base
 
@@ -483,10 +483,10 @@ Candidate patch set `cx26.3-wine11.0-runeon.25` adds `patches/runeon/0137`–`01
 | `0137` | `8df18268539a` | The pump unregistered already-added objects only when `i > 1`, so a wait whose second object was signalled left a node on the first. Defect fix. |
 | `0138` | `9be392b3b4b8` | A wait-any that gave up on contention during registration never sent the unregister message, leaving the tid on every object and the alert counter above zero. Defect fix. |
 | `0139` | `3a7a712d6616` | Pump queue limit 50 → `MACH_PORT_QLIMIT_MAX` (1024); `WINEMSYNC_QLIMIT` clamped. Performance. |
-| `0140` | `307f90fdb1b3` | The client sleeps on its tid slot (value 3, 1 ms bound) instead of spinning while the pump acknowledges a registration; adds `WINEMSYNC_SPINS`. Performance. |
-| `0141` | `620d8c542fcd` | Splits `int multiple_waiters` into two `short` counters and skips `__ulock_wake` when no thread waits on the object word. Object size and other field offsets are unchanged; server and client must come from the same build. Every signal path stores with a full barrier before it reads the count. Performance. |
-| `0142` | `ef72fdb55b92` | SetEvent on a set event returns after a read instead of an exchange. Adapted: a sequentially consistent fence before the read keeps SetEvent a full barrier, as on Windows. Performance. |
-| `0143` | `6d316146c2fa` | Registration spin count set to 0, as measured by the author. Performance. |
+| `0140` | `307f90fdb1b3` | The client sleeps on its tid slot (value 3, 1 ms bound) instead of spinning while the pump acknowledges a registration. Performance. |
+| `0141` | `620d8c542fcd` | Splits `int multiple_waiters` into two `short` counters and skips `__ulock_wake` when no thread waits on the object word. Object size and other field offsets are unchanged; server and client must come from the same build. Every signal path stores with a full barrier before it reads the count. Adapted: mutex abandonment stored the new owner with a plain store, which the count read may pass under TSO and skip the wake; it now stores with a full barrier. Performance. |
+| `0142` | `ef72fdb55b92` | SetEvent on a set event returns after a read instead of an exchange. Adapted: a sequentially consistent fence before the read keeps SetEvent a full barrier, as on Windows; the argument relies on x86 TSO. Performance. |
+| `0143` | `6d316146c2fa` | Registration spin count set to 0, as measured by the author; adds `WINEMSYNC_SPINS` to override it. Performance. |
 
 The performance commits are not defect fixes and would normally stay out (§3 of `CLAUDE.md`). The maintainer took them because they run only in the opt-in msync path, which users enable for performance.
 
@@ -498,6 +498,18 @@ The performance commits are not defect fixes and would normally stay out (§3 of
 | Highball `0014` | Carries the same two unregister fixes as `0137` and `0138`, plus rate-limiting the pool warning, which would hide the leak's symptom rather than fix it. |
 | Highball `0005` (yield after setting an auto-reset event) | Also changes the server sync path every default user runs. Its msync half is a scheduling heuristic for programs that rely on Windows' priority boost, against the direction of this series, and was not reproduced here. |
 
+### Measured on the candidate
+
+A complete i386/x86_64 WoW64 build of this patch set, before the abandonment adaptation of `0141`, ran the same probe in a clean prefix (milliseconds and counts are x86_64/i686, single runs):
+
+| | `runeon.24`, msync | `runeon.25`, msync | `runeon.24`, no msync | `runeon.25`, no msync |
+|---|---|---|---|---|
+| Pool warnings | 48,029,232 | 0 | 0 | 0 |
+| wineserver RSS after the run | 181 MB | 22 MB, flat | 18 MB | 17 MB |
+| Leak-mode waits in 120 s | 11.5M / 10.8M | 26.2M / 26.9M | 14.8M / 15.0M | 14.8M / 14.9M |
+| ring | 810 / 893 | 814 / 852 | 1961 / 2212 | 1957 / 2155 |
+| multi | 793 / 937 | 661 / 676 | 1216 / 1252 | 1225 / 1252 |
+
 ### Validation limits
 
-Static and integration checks prove the series applies and its anchors are present. A complete i386/x86_64 WoW64 build, the probe on both runtimes and Steam with representative games are required before the patch set is tagged. The probe does not isolate each patch's effect, mutex abandonment or alertable waits.
+Static and integration checks prove the series applies and its anchors are present. The table above shows the leak gone and no measurable change without `WINEMSYNC`. The abandonment adaptation is checked by code review only and must be in the build that is tagged. The probe covers auto-reset events with single-object waiters, wait-any registrations and semaphores in wait-any; it does not cover single-object waits on semaphores or manual events, `ReleaseMutex`, mutex abandonment, wait-all or alertable waits, and does not isolate each patch's effect. A lost wake-up shows only as a hang, so probe runs need an external timeout. Steam with representative games is still required before the patch set is tagged.

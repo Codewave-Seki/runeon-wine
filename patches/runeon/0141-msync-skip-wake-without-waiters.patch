@@ -4,8 +4,15 @@ Subject: [PATCH] ntdll: skip the wake syscall when nothing is parked on an
 
 Ported for CrossOver 26.3 from dappermint/winecx commit
 620d8c542fcd0b3bd8777f1d88f727fbed1c3a09 (branch wine1119),
-code unchanged. A downstream msync fix, not a
+code unchanged except as noted below. A downstream msync fix, not a
 WineHQ backport: WineHQ has no msync. Runs only when WINEMSYNC is set.
+
+Adaptation: msync_abandon_mutexes() stored the new owner with a plain
+store and then read the waiter count in signal_all(). Under TSO that
+read may pass the store, see no waiter and skip the wake that the
+unconditional wake used to deliver, so a waiter on an abandoned mutex
+could sleep for good. The owner is now stored with a full barrier. Every
+other signal path already stores with one.
 
 multiple_waiters guards the mach send, but nothing guarded the ulock wake, so
 every SetEvent, ReleaseSemaphore and ReleaseMutex paid a __ulock_wake that
@@ -72,6 +79,18 @@ a FUTEX_WAKE, ntsync an ioctl.
  };
  
  void msync_abandon_mutexes( thread_id_t tid )
+@@ -801,8 +807,10 @@
+         {
+             if (debug_level)
+                 fprintf( stderr, "msync_abandon_mutexes() idx=%d\n", msync->shm_idx );
+-            mutex->tid = ~0;
+             mutex->count = 0;
++            /* signal_all() skips the wake when it counts no waiter, so the
++             * new owner value must be visible before it reads the count. */
++            __atomic_store_n( &mutex->tid, ~0, __ATOMIC_SEQ_CST );
+             signal_all ( msync->shm_idx, (int *)mutex );
+         }
+     }
 --- a/dlls/ntdll/unix/msync.c
 +++ b/dlls/ntdll/unix/msync.c
 @@ -195,7 +195,8 @@

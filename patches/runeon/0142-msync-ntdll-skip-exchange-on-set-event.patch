@@ -10,7 +10,8 @@ WineHQ backport: WineHQ has no msync. Runs only when WINEMSYNC is set.
 Adaptation: a sequentially consistent fence before the early read keeps
 SetEvent a full barrier when the event is already set, as it is on
 Windows; the fence does not take the cache line exclusive, which is
-what the original change avoids.
+what the original change avoids. The argument relies on x86 TSO, which
+holds for this x86_64 build, under Rosetta too.
 
 SetEvent on an event that is already set changes nothing and wakes nobody, but
 the unconditional exchange still takes the cache line exclusive. a thread that
