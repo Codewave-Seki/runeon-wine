@@ -566,7 +566,7 @@ No self-contained check exists: the behaviour needs Cocoa views and CGL contexts
 
 ## macOS fix batch 1 (Wine 11.0 to master, 2026-10-22)
 
-Candidate patch set `cx26.3-wine11.0-runeon.27` adds `patches/upstream/0145` after `0144`: eleven WineHQ commits applied unchanged in upstream order, test-only hunks omitted. It is the first batch carried under the macOS-fix exception in §3 of `CLAUDE.md` (maintainer decision 2026-10-26). Before that rule, every sweep left `winemac.drv`, `win32u` and `ntdll` out, so most macOS fixes since `wine-11.0` were never carried.
+Candidate patch set `cx26.3-wine11.0-runeon.27` adds `patches/upstream/0145` after `0144`: twelve WineHQ commits applied unchanged in upstream order, test-only hunks omitted. It is the first batch carried under the macOS-fix exception in §3 of `CLAUDE.md` (maintainer decision 2026-10-26). Before that rule, every sweep left `winemac.drv`, `win32u` and `ntdll` out, so most macOS fixes since `wine-11.0` were never carried.
 
 ### Selection
 
@@ -591,6 +591,7 @@ For each taken commit, a script compared the pinned CrossOver files with `wine-1
 | `1bfb493cd0` | 11.7 | A window that becomes invalid between `WM_QUERYENDSESSION` and `WM_ENDSESSION` is treated as having agreed, instead of blocking the session end. |
 | `d14d0b22b4` | 11.10 | IME open status follows whether the keyboard layout has an IME. |
 | `eefbbc07a8` | 11.10 | `ClipCursor` with the reset flag releases the clip instead of returning early. |
+| `d56f36c1aa` | 11.8 | A window restored from the Dock is activated before `SC_RESTORE`, so it gets `WM_ACTIVATE` first as on Windows (upstream: Warhammer: Vermintide 2 could not return to fullscreen after losing focus). The commit also reverts `win32u` and `winex11.drv` code that macOS does not reach (`winemac.drv` does not implement `GetWindowStateUpdates`); it is outside the macOS exception for that reason, was approved individually on 2026-10-26 after confirming upstream master still carries it, and is applied unchanged. Its later fix `852e39a89c` only concerns the X11 driver. |
 | `1a1d1f3f38` | 11.16 | A window-surface flush hides a client view left by an earlier D3D or OpenGL swapchain. Upstream fixes a regression of `b5ab3b155a`, carried in `0144`: a launcher that drew with D3D9 and then with GDI on the same window kept showing the last 3D frame. `0144` was carried without it; the search for later fixes in §3 was added because of this. |
 | `53a91cdcbe` | 11.17 | Pasteboard data is released after import (leak). |
 
@@ -605,7 +606,6 @@ For each taken commit, a script compared the pinned CrossOver files with `wine-1
 | `3ae8338d9f` (driver notified of capture reset on destruction) | Its `winemac.drv/window.c` hunk sits next to CrossOver hack 22435 (D3DMetal client surfaces in `macdrv_DestroyWindow`). |
 | `3dcb1a565a` (display changes through `CGDisplayRegisterReconfigurationCallback`) | Larger change next to CrossOver hack 10912 in `cocoa_app.m`; deferred for a closer review. |
 | `361b82c32e`, `a32e9be3d5` (mountmgr free space) | CrossOver changed the same file's includes and structure; the `ntdll` pair above covers the path games and installers use. |
-| `d56f36c1aa` (revert of forced window activation before restore) | Changes `win32u` behaviour on every platform, so it is outside the macOS exception; pending individual approval. |
 | `98d3e36f2b` (Core Audio `zero_bits` at wow64 attach) | Removes a Unix call entry: a unix-call table change and a refactor. |
 | `ab9ab01153` (USB interface information in winebus) | A feature for device identity. |
 | ARM64 commits (`569a7553b2`, `920240e73e`, `2a61baa185`, …) | Runeon runs x86_64 under Rosetta. |

@@ -1,11 +1,13 @@
 From: Wine upstream contributors (see commit list)
 Subject: [PATCH] Carry WineHQ fixes for macOS-specific behaviour.
 
-Eleven WineHQ commits from wine-11.2 to wine-11.17, applied unchanged in
+Twelve WineHQ commits from wine-11.2 to wine-11.17, applied unchanged in
 upstream order; test-only hunks are omitted. They are the first batch
 carried under the macOS-fix rule in CLAUDE.md section 3: each fixes a
 defect present in the pinned base, touches only Wine code that CrossOver
-keeps unchanged, and changes no protocol or shared structure. See
+keeps unchanged, and changes no protocol or shared structure. d56f36c1aa
+also changes win32u and winex11 code that macOS does not reach; it was
+approved individually and is carried unchanged. See
 docs/upstream-reviews.md, "macOS fix batch 1".
 
   98a370e5e1 (wine-11.2, Tim Clem): ntdll: Report free space for "important" data on macOS.
@@ -15,6 +17,7 @@ docs/upstream-reviews.md, "macOS fix batch 1".
   3b1ab64042 (wine-11.6, Rémi Bernon): winemac: Keep current user locale in the generated HKLs.
   c8b7150680 (wine-11.7, Tim Clem): ntdll: Fall back to statfs if "important" free space is 0 on macOS.
   1bfb493cd0 (wine-11.7, Tim Clem): winemac.drv: Handle windows becoming invalid between WM_QUERYENDSESSION and WM_ENDSESSION.
+  d56f36c1aa (wine-11.8, Zhiyi Zhang): Revert "win32u: Don't forcefully activate windows before restoring them.".
   d14d0b22b4 (wine-11.10, Marc-Aurel Zent): winemac: Set IME open status depending on HKL.
   eefbbc07a8 (wine-11.10, Feifan He): winemac: Handle reset parameter in ClipCursor.
   1a1d1f3f38 (wine-11.16, Zhiyi Zhang): winemac.drv: Hide client_view when flushing window surfaces.
@@ -107,6 +110,27 @@ index ac2619f..2840b43 100644
      if (bsize == 2048)  /* assume CD-ROM */
      {
          info->BytesPerSector = 2048;
+diff --git a/dlls/win32u/message.c b/dlls/win32u/message.c
+index caddb73..4721733 100644
+--- a/dlls/win32u/message.c
++++ b/dlls/win32u/message.c
+@@ -2238,13 +2238,14 @@ static LRESULT handle_internal_message( HWND hwnd, UINT msg, WPARAM wparam, LPAR
+         window_rect = map_rect_raw_to_virt( window_rect, get_thread_dpi() );
+ 
+         if (foreground) set_foreground_window( foreground, FALSE, TRUE );
+-        switch (state_cmd)
++        switch (LOWORD(state_cmd))
+         {
+         case SC_RESTORE:
++            if (HIWORD(state_cmd)) NtUserSetActiveWindow( hwnd );
+             NtUserSetInternalWindowPos( hwnd, SW_SHOW, &window_rect, NULL );
+             /* fallthrough */
+         default:
+-            send_message( hwnd, WM_SYSCOMMAND, state_cmd, 0 );
++            send_message( hwnd, WM_SYSCOMMAND, LOWORD(state_cmd), 0 );
+             break;
+         case 0:
+             if (!swp_flags) break;
 diff --git a/dlls/winemac.drv/clipboard.c b/dlls/winemac.drv/clipboard.c
 index c1e6ebb..e9fde9c 100644
 --- a/dlls/winemac.drv/clipboard.c
@@ -386,3 +410,30 @@ index a849918..3948114 100644
      return TRUE;
  }
  
+diff --git a/dlls/winemac.drv/window.c b/dlls/winemac.drv/window.c
+index ebf8505..bfeae78 100644
+--- a/dlls/winemac.drv/window.c
++++ b/dlls/winemac.drv/window.c
+@@ -1966,6 +1966,7 @@ void macdrv_window_did_unminimize(HWND hwnd)
+     {
+         TRACE("restoring win %p/%p\n", hwnd, data->cocoa_window);
+         release_win_data(data);
++        NtUserSetActiveWindow(hwnd);
+         send_message(hwnd, WM_SYSCOMMAND, SC_RESTORE, 0);
+         return;
+     }
+diff --git a/dlls/winex11.drv/window.c b/dlls/winex11.drv/window.c
+index 51da576..eb4a2f0 100644
+--- a/dlls/winex11.drv/window.c
++++ b/dlls/winex11.drv/window.c
+@@ -1829,8 +1829,9 @@ static UINT window_update_client_state( struct x11drv_win_data *data )
+         }
+         else if (old_style & (WS_MINIMIZE | WS_MAXIMIZE))
+         {
++            BOOL activate = (old_style & (WS_MINIMIZE | WS_VISIBLE)) == (WS_MINIMIZE | WS_VISIBLE);
+             TRACE( "restoring win %p/%lx\n", data->hwnd, data->whole_window );
+-            return SC_RESTORE;
++            return MAKELONG(SC_RESTORE, activate);
+         }
+     }
+     if (!(old_style & WS_MINIMIZE) && (new_style & WS_MINIMIZE))
