@@ -39,6 +39,15 @@ Scripts use the newest patch set unless `RUNEON_WINE_PATCHSET_DEFINITION=patchse
 - WineHQ upstream fixes are the trusted source. A fix from another fork or downstream project is adopted only after its defect is reproduced on this base, and only if its licence is LGPL-compatible.
 - Backport only user-mode fixes in DLLs that Steam, launchers, installers or games load: crashes, memory safety, leaks, hangs and error paths. Features, refactors, test-only commits, toolchain and translation changes stay out.
 - `ntdll`, `server`, `wow64`, the loader, `winemac.drv`, `win32u`, Unix library and server protocols, and graphics interfaces are ABI-sensitive and excluded. A single small fix there needs the maintainer's individual approval, recorded in its review section and manifest `summary`.
+- Exception, macOS fixes (maintainer decision 2026-10-26): a WineHQ commit merged into master that fixes macOS-specific behaviour (in `winemac.drv`, `winecoreaudio.drv`, the macOS parts of `mountmgr.sys`, or code in `ntdll` or `win32u` that only runs on macOS) may be carried in batches without individual approval when all of these hold:
+  1. It fixes a defect; features, refactors and clean-ups stay out.
+  2. The defect exists in the pinned base, and CrossOver does not already carry an equivalent fix.
+  3. It only touches Wine code that CrossOver keeps unchanged. It never touches CrossOver's own changes, such as the D3DMetal presentation path, `CX_` hacks, or CrossOver-specific window and surface logic.
+  4. It applies with zero fuzz, or the fix alone is placed mechanically at the matching spot in the base. Upstream refactors are not carried; a fix that only works together with one waits for a newer base.
+  5. It changes no unix-call or wineserver protocol and no structure layout shared with drivers.
+  6. It takes effect on x86_64 under Rosetta; ARM64-only changes stay out.
+
+  Each batch records every commit taken or left out, with the reason, in `docs/upstream-reviews.md`, and goes through review, local acceptance, Dev and Production as usual. Run a macOS sweep after each upstream release. This exception covers macOS-specific fixes only; other ABI-sensitive changes still need individual approval.
 - For every candidate, confirm the defect exists in the pinned base (same code, or a reachable path). A clean apply alone proves nothing; a commit that does not apply cleanly is not forced in.
 - Record every review decision, including exclusions and why, in a new section of `docs/upstream-reviews.md`.
 - Downstream behaviour follows §4: opt-in, never keyed on game identity. The only exceptions are individually approved fixes listed in `MAINTENANCE.md`; an approval covers that patch alone and is never a precedent.

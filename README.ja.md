@@ -28,7 +28,7 @@ Runeon Wine は、Runeon の Steam Baseline runtime のソースを公開で管�
 
 - Wine ソースツリー、ビルド出力、runtime アーカイブ、prefix、ユーザーデータ、診断情報はコミットしません。
 - `D3DMetal.framework`、`libd3dshared.dylib`、GPTK の非公開オーバーレイはダウンロード、ミラー、配布しません。
-- きれいに適用できても、上流コミットはレビューを経るまでパッチセットに入りません。`ntdll`、`server`、`wow64`、ローダー、`winemac.drv`、`win32u`、Unix/server プロトコルの変更は ABI に影響しうるため、個別に承認されない限り取り込みません。
+- きれいに適用できても、上流コミットはレビューを経るまでパッチセットに入りません。`ntdll`、`server`、`wow64`、ローダー、`winemac.drv`、`win32u`、Unix/server プロトコルの変更は ABI に影響しうるため、個別に承認されない限り取り込みません。例外は macOS 固有の動作を修正する上流の修正で、CrossOver が変更していない Wine のコードだけを変え、プロトコルや共有構造体を変えないものは、レビューを経てまとめて取り込みます（`CLAUDE.md` §3 参照）。
 - Runeon のパッチは呼び出し側が明示的に有効にするもので、ゲーム名や AppID では判定しません。例外は [MAINTENANCE.md](MAINTENANCE.md#product-patches-without-an-opt-in) に記載しています。
 - Production に出荷する runtime には、同一のパッチセットバンドル、完全な対応ソース、SHA-256 ファイルを含む不変の正式版 Release があります。候補はプレリリースのままです。タグと Release アセットは移動、差し替え、削除しません。
 - runtime のパッケージ化、署名、配布は Runeon の製品リポジトリが行います。

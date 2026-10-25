@@ -28,7 +28,7 @@ Runeon Wine is the public source-maintenance repository for Runeon's Steam Basel
 
 - No Wine source trees, build output, runtime archives, prefixes, user data or diagnostics are committed.
 - `D3DMetal.framework`, `libd3dshared.dylib` and GPTK private overlays are never downloaded, mirrored or distributed.
-- A clean apply does not put an upstream commit into a patch set; every commit is reviewed first. Changes to `ntdll`, `server`, `wow64`, the loader, `winemac.drv`, `win32u` or Unix/server protocols are ABI-sensitive and excluded unless individually approved.
+- A clean apply does not put an upstream commit into a patch set; every commit is reviewed first. Changes to `ntdll`, `server`, `wow64`, the loader, `winemac.drv`, `win32u` or Unix/server protocols are ABI-sensitive and excluded unless individually approved. The exception is upstream fixes for macOS-specific behaviour that apply to Wine code CrossOver keeps unchanged and change no protocol or shared structure; they are carried in reviewed batches (see `CLAUDE.md` §3).
 - Runeon patches are opt-in, never match game names or AppIDs, and the exceptions are listed in [MAINTENANCE.md](MAINTENANCE.md#product-patches-without-an-opt-in).
 - Every runtime shipped to Production has an immutable stable Release with the exact patch-set bundle, complete corresponding source and SHA-256 files. Candidates stay Pre-releases. Tags and Release assets are never moved, replaced or deleted.
 - Packaging, signing and distribution of the runtime are done by the Runeon product repository.

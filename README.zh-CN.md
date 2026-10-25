@@ -28,7 +28,7 @@ Runeon Wine 是 Runeon Steam Baseline runtime 的公开源码维护仓库，包�
 
 - 不提交 Wine 源码树、构建产物、runtime 归档、prefix、用户数据或诊断信息。
 - 从不下载、镜像或分发 `D3DMetal.framework`、`libd3dshared.dylib` 与 GPTK 私有 overlay。
-- 能干净应用不等于进入补丁集，每个上游提交都先经审查。改动 `ntdll`、`server`、`wow64`、loader、`winemac.drv`、`win32u` 或 Unix/server 协议属于 ABI 敏感，除非单独批准，否则不纳入。
+- 能干净应用不等于进入补丁集，每个上游提交都先经审查。改动 `ntdll`、`server`、`wow64`、loader、`winemac.drv`、`win32u` 或 Unix/server 协议属于 ABI 敏感，除非单独批准，否则不纳入。例外是针对 macOS 专属行为的上游修复：只改 CrossOver 原样保留的 Wine 代码、不改任何协议或共享结构的，按批审查后纳入（见 `CLAUDE.md` §3）。
 - Runeon 补丁须由调用方显式开启，从不按游戏名或 AppID 匹配；例外列在 [MAINTENANCE.md](MAINTENANCE.md#product-patches-without-an-opt-in)。
 - 每个进入 Production 的 runtime 都有不可变的正式版 Release，含完全一致的补丁集包、完整对应源码与 SHA-256 文件。候选保持预发布。tag 与 Release 附件从不移动、替换或删除。
 - runtime 的打包、签名与分发由 Runeon 产品仓库负责。
