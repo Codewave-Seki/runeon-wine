@@ -617,3 +617,47 @@ To be adapted only if the fix alone fits the base without touching CrossOver cha
 ### Verification required before tagging
 
 No self-contained check. A complete WoW64 build and an application run must show that the Steam client and several games (WineD3D, DXMT, D3DMetal) still present, take keyboard and mouse input and exit normally; rich text (RTF or HTML) copies with formatting both ways between a macOS app and a Windows program that reads registered formats; files or text dragged from Finder reach a Windows program; a game that confines the cursor releases it; a fullscreen game minimised to the Dock and restored returns to fullscreen; and free space Steam reports for its library drive matches Finder. The adaptation's branch (a volume without the property) is not covered by any test.
+
+<a id="game-graphics-input-fixes"></a>
+
+## Game-facing graphics and input fixes (Wine 11.1 to 11.20)
+
+Candidate patch set `cx26.3-wine11.0-runeon.27` also adds `patches/upstream/0146` (37 WineHQ commits, applied unchanged) and `0147` (`1c144117a8`, adapted) after `0145`. Earlier sweeps reviewed these releases but took only crash, leak and hang fixes in user-mode DLLs; the maintainer decided on 2026-10-26 that the graphics and input DLLs games use also take rendering and input correctness fixes (§3 of `CLAUDE.md`).
+
+### Selection
+
+Every commit in `wine-11.0..master` that changes `wined3d`, `d3d8`, `d3d9`, `d3d10*`, `d3d11`, `dxgi`, `ddraw`, `dinput`, `xinput1_3`/`xinput1_4`, `winebus.sys`, `hidclass.sys`, `hid` or `windows.gaming.input`: 262 commits, checked against the pinned archive plus `0001`–`0145`. 56 change only tests, 22 are carried and 1 is in the base; 100 apply with zero fuzz and 83 do not. Of the 100, the defect fixes games reach were taken; for each, the CrossOver files were compared with `wine-11.0` (no hunk is near a CrossOver change) and later upstream commits naming it were searched for (only `88e775dbdc` has one, `4377bdebd6`, taken with it). All 37 apply in upstream order.
+
+### Taken in 0146
+
+| Area | Commits |
+|---|---|
+| wined3d (OpenGL renderer) | `dec0864562` sphere-map texture coordinates in GLSL; `76f152e01f`, `98a441ddf9` backup DC state after a reset; `24df29db09` the right pixel format in `swapchain_gl_present()`; `824d95cae5` (helper), `58af62eb90`, `0ff2188fb1` raw and non-colour blits and resolves; `77d56ec16f` self-blits with FX transforms; `b58c221630` no `texelFetchOffset()` on buffers and multisample textures (GLSL compile failure); `5279200712` locking multisampled back buffers is refused, as on Windows; `1ec446b9ae` swapchain latency left as set |
+| d3d9 | `6481c20603` the device vtbl initialization sequence that hooking overlays and launchers expect |
+| ddraw | `f4626afec7` the ramp device is enumerated (WineHQ bug 1201); `7df175a66f` material activation uses the active device; `303b790376` no rendering to the clipping window in exclusive fullscreen; `6b486ec783` render-target flags on v1 swapchain surfaces; `365e610147` execute-buffer vertices staged at execute time; `6b17d73c04` system-memory depth fills done on the CPU (the base has `5942da6c6c`, which this completes) |
+| dxgi | `020cbce1a9`, `94f82f44e9` fullscreen descriptions reported as created, invalid fullscreen modes refused; `c5cb1e789e` `EnumWarpAdapter()` returns an adapter |
+| dinput, HID | `62bf2b0545` `Escape` returns `DIERR_UNSUPPORTED` (Thrustmaster wheels); `a7277ba021` opening a disconnected joystick fails; `5335bc6551`, `da5cdc1bde` link collections and separate hat-switch collections; `0e1616f1f6` HID device objects report the right device type; `135ae82919` `IOCTL_HID_WRITE_REPORT` returns the full report length (WineHQ bug 59891) |
+| xinput | `ea50539dae` read events kept across device changes (also a handle leak); `1b79d86f73`, `2b11697164` controllers disabled on read errors and removal; `4241f00fb7` no wait after a failed `CancelIoEx`; `c7720f8698` state starts from the previous state, so `dwPacketNumber` advances |
+| winebus, winexinput, windows.gaming.input | `8df796f0f8`, `88e775dbdc` with `4377bdebd6` axis report sizes for the SDL bus Runeon uses, and the winexinput inversion that assumed 32-bit axes; `7f29964c15` HID axis usage mapping (DualSense); `b45d928aa1` gamepad-added callbacks registered before the provider starts |
+
+### Taken in 0147
+
+`1c144117a8` (wine-11.17) flushes the current OpenGL context before another becomes current on the thread. Upstream puts the line in `macdrv_context_activate()`, which a later refactor split out of the base's `macdrv_make_current()`; it is placed at the matching point there. The rest of the core-profile work is left out (below).
+
+### Left out after review
+
+| Commits | Reason |
+|---|---|
+| `da9f8090bf`, `9787affece` (d3d8 lock boxes) | Upstream: they only silence a warning wined3d already ignores. |
+| `13897c1d39` (dxgi fullscreen state) | An efficiency change. |
+| Vulkan renderer, SPIR-V and HLSL back ends (`170c4c9083`, `bdc2fc0c8f`, `0f3858a83e`, `ccdaa2b581`, …) | wined3d runs on OpenGL on macOS. |
+| Linux device back ends (`5c991013a8`, `8b8cdc9e68`, `fe9533f93a`, `cf5d043dc1`, …) | hidraw, evdev and inotify do not exist on macOS. |
+| Performance work (`975b8929de`, `b3f63962dd`, `5b3196138b`, `90e5a9c436`, `7586644cad`) | Not defect fixes. |
+| Features (`3d6a212b68` `DiscardResource()`, `34d085e3e0` video support, `1de2dcda90`/`e980a92009` shared resource flags, PnP and container IDs) | New behaviour rather than fixes. |
+| GPU descriptions, clean-ups, tracing and FIXME changes | Not defect fixes. |
+| OpenGL core-profile contexts (`b7ce33f16d`, `1f6bdd6360`, `fe16726680`, `e7e7825b3c`, `4b70bebd89`, `cc91be7b65`) | They rewrite context creation in `winemac.drv` and `win32u`, where `0080`, `0114` and `0130` already change the same code; adapting them is a rewrite, not a backport. |
+| The 83 commits that do not apply | Not adapted in this batch. |
+
+### Verification required before tagging
+
+No self-contained check. A complete WoW64 build and an application run must show that several WineD3D games (D3D8, D3D9, D3D11, and a DirectDraw title if one is available) render, present and enter and leave fullscreen as before, and that a game controller over USB or Bluetooth is detected, reads axes, buttons and the hat switch correctly, and survives being unplugged and replugged.

@@ -3072,6 +3072,195 @@
         }
       ],
       "adaptation": "One Runeon change to 98a370e5e1: get_free_bytes_for_important_data() also falls back to statfs when CFURLCopyResourcePropertyForKey() succeeds without returning a value, which CoreFoundation allows; upstream passes that NULL to CFNumberGetValue(). No volume returning that was observed. The other six commits are applied unchanged."
+    },
+    {
+      "order": 176,
+      "path": "patches/upstream/0146-wine-11.20-game-graphics-input-fixes.patch",
+      "sha256": "e98f32b14c4c1ffb78496ef9fe572f8afd0cb5de0c0c1ef6755881705c259ed9",
+      "kind": "upstream-backport",
+      "status": "active",
+      "risk": "medium",
+      "firstWineRelease": "wine-11.20",
+      "upstreamCommits": [
+        "88e775dbdc3b1e977d231ad8f1a5eccdd5c4d2b6",
+        "8df796f0f8bd19e1f623b1ec5c67f51914af4eed",
+        "7f29964c1579cee7e657622f5d78d04be8f5eea5",
+        "dec086456298e112dcac5f72ad3b89be4a14d0f6",
+        "f4626afec7c18e9e504bcee00484fdcba3ac9397",
+        "76f152e01f2b4caf9bab155aa124461b0677cbca",
+        "98a441ddf9d857ae21e4383eaee628deb6947a27",
+        "62bf2b0545cc2d16343f2dcf4f64e9b713b23087",
+        "7df175a66faef1804ee84e278feecbd69a30cf37",
+        "24df29db0999f4aa21bcf5f593ab9009a840a472",
+        "0e1616f1f6676471ecaf61a473e9ae005442198e",
+        "58af62eb909e761bdfd443c749b7b0ac980cb233",
+        "824d95cae5061e07ccfa0ac00cc796be2973cd5d",
+        "0ff2188fb1148ad10511980eb85c49c21bc47ef5",
+        "a7277ba021c2a443d60055b816af3132d99438a0",
+        "6481c2060313698b04606a8db28da6cf67559f07",
+        "303b7903766e15ab898611bc5ab8660fa1839eb1",
+        "77d56ec16f60b513b6958d2055cc0f9616ba0e6f",
+        "52792007123b0844c8cde24091a419e0717f3c5e",
+        "b58c2216302dcdb5fce33ab34af79ae0ce6eae13",
+        "6b486ec7830ae245241fe406d95330b7d7078a31",
+        "4377bdebd6b94ee8539b99599f4abaf1ad7e1904",
+        "ea50539dae7497b69f30f112a7a775eb8d728d6c",
+        "1b79d86f735795860f249e02f5552052c6003010",
+        "4241f00fb77a762e255d0e25d6d23760137295aa",
+        "2b116971642ef53494ed8b84435bc96d5283d771",
+        "c7720f8698e3dd21a079cfee7cff6ca473f3b26c",
+        "135ae829199108e7168662c740fc076b0d841bce",
+        "94f82f44e9f01f5f9ac0c8612b832ce247b6b1d9",
+        "020cbce1a9272618c1c638cf57c82e11cde5b21d",
+        "1ec446b9aed3fd838ea9be0a8f492f7c6b22c9ee",
+        "c5cb1e789e82d178194d4f14ba62fec295534c37",
+        "b45d928aa12f6059035a57619e577d99b4434f97",
+        "da5cdc1bde64210a5183d9b5bd08c2a7ab587907",
+        "5335bc65518519eda3888c0359277b50a4b33d79",
+        "365e610147db65eb96fd84c725eb7e323bf237aa",
+        "6b17d73c04a217ca14c8b5413362e82c3aeede68"
+      ],
+      "summary": "Thirty-seven WineHQ fixes for rendering and input behaviour that games reach, applied unchanged (maintainer decision 2026-10-26 to carry correctness fixes in these game-facing DLLs, not only crash, leak and hang fixes). wined3d: sphere-map texture coordinates in GLSL, backup DC state after reset, the right pixel format in GL present, raw and non-colour blits and resolves, self-blits with FX, texelFetchOffset on buffers and multisample textures, locking multisampled back buffers, swapchain latency. d3d9: the device vtbl initialization sequence hooks expect. ddraw: the ramp device, material activation, no rendering to the clipping window in exclusive fullscreen, render-target flags on v1 swapchain surfaces, execute-buffer vertices staged at execute time, system-memory depth fills. dxgi: fullscreen descriptions and invalid fullscreen modes, the WARP adapter. Input: dinput Escape and disconnected joysticks, HID link collections and hat switches, xinput controller removal and state, hidclass device type and write-report length, winebus axis report sizes for SDL, windows.gaming.input axis mapping and early callbacks.",
+      "testStrategy": "No self-contained check. A complete WoW64 build and an application run are required before tagging: several WineD3D games (D3D8, D3D9, D3D11 and a DirectDraw title if available) render and present as before, enter and leave fullscreen, and a game controller connected over USB or Bluetooth is detected, reads axes, buttons and the hat switch correctly in a game, and survives being unplugged and replugged.",
+      "verification": [
+        {
+          "path": "dlls/d3d8/device.c",
+          "contains": "            | WINED3D_SWAPCHAIN_ALLOW_MS_LOCKABLE_BACKBUFFER;"
+        },
+        {
+          "path": "dlls/d3d9/device.c",
+          "contains": "/* BFME Online Arena hooks the IDirect3DDevice9 vtbl. Instead of getting the"
+        },
+        {
+          "path": "dlls/ddraw/ddraw.c",
+          "contains": "        void *context, unsigned int version, DWORD desc_size)"
+        },
+        {
+          "path": "dlls/ddraw/ddraw_private.h",
+          "contains": "void material_activate(struct d3d_device *device, struct d3d_material *material);"
+        },
+        {
+          "path": "dlls/ddraw/device.c",
+          "contains": "            material_activate(device, m);"
+        },
+        {
+          "path": "dlls/ddraw/executebuffer.c",
+          "contains": "static bool d3d_execute_buffer_has_process_vertices(const struct d3d_execute_buffer *buffer)"
+        },
+        {
+          "path": "dlls/ddraw/material.c",
+          "contains": "void material_activate(struct d3d_device *device, struct d3d_material *material)"
+        },
+        {
+          "path": "dlls/ddraw/surface.c",
+          "contains": "static HRESULT ddraw_surface_clear(struct ddraw_surface *surface, const RECT *rect,"
+        },
+        {
+          "path": "dlls/dinput/joystick_hid.c",
+          "contains": "    status = HidP_GetUsageValue( HidP_Input, instance->wUsagePage, instance->wCollectionNumber, instance->wUsage,"
+        },
+        {
+          "path": "dlls/dxgi/device.c",
+          "contains": "    if (FAILED(hr = d3d11_swapchain_init(object, device, &wined3d_desc, fullscreen_desc)))"
+        },
+        {
+          "path": "dlls/dxgi/dxgi_private.h",
+          "contains": "    DXGI_SWAP_CHAIN_FULLSCREEN_DESC fullscreen_desc;"
+        },
+        {
+          "path": "dlls/dxgi/factory.c",
+          "contains": "    DXGI_SWAP_CHAIN_FULLSCREEN_DESC windowed_fullscreen_desc = {0};"
+        },
+        {
+          "path": "dlls/dxgi/swapchain.c",
+          "contains": "        DXGI_SWAP_CHAIN_FULLSCREEN_DESC test_fullscreen_desc = swapchain->fullscreen_desc;"
+        },
+        {
+          "path": "dlls/hidclass.sys/device.c",
+          "contains": "    if (params->report_len) orig_irp->IoStatus.Information = params->report_len;"
+        },
+        {
+          "path": "dlls/hidclass.sys/pnp.c",
+          "contains": "        if ((status = IoCreateDevice( device->DriverObject, sizeof(*pdo), NULL,"
+        },
+        {
+          "path": "dlls/windows.gaming.input/provider.c",
+          "contains": "static const DIOBJECTDATAFORMAT data_format_xusb_objs[] ="
+        },
+        {
+          "path": "dlls/winebus.sys/bus_sdl.c",
+          "contains": "                                 &relative_axis_usages[2 * i].Usage, TRUE, INT16_MIN, INT16_MAX))"
+        },
+        {
+          "path": "dlls/winebus.sys/hid.c",
+          "contains": "            USAGE(1, HID_USAGE_GENERIC_HATSWITCH),"
+        },
+        {
+          "path": "dlls/winebus.sys/unix_private.h",
+          "contains": "    USHORT axis_byte_offsets[64];"
+        },
+        {
+          "path": "dlls/wined3d/context_gl.c",
+          "contains": "        context_gl->internal_format_set = FALSE;"
+        },
+        {
+          "path": "dlls/wined3d/device.c",
+          "contains": "        device_gl->backup_dc = NULL;"
+        },
+        {
+          "path": "dlls/wined3d/glsl_shader.c",
+          "contains": "static void shader_glsl_add_offset_immdata_param(const struct wined3d_shader_context *ctx,"
+        },
+        {
+          "path": "dlls/wined3d/surface.c",
+          "contains": "                    !(dst_box->bottom <= src_box->top || src_box->bottom <= dst_box->top"
+        },
+        {
+          "path": "dlls/wined3d/swapchain.c",
+          "contains": "    pixel_format = &wined3d_adapter_gl(swapchain->device->adapter)->pixel_formats[context_gl->pixel_format - 1];"
+        },
+        {
+          "path": "dlls/wined3d/texture_gl.c",
+          "contains": "static bool raw_blitter_supported(enum wined3d_blit_op op, struct wined3d_texture *src_texture,"
+        },
+        {
+          "path": "dlls/wined3d/wined3d_private.h",
+          "contains": "HRESULT wined3d_swapchain_desc_validate_flags(const struct wined3d_swapchain_desc *desc);"
+        },
+        {
+          "path": "dlls/winexinput.sys/main.c",
+          "contains": "    fdo->xinput_state.ly_axis = 65535 - scale_value(ly, &fdo->ly_caps, 0, 65535);"
+        },
+        {
+          "path": "dlls/xinput1_3/main.c",
+          "contains": "    if (CancelIoEx(controller->device, &controller->hid.read_ovl))"
+        },
+        {
+          "path": "include/wine/wined3d.h",
+          "contains": "/* Allow the swapchain flag, but not actual locking */"
+        }
+      ]
+    },
+    {
+      "order": 177,
+      "path": "patches/upstream/0147-wine-11.17-winemac-flush-on-context-switch.patch",
+      "sha256": "f2633197472650e49734d42bb8f4d0ccb4afe89edad52045ccdfa5ed9b51e58c",
+      "kind": "upstream-backport",
+      "status": "active",
+      "risk": "low",
+      "firstWineRelease": "wine-11.17",
+      "upstreamCommits": [
+        "1c144117a874dac1ab136fab23b809f4bc7e4a82"
+      ],
+      "adaptation": "Upstream adds the flush to macdrv_context_activate(), which a later refactor split out of the base's macdrv_make_current(); the same line is placed at the matching point in macdrv_make_current(), after the release path and before the new context is selected, while glReserved2 still holds the context being left.",
+      "summary": "Flush the current OpenGL context's commands before another context becomes current on the thread, so a second context that reads the first one's results sees them.",
+      "testStrategy": "No self-contained check; covered by the WineD3D and OpenGL application runs for 0146.",
+      "verification": [
+        {
+          "path": "dlls/winemac.drv/opengl.c",
+          "contains": "    if (NtCurrentTeb()->glReserved2) funcs->p_glFlush();"
+        }
+      ]
     }
   ],
   "targetedReview": {
