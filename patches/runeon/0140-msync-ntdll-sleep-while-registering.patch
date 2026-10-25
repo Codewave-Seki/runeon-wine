@@ -1,0 +1,102 @@
+From: millia ampora <198710911+dappermint@users.noreply.github.com>
+Subject: [PATCH] ntdll: sleep instead of spinning while msync registers a wait
+ with the server
+
+Ported for CrossOver 26.3 from dappermint/winecx commit
+307f90fdb1b356ebb178bf704a0254e45f1db080 (branch wine1119),
+code unchanged. A downstream msync fix, not a
+WineHQ backport: WineHQ has no msync. Runs only when WINEMSYNC is set.
+
+between sending the register message and the pump acknowledging it, the client
+sat in a tight load loop on a cache line the pump itself writes, with no bound,
+no yield and no exit other than one of the objects becoming contended. the spin
+lasts as long as the pump takes to drain everything queued ahead of it, so under
+load every waiting thread burns a core the pump needs.
+
+spin briefly with a yield hint, then publish 3 in the slot and sleep on it. the
+pump wakes us when it swaps 3 out for 1. the sleep is bounded at 1ms so a wake
+we raced past costs latency rather than the wait.
+---
+--- a/server/msync.c
++++ b/server/msync.c
+@@ -515,8 +515,10 @@
+             add_tid( receive_message.shm_idx[i], tid );
+             if (i == count - 1)
+             {
+-                /* The client can stop spinning and safely start waiting now */
+-                __atomic_store_n( shm_tid_map + tid, 1, __ATOMIC_RELEASE );
++                /* The client can stop spinning and safely start waiting now.
++                 * 3 means it gave up spinning and is asleep on the slot. */
++                if (__atomic_exchange_n( shm_tid_map + tid, 1, __ATOMIC_SEQ_CST ) == 3)
++                    __ulock_wake( UL_COMPARE_AND_WAIT_SHARED, shm_tid_map + tid, 0 );
+             }
+         }
+     }
+--- a/dlls/ntdll/unix/msync.c
++++ b/dlls/ntdll/unix/msync.c
+@@ -101,8 +101,24 @@
+         uint32_t adjust = (timeout_us == 0) & (timeout_ns != 0);
+         return __ulock_wait( operation, addr, value, timeout_us + adjust );
+     }
++}
++
++static inline void spin_hint(void)
++{
++#if defined(__x86_64__) || defined(__i386__)
++    __builtin_ia32_pause();
++#elif defined(__aarch64__) || defined(__arm64__)
++    __asm__ __volatile__( "yield" ::: "memory" );
++#endif
+ }
+ 
++/* How long to spin waiting for the server to acknowledge a registration before
++ * sleeping instead. The pump normally gets there in well under a microsecond;
++ * this only matters when it is behind, which is exactly when the core it needs
++ * should not be busy spinning. Tune with synctest. */
++#define MSYNC_REGISTER_SPINS    256
++#define MSYNC_REGISTER_SLEEP_NS 1000000
++
+ /*
+  * Faster to directly do the syscall and inline everything, taken and slightly adapted
+  * from xnu/libsyscall/mach/mach_msg.c
+@@ -359,7 +375,7 @@
+ static NTSTATUS msync_wait_multiple( const int *objs, void **objs_shm, int alert_obj, void *alert_obj_shm,
+                                      int count, ULONGLONG *end, int tid )
+ {
+-    int ret, val;
++    int ret, val, spins;
+     int *addr = shm_tid_map + tid;
+     ULONGLONG ns_timeleft = 0;
+     mach_msg_return_t mr;
+@@ -373,13 +389,30 @@
+     if (mr != MACH_MSG_SUCCESS)
+         return STATUS_PENDING;
+ 
+-    while (__atomic_load_n( addr, __ATOMIC_ACQUIRE ) == 2)
++    /* The server moves us off 2 once it has us registered, or straight to 0 if
++     * one of the objects was already signalled. Spin for that briefly, then
++     * publish 3 and sleep, so the pump is not competing with us for a core. */
++    spins = 0;
++    while ((val = __atomic_load_n( addr, __ATOMIC_ACQUIRE )) >= 2)
+     {
+         if (check_shm_contention( objs_shm, alert_obj_shm, count, tid ))
+         {
+             server_remove_wait( msgh_id, objs, objs_shm, alert_obj, alert_obj_shm, count );
+             return STATUS_PENDING;
++        }
++
++        if (++spins <= MSYNC_REGISTER_SPINS)
++        {
++            spin_hint();
++            continue;
+         }
++
++        if (val == 2 && !__atomic_compare_exchange_n( addr, &val, 3, 0,
++                                                      __ATOMIC_SEQ_CST, __ATOMIC_ACQUIRE ))
++            continue;
++
++        /* Bounded, so a wake we raced past cannot park us here for good. */
++        ulock_wait( UL_COMPARE_AND_WAIT_SHARED | ULF_NO_ERRNO, addr, 3, MSYNC_REGISTER_SLEEP_NS );
+     }
+ 
+     do

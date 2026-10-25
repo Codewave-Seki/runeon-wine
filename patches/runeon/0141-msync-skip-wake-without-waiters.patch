@@ -1,0 +1,171 @@
+From: millia ampora <198710911+dappermint@users.noreply.github.com>
+Subject: [PATCH] ntdll: skip the wake syscall when nothing is parked on an
+ msync object
+
+Ported for CrossOver 26.3 from dappermint/winecx commit
+620d8c542fcd0b3bd8777f1d88f727fbed1c3a09 (branch wine1119),
+code unchanged. A downstream msync fix, not a
+WineHQ backport: WineHQ has no msync. Runs only when WINEMSYNC is set.
+
+multiple_waiters guards the mach send, but nothing guarded the ulock wake, so
+every SetEvent, ReleaseSemaphore and ReleaseMutex paid a __ulock_wake that
+returns ENOENT when no one is waiting. that is the common case.
+
+split the counter: multiple_waiters keeps counting the threads the server has
+parked on their tid slot, single_waiters counts the ones parked on the object's
+own word by msync_wait_single. the waiter publishes before its last look at the
+value and the signaller reads it after storing the value, both seq_cst, so a
+signal in the window either sees the waiter or leaves a value ulock compares
+against. a leaked count only costs a syscall, which is the safe direction.
+
+an uncontended signal now stays in user space. esync pays a write there, fsync
+a FUTEX_WAKE, ntsync an ioctl.
+---
+--- a/server/msync.c
++++ b/server/msync.c
+@@ -371,7 +371,8 @@
+     int high;
+     unsigned short msync_type;
+     unsigned short refcount;
+-    int multiple_waiters;
++    short multiple_waiters;   /* threads parked on their tid slot via the server */
++    short single_waiters;     /* threads parked on this object's own word */
+ };
+ 
+ static unsigned int last_allocated_idx = 1;
+@@ -414,7 +415,9 @@
+     static mach_msg_header_t send_header;
+     struct msync_shm *obj = (struct msync_shm *)shm;
+ 
+-    __ulock_wake( UL_COMPARE_AND_WAIT_SHARED | ULF_WAKE_ALL, (void *)shm, 0 );
++    if (__atomic_load_n( &obj->single_waiters, __ATOMIC_SEQ_CST ))
++        __ulock_wake( UL_COMPARE_AND_WAIT_SHARED | ULF_WAKE_ALL, (void *)shm, 0 );
++
+     if (!__atomic_load_n( &obj->multiple_waiters, __ATOMIC_SEQ_CST ))
+         return MACH_MSG_SUCCESS;
+ 
+@@ -736,6 +739,7 @@
+     shm->high = high;
+     shm->msync_type = type;
+     shm->multiple_waiters = 0;
++    shm->single_waiters = 0;
+     __atomic_store_n( &shm->refcount, 1, __ATOMIC_SEQ_CST );
+ 
+     return shm_idx;
+@@ -762,7 +766,8 @@
+     int unused;
+     unsigned short msync_type;
+     unsigned short refcount;
+-    int multiple_waiters;
++    short multiple_waiters;   /* threads parked on their tid slot via the server */
++    short single_waiters;     /* threads parked on this object's own word */
+ };
+ 
+ void msync_set_event( struct msync *msync )
+@@ -786,7 +791,8 @@
+     int count;  /* recursion count */
+     unsigned short msync_type;
+     unsigned short refcount;
+-    int multiple_waiters;
++    short multiple_waiters;   /* threads parked on their tid slot via the server */
++    short single_waiters;     /* threads parked on this object's own word */
+ };
+ 
+ void msync_abandon_mutexes( thread_id_t tid )
+--- a/dlls/ntdll/unix/msync.c
++++ b/dlls/ntdll/unix/msync.c
+@@ -195,7 +195,8 @@
+     int max;
+     unsigned short msync_type;
+     unsigned short refcount;
+-    int multiple_waiters;
++    short multiple_waiters;   /* threads parked on their tid slot via the server */
++    short single_waiters;     /* threads parked on this object's own word */
+ };
+ C_ASSERT(sizeof(struct semaphore) == 16);
+ 
+@@ -205,7 +206,8 @@
+     int unused;
+     unsigned short msync_type;
+     unsigned short refcount;
+-    int multiple_waiters;
++    short multiple_waiters;   /* threads parked on their tid slot via the server */
++    short single_waiters;     /* threads parked on this object's own word */
+ };
+ C_ASSERT(sizeof(struct event) == 16);
+ 
+@@ -215,7 +217,8 @@
+     int count;  /* recursion count */
+     unsigned short msync_type;
+     unsigned short refcount;
+-    int multiple_waiters;
++    short multiple_waiters;   /* threads parked on their tid slot via the server */
++    short single_waiters;     /* threads parked on this object's own word */
+ };
+ C_ASSERT(sizeof(struct mutex) == 16);
+ 
+@@ -317,9 +320,16 @@
+ static inline NTSTATUS msync_wait_single( int obj, void *obj_shm,
+                                           ULONGLONG *end, int tid )
+ {
+-    int ret, val = 0;
++    struct event *event_obj = (struct event *)obj_shm;
++    NTSTATUS status = STATUS_SUCCESS;
++    int ret = 0, val = 0;
+     ULONGLONG ns_timeleft = 0;
+ 
++    /* Publish before the last look at the value. A signal landing in that
++     * window either sees us and wakes, or has not happened yet, in which case
++     * ulock compares the value for us and does not put us to sleep. */
++    __atomic_add_fetch( &event_obj->single_waiters, 1, __ATOMIC_SEQ_CST );
++
+     do 
+     {
+         if (((struct mutex *)obj_shm)->msync_type == MSYNC_MUTEX)
+@@ -329,21 +339,31 @@
+                 val = tid;
+         }
+ 
+-        if (__atomic_load_n( (int *)obj_shm, __ATOMIC_ACQUIRE ) != val)
+-            return STATUS_PENDING;
++        if (__atomic_load_n( (int *)obj_shm, __ATOMIC_SEQ_CST ) != val)
++        {
++            status = STATUS_PENDING;
++            break;
++        }
+ 
+         if (end)
+         {
+             ns_timeleft = update_timeout( *end ) * 100;
+-            if (!ns_timeleft) return STATUS_TIMEOUT;
++            if (!ns_timeleft)
++            {
++                status = STATUS_TIMEOUT;
++                break;
++            }
+         }
+         ret = ulock_wait( UL_COMPARE_AND_WAIT_SHARED | ULF_NO_ERRNO, obj_shm, val, ns_timeleft );
+     } while (ret == -EINTR || ret == -EFAULT);
+ 
+     if (ret == -ETIMEDOUT)
+-        return STATUS_TIMEOUT;
++        status = STATUS_TIMEOUT;
+ 
+-    return STATUS_SUCCESS;
++    if (__atomic_sub_fetch( &event_obj->single_waiters, 1, __ATOMIC_SEQ_CST ) < 0)
++        __atomic_store_n( &event_obj->single_waiters, 0, __ATOMIC_SEQ_CST );
++
++    return status;
+ }
+ 
+ static inline int check_shm_contention( void **objs_shm, void *alert_obj_shm, int count, int tid )
+@@ -676,7 +696,8 @@
+     __thread static mach_msg_header_t send_header;
+     struct event *event_obj = (struct event *)shm;
+ 
+-    __ulock_wake( UL_COMPARE_AND_WAIT_SHARED | ULF_WAKE_ALL, shm, 0 );
++    if (__atomic_load_n( &event_obj->single_waiters, __ATOMIC_SEQ_CST ))
++        __ulock_wake( UL_COMPARE_AND_WAIT_SHARED | ULF_WAKE_ALL, shm, 0 );
+ 
+     if (!__atomic_load_n( &event_obj->multiple_waiters, __ATOMIC_SEQ_CST ))
+         return;

@@ -1,0 +1,44 @@
+From: millia ampora <198710911+dappermint@users.noreply.github.com>
+Subject: [PATCH] ntdll: skip the exchange when setting an already-signalled
+ msync event
+
+Ported for CrossOver 26.3 from dappermint/winecx commit
+ef72fdb55b9274f61ba42d3c4e7a6981179bd455 (branch wine1119),
+code unchanged except as noted below. A downstream msync fix, not a
+WineHQ backport: WineHQ has no msync. Runs only when WINEMSYNC is set.
+
+Adaptation: a sequentially consistent fence before the early read keeps
+SetEvent a full barrier when the event is already set, as it is on
+Windows; the fence does not take the cache line exclusive, which is
+what the original change avoids.
+
+SetEvent on an event that is already set changes nothing and wakes nobody, but
+the unconditional exchange still takes the cache line exclusive. a thread that
+signals in a loop, which is what a producer feeding a worker pool looks like,
+then holds the line against every waiter trying to take the event.
+
+read first and return when it is already set. the exchange still runs for the
+0 to 1 transition, which is the only case that has to be atomic against another
+signaller.
+---
+--- a/dlls/ntdll/unix/msync.c
++++ b/dlls/ntdll/unix/msync.c
+@@ -744,6 +744,18 @@
+ {
+     struct event *event = get_shm( obj );
+     LONG current;
++
++    /* Read before the exchange. Setting an event that is already set changes
++     * nothing and wakes nobody, but the exchange still takes the line
++     * exclusive, and a thread that signals in a loop then holds it against
++     * every waiter trying to take the event. */
++    /* Keep SetEvent a full barrier when it returns early, as on Windows. */
++    __atomic_thread_fence( __ATOMIC_SEQ_CST );
++    if (__atomic_load_n( &event->signaled, __ATOMIC_ACQUIRE ))
++    {
++        if (prev_state) *prev_state = 1;
++        return STATUS_SUCCESS;
++    }
+ 
+     if (!(current = __atomic_exchange_n( &event->signaled, 1, __ATOMIC_SEQ_CST )))
+         signal_all( (void *)event, obj );

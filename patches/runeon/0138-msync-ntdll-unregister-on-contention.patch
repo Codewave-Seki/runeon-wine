@@ -1,0 +1,38 @@
+From: millia ampora <198710911+dappermint@users.noreply.github.com>
+Subject: [PATCH] ntdll: unregister from the server when an msync wait bails
+ out on contention
+
+Ported for CrossOver 26.3 from dappermint/winecx commit
+9be392b3b4b845a87b8b7a4d98fbcd8ded682a04 (branch wine1119),
+code unchanged. A downstream msync fix, not a
+WineHQ backport: WineHQ has no msync. Runs only when WINEMSYNC is set.
+
+the spin loop returns STATUS_PENDING as soon as one of the objects becomes
+contended, but it only decremented multiple_waiters locally and never sent
+the unregister message, so the tid stayed registered on every object in the
+set. it also skipped the alert object's counter, which then never falls back
+to zero and forces a mach send on every apc delivery for the rest of the
+thread's life.
+
+server_remove_wait already does both decrements and sends the message, and
+it is ordered behind the register we just sent on the same mach port.
+---
+--- a/dlls/ntdll/unix/msync.c
++++ b/dlls/ntdll/unix/msync.c
+@@ -377,15 +377,7 @@
+     {
+         if (check_shm_contention( objs_shm, alert_obj_shm, count, tid ))
+         {
+-            int i;
+-            for (i = 0; i < count; i++)
+-            {
+-                struct event *obj = (struct event *)objs_shm[i];
+-
+-                int refs = __atomic_sub_fetch( &obj->multiple_waiters, 1, __ATOMIC_SEQ_CST);
+-                if (refs < 0)
+-                    __atomic_store_n( &obj->multiple_waiters, 0, __ATOMIC_SEQ_CST);
+-            }
++            server_remove_wait( msgh_id, objs, objs_shm, alert_obj, alert_obj_shm, count );
+             return STATUS_PENDING;
+         }
+     }

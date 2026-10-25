@@ -463,3 +463,41 @@ Each taken commit applies to that tree in upstream order, which shows that the b
 `scripts/static-check.sh` and `scripts/integration-check.sh` pass for `.23`. Every commit applies in order without fuzz, except the two adapted ones. A complete i386/x86_64 build, Wine's own tests for the affected modules compared against `.22`, and product acceptance passed before `.23` was tagged.
 
 `upstreamAuditThrough` stays at `wine-11.15`. The base manifest records `upstreamSweepThrough: wine-11.20`.
+
+<a id="msync-fix-series"></a>
+
+## msync fix series from dappermint/winecx
+
+Candidate patch set `cx26.3-wine11.0-runeon.25` adds `patches/runeon/0137`–`0143` after `0136`. msync is CrossOver's Mach-based synchronisation path, enabled only when `WINEMSYNC` is set; WineHQ has no msync, so there is no upstream fix to backport. The source is the `wine1119` branch of [dappermint/winecx](https://github.com/dappermint/winecx), a CrossOver 26.3 / Wine 11.0 tree like the pinned base. All seven commits are by millia ampora and apply in branch order, with zero fuzz, to the pinned archive plus `0001`–`0136`. No commit on that branch touched msync after 2026-08-25.
+
+`ntdll` and `server` are ABI-sensitive. The maintainer approved the series as a whole on 2026-10-25; the approval does not widen the rule for other patches. Every changed line is in `server/msync.c` or `dlls/ntdll/unix/msync.c` and runs only when `do_msync()` is true, so without `WINEMSYNC` the runtime behaves as the base. The Mach message format and the Unix-call ABI are unchanged; `0141` changes the meaning of a shared object field (below).
+
+### Defect reproduced on the base
+
+`tests/msync-wait-probe.c` in leak mode has four threads wait for any of a never-signalled event and a semaphore that two threads keep releasing. On `runeon.24`, in a clean prefix with `WINEMSYNC=1`, the server node pool (`0x80000` nodes) ran out within two minutes, after which every registration printed `msync: warn: node memory pool exhausted` and fell back to `malloc`: wineserver grew from about 22 MB to 181 MB over the x86_64 and i686 runs, with 48 million warnings. With `WINEMSYNC=0` the same run printed none and wineserver stayed at about 18 MB.
+
+### Taken
+
+| Patch | Commit | Change |
+|---|---|---|
+| `0137` | `8df18268539a` | The pump unregistered already-added objects only when `i > 1`, so a wait whose second object was signalled left a node on the first. Defect fix. |
+| `0138` | `9be392b3b4b8` | A wait-any that gave up on contention during registration never sent the unregister message, leaving the tid on every object and the alert counter above zero. Defect fix. |
+| `0139` | `3a7a712d6616` | Pump queue limit 50 → `MACH_PORT_QLIMIT_MAX` (1024); `WINEMSYNC_QLIMIT` clamped. Performance. |
+| `0140` | `307f90fdb1b3` | The client sleeps on its tid slot (value 3, 1 ms bound) instead of spinning while the pump acknowledges a registration; adds `WINEMSYNC_SPINS`. Performance. |
+| `0141` | `620d8c542fcd` | Splits `int multiple_waiters` into two `short` counters and skips `__ulock_wake` when no thread waits on the object word. Object size and other field offsets are unchanged; server and client must come from the same build. Every signal path stores with a full barrier before it reads the count. Performance. |
+| `0142` | `ef72fdb55b92` | SetEvent on a set event returns after a read instead of an exchange. Adapted: a sequentially consistent fence before the read keeps SetEvent a full barrier, as on Windows. Performance. |
+| `0143` | `6d316146c2fa` | Registration spin count set to 0, as measured by the author. Performance. |
+
+The performance commits are not defect fixes and would normally stay out (§3 of `CLAUDE.md`). The maintainer took them because they run only in the opt-in msync path, which users enable for performance.
+
+### Left out after review
+
+| Change | Reason |
+|---|---|
+| `a7ef7b3b` (wake one waiter for auto events and mutexes) | Single-object waiters and wait-all waiters sleep in the same ulock queue on the object word. A wait-all thread woken alone moves on to its next unsignalled object without taking this one, so the object stays signalled while the remaining waiters sleep: a lost wake-up that Windows does not have, possibly a hang. Its gain was 68 → 50 ms in the author's benchmark together with `ef72fdb5`. |
+| Highball `0014` | Carries the same two unregister fixes as `0137` and `0138`, plus rate-limiting the pool warning, which would hide the leak's symptom rather than fix it. |
+| Highball `0005` (yield after setting an auto-reset event) | Also changes the server sync path every default user runs. Its msync half is a scheduling heuristic for programs that rely on Windows' priority boost, against the direction of this series, and was not reproduced here. |
+
+### Validation limits
+
+Static and integration checks prove the series applies and its anchors are present. A complete i386/x86_64 WoW64 build, the probe on both runtimes and Steam with representative games are required before the patch set is tagged. The probe does not isolate each patch's effect, mutex abandonment or alertable waits.

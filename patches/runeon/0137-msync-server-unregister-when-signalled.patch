@@ -1,0 +1,25 @@
+From: millia ampora <198710911+dappermint@users.noreply.github.com>
+Subject: [PATCH] server: unregister the tids we already added when msync finds
+ an object signalled
+
+Ported for CrossOver 26.3 from dappermint/winecx commit
+8df18268539a6ff3ef8bd17f4e0e88766342b3e9 (branch wine1119),
+code unchanged. A downstream msync fix, not a
+WineHQ backport: WineHQ has no msync. Runs only when WINEMSYNC is set.
+
+the early out in the message pump guards the cleanup with i > 1, so the
+i == 1 case walks away leaving object 0 still holding this tid. the pump wakes
+the client, which moves on, and the node survives until that object is next
+signalled, when that signal wakes a thread no longer waiting on it.
+---
+--- a/server/msync.c
++++ b/server/msync.c
+@@ -508,7 +508,7 @@
+             val = __atomic_load_n( &obj->low, __ATOMIC_SEQ_CST );
+             if ((is_mutex && (val == 0 || val == ~0 || val == tid)) || (!is_mutex && val != 0))
+             {
+-                if (i > 1) unregister_wait( &receive_message, tid, i );
++                if (i > 0) unregister_wait( &receive_message, tid, i );
+                 wake_tid( tid );
+                 break;
+             }
