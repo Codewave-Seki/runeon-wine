@@ -513,3 +513,39 @@ A complete i386/x86_64 WoW64 build of this patch set, before the abandonment ada
 ### Validation limits
 
 Static and integration checks prove the series applies and its anchors are present. The table above shows the leak gone and no measurable change without `WINEMSYNC`. The abandonment adaptation is checked by code review only and must be in the build that is tagged. The probe covers auto-reset events with single-object waiters, wait-any registrations and semaphores in wait-any; it does not cover single-object waits on semaphores or manual events, `ReleaseMutex`, mutex abandonment, wait-all or alertable waits, and does not isolate each patch's effect. A lost wake-up shows only as a hang, so probe runs need an external timeout. Steam with representative games is still required before the patch set is tagged.
+
+<a id="gl-present-on-swap"></a>
+
+## OpenGL surface presentation on swap (Wine 11.3–11.4)
+
+Candidate patch set `cx26.3-wine11.0-runeon.26` adds `patches/upstream/0144` after `0143`: WineHQ commits `62da9c02a7` (wine-11.3, Paul Gofman) and `b5ab3b155a` (wine-11.4, Rémi Bernon), applied unchanged as one patch because they decide one behaviour, which OpenGL surface a window shows. Upstream took them in this order and the second relies on the first.
+
+`winemac.drv` and `win32u` are ABI-sensitive (§3 of `CLAUDE.md`). The maintainer approved this patch individually on 2026-10-25; the approval does not widen the rule for other patches. Neither commit changes a structure, export or driver entry point: one flag argument in `context_sync_drawables()` and the bodies of `macdrv_surface_flush()` and `macdrv_surface_swap()`.
+
+### Defect reproduced on the base
+
+Amnesia: Memories (D3D9 through WineD3D) plays its opening videos through the DirectShow Video Mixing Renderer in windowless mode, clipped to the game's window. On `runeon.25`, skipping the video left the window on its last frame while the game kept running: menu sounds answered input and the main thread kept calling `Present`. A run with `WINEDEBUG=+quartz,+d3d9,+wgl,+macdrv` showed the mechanism:
+
+- the game's device created its surface on the window when it started, and every later swap went to it;
+- the first video's device created a second surface on the same window; `macdrv_client_surface_present()` made it the window's visible view and hid the game's; the next videos reused it through `get_window_unused_drawable()`;
+- skipping stopped the graph and released the presenter, but that surface had no detach or destroy, and the game's swaps never presented its own surface again. In the base, `macdrv_surface_swap()` only flushes the context; only the Vulkan path calls `client_surface_present()`.
+
+The same "skipping the intro video freezes the screen on a Mac" report exists for other games on CrossOver, which fits this mechanism, but no WineHQ bug is linked to these commits.
+
+### Taken
+
+| Patch | Commits | Change |
+|---|---|---|
+| `0144` | `62da9c02a7`, `b5ab3b155a` | `macdrv_surface_swap()` presents the swapped surface, and `macdrv_surface_flush()` presents it when opengl32 asks after front-buffer drawing; `context_sync_drawables()` no longer presents a drawable merely because a context was made current on it. Defect fix. |
+
+Both apply with zero fuzz on top of `0143`; `0080`, `0114` and `0117` also touch `dlls/winemac.drv/opengl.c` and are unaffected. The pre-images in the base match upstream exactly, so there is no adaptation.
+
+### Left out after review
+
+| Change | Reason |
+|---|---|
+| `02d01544dd` (DC own drawable in `get_updated_drawable()` on flush) | Same area and release, but it addresses a different path (flushing through a DC whose drawable differs from the context's) and the defect above does not need it. |
+
+### Verification required before tagging
+
+No self-contained check exists: the behaviour needs Cocoa views and CGL contexts. A complete WoW64 build and an application run must show the game's own frames after the skipped video, and other WineD3D games and the Steam client must present as before.

@@ -1,0 +1,67 @@
+From: Wine upstream contributors (see commit list)
+Subject: [PATCH] winemac.drv: Show the OpenGL surface that is being presented.
+
+Backport of WineHQ commits 62da9c02a7 (wine-11.3, Paul Gofman) and
+b5ab3b155a (wine-11.4, Rémi Bernon), applied unchanged.
+
+A window shows one client view at a time: macdrv_client_surface_present()
+hides the previous view and shows the new one, and every new surface is
+presented when it is created. In the base, an OpenGL swap never presents its
+surface. When a second device draws to a window, as the DirectShow Video
+Mixing Renderer does in windowless mode on the game's window, its surface
+becomes the visible view. After that device is gone the application keeps
+swapping its own surface, which stays hidden, so the window shows the last
+video frame while the game runs underneath.
+
+b5ab3b155a presents the surface on every swap, and on the flush opengl32
+requests after front-buffer drawing (GL_FLUSH_PRESENT), so the surface being
+drawn is the one shown, as on Windows where all contexts on a window draw to
+the same buffers. 62da9c02a7, which upstream
+took first, stops context_sync_drawables() from presenting a drawable merely
+because a context was made current on it; with b5ab3b155a in place that
+would let any context switch steal the window's view.
+
+diff --git a/dlls/win32u/opengl.c b/dlls/win32u/opengl.c
+index 3b76f56e46..968d3b7dfd 100644
+--- a/dlls/win32u/opengl.c
++++ b/dlls/win32u/opengl.c
+@@ -1856,7 +1856,7 @@ static BOOL context_sync_drawables( struct opengl_context *context, HDC draw_hdc
+         if (new_read != new_draw) opengl_drawable_set_context( new_draw, context );
+ 
+         opengl_drawable_flush( new_read, new_read->interval, 0 );
+-        opengl_drawable_flush( new_draw, new_draw->interval, GL_FLUSH_PRESENT );
++        opengl_drawable_flush( new_draw, new_draw->interval, 0 );
+     }
+ 
+     if (ret)
+diff --git a/dlls/winemac.drv/opengl.c b/dlls/winemac.drv/opengl.c
+index e60fc04a82..7040bbd5a8 100644
+--- a/dlls/winemac.drv/opengl.c
++++ b/dlls/winemac.drv/opengl.c
+@@ -2020,6 +2020,11 @@ static void macdrv_surface_flush(struct opengl_drawable *base, UINT flags)
+     if (!context) return;
+     if (flags & GL_FLUSH_INTERVAL) set_swap_interval(context, base->interval);
+     if (flags & GL_FLUSH_UPDATED) make_context_current(context, context->read_view == client->cocoa_view);
++    if (flags & GL_FLUSH_PRESENT)
++    {
++        macdrv_flush_opengl_context(context->context);
++        client_surface_present(base->client);
++    }
+ }
+ 
+ 
+@@ -2760,7 +2765,13 @@ static BOOL macdrv_surface_swap(struct opengl_drawable *base)
+     TRACE("%s context %p/%p/%p\n", debugstr_opengl_drawable(base), context, (context ? context->context : NULL),
+           (context ? context->cglcontext : NULL));
+ 
+-    macdrv_flush_opengl_context(context->context);
++    if (context)
++    {
++        struct macdrv_client_surface *client = impl_from_client_surface(base->client);
++        make_context_current(context, context->read_view == client->cocoa_view);
++        macdrv_flush_opengl_context(context->context);
++    }
++    client_surface_present(base->client);
+     return TRUE;
+ }
+ 
