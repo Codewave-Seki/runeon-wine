@@ -1,16 +1,16 @@
 From: Wine upstream contributors (see commit list)
 Subject: [PATCH] Carry WineHQ fixes in ntdll, win32u and server.
 
-Forty WineHQ commits from wine-11.1 to master after wine-11.20, applied
-unchanged in upstream order; test-only hunks are omitted. They make
-ntdll, win32u and wineserver behave as Windows does in cases games,
-launchers and installers reach: time zones and timers, locale data,
-file and volume queries, process memory reads, system threads, bitmap
-alpha, glyph outlines, window class and atom handling, window surfaces
-and drag and drop. None changes the wineserver protocol, a unix-call
-table or a structure shared between modules, and none touches code
-CrossOver changed (maintainer decision 2026-10-26). See
-docs/upstream-reviews.md, "ntdll, win32u and server fixes".
+Thirty-nine WineHQ commits from wine-11.1 to master after wine-11.20,
+applied unchanged in upstream order; test-only hunks are omitted. They
+make ntdll, win32u and wineserver behave as Windows does in cases games,
+launchers and installers reach: time zones and timers, locale data, file
+and volume queries, process memory reads, system threads, bitmap alpha,
+glyph outlines, window class and atom handling, window surfaces and drag
+and drop. None changes the wineserver protocol, a unix-call table or a
+structure shared between modules, and none touches code CrossOver
+changed (maintainer decision 2026-10-26). See docs/upstream-reviews.md,
+"ntdll, win32u and server fixes".
 
   8c1dcfc77d (wine-11.1, Paul Gofman): ntdll: Don't fill output handle on error in LdrLoadDll().
   5aa9e20efe (wine-11.3, Zhiyi Zhang): win32u: Ignore alpha channels for 32-bit DIB bitmaps.
@@ -42,7 +42,6 @@ docs/upstream-reviews.md, "ntdll, win32u and server fixes".
   b4622e972d (wine-11.16, Matteo Bruni): win32u: Fix get_locale_data() table entry lookup.
   63f8091369 (wine-11.17, Nikolay Sivov): server: Fix freeing unlinked windows.
   2ecc2f84b4 (wine-11.17, Evan Morse): ntdll: Return the object manager status from NtQueryFullAttributesFile.
-  32324bf1ef (wine-11.17, Alexandre Julliard): ntdll: Return the default user UI language for LOCALE_CUSTOM_UI_DEFAULT.
   0405e200e2 (wine-11.17, Rémi Bernon): win32u: Fix some truncated query_renderer_integer memcpy.
   3e132b3cbb (wine-11.17, Rémi Bernon): win32u: Avoid possible buffer overflow in NtUserGetAtomName.
   1fe3600b16 (wine-11.18, Alistair Leslie-Hughes): server: Correct sizeof usage.
@@ -66,45 +65,6 @@ index e1aea34..daf3bb7 100644
  
      RtlLeaveCriticalSection( &loader_section );
      RtlFreeHeap( GetProcessHeap(), 0, dllname );
-diff --git a/dlls/ntdll/locale.c b/dlls/ntdll/locale.c
-index 3d5dae2..b174276 100644
---- a/dlls/ntdll/locale.c
-+++ b/dlls/ntdll/locale.c
-@@ -989,7 +989,7 @@ NTSTATUS WINAPI RtlLcidToLocaleName( LCID lcid, UNICODE_STRING *str, ULONG flags
- {
-     const NLS_LOCALE_LCID_INDEX *entry;
-     const WCHAR *name;
--    ULONG len;
-+    ULONG len, idx;
- 
-     if (!str) return STATUS_INVALID_PARAMETER_2;
- 
-@@ -1003,17 +1003,22 @@ NTSTATUS WINAPI RtlLcidToLocaleName( LCID lcid, UNICODE_STRING *str, ULONG flags
-         lcid = system_lcid;
-         break;
-     case LOCALE_CUSTOM_UI_DEFAULT:
--        return STATUS_UNSUCCESSFUL;
-+        idx = user_ui_languages_default[0];
-+        name = locale_strings + get_locale_data( locale_table, idx )->sname;
-+        goto found;
-     case LOCALE_CUSTOM_UNSPECIFIED:
-         return STATUS_INVALID_PARAMETER_1;
-     }
- 
-     if (!(entry = find_lcid_entry( locale_table, lcid ))) return STATUS_INVALID_PARAMETER_1;
-+    idx = entry->idx;
-+    name = locale_strings + entry->name;
-+
-+ found:
-     /* reject neutral locale unless flag 2 is set */
--    if (!(flags & 2) && !get_locale_data( locale_table, entry->idx )->inotneutral)
-+    if (!(flags & 2) && !get_locale_data( locale_table, idx )->inotneutral)
-         return STATUS_INVALID_PARAMETER_1;
- 
--    name = locale_strings + entry->name;
-     len = *name++;
- 
-     if (alloc)
 diff --git a/dlls/ntdll/sync.c b/dlls/ntdll/sync.c
 index d231944..3a372a0 100644
 --- a/dlls/ntdll/sync.c

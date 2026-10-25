@@ -3261,7 +3261,7 @@
     {
       "order": 178,
       "path": "patches/upstream/0148-wine-11.20-ntdll-win32u-server-fixes.patch",
-      "sha256": "be36e5794b5890a60b5f8775cc2eac54dd744a8ed614dcca90f87c45cf29c96c",
+      "sha256": "b3d3188dc5c0c108245495458f68846a6bcf2ab0d16a6187e07a2e790c455302",
       "kind": "upstream-backport",
       "status": "active",
       "risk": "medium",
@@ -3297,7 +3297,6 @@
         "b4622e972d6866ff05be8781b673385f6f7171f5",
         "63f8091369cf7411dc9b4745b7527dd11560fa37",
         "2ecc2f84b45ec42afbf1725d756181180a8204b1",
-        "32324bf1efc965753782035e87665dde6797d061",
         "0405e200e2b24aa5a388fb631b420b0a3f51719a",
         "3e132b3cbb99a71d9ce0f61c7f7521438891865c",
         "1fe3600b163de189b3160eb2922bff4bedc7204d",
@@ -3308,16 +3307,12 @@
         "1c4cb6c6bfc50811de970d566078d00088238d09",
         "06c0cb5c5eccd96a6db306a505d943bef6c6fd08"
       ],
-      "summary": "Forty WineHQ fixes in ntdll, win32u and wineserver that make them behave as Windows does where games, launchers and installers reach them, applied unchanged; the maintainer approved this group on 2026-10-26 under the rule that it changes no wineserver protocol, unix-call table or structure shared between modules and touches no CrossOver change. Time: threadpool timers across a system time change, time zones with inverse DST in ntdll and wineserver. Locale: LOCALE_CUSTOM_UI_DEFAULT, win32u locale table lookup. Files: anonymous files, empty volume information instead of failure, Unix paths without a drive, NtQueryFullAttributesFile status, NtUnlockFile on an unlocked range, fully initialized directory entries, file mode masks. Processes and sync: zero-length process memory reads, no context access or debug events for system threads, LdrLoadDll output on error, semaphore errors in critical-section release (master after wine-11.20), fiber data initial value. Windows and drawing: 32-bit DIB alpha, glyph outline size, freeing unlinked windows, NtUserGetAtomName overflow, class registration thread safety, window shape and surface flushing, D3D present rect, WM_PRINT clip, tool-window minimum width, signed drag-and-drop coordinates, monitors without an id, DirectX registry sizes, renderer query sizes, DPI contexts when reparenting. Network and server: AFD connect failure events, IPv6 MTU discovery, kernel notification event state, a d3dkmt leak, a sizeof fix.",
+      "summary": "Thirty-nine WineHQ fixes in ntdll, win32u and wineserver that make them behave as Windows does where games, launchers and installers reach them, applied unchanged; the maintainer approved this group on 2026-10-26 under the rule that it changes no wineserver protocol, unix-call table or structure shared between modules and touches no CrossOver change. Time: threadpool timers across a system time change, time zones with inverse DST in ntdll and wineserver. Locale: win32u locale table lookup. Files: anonymous files, empty volume information instead of failure, Unix paths without a drive, NtQueryFullAttributesFile status, NtUnlockFile on an unlocked range, fully initialized directory entries, file mode masks. Processes and sync: zero-length process memory reads, no context access or debug events for system threads, LdrLoadDll output on error, semaphore errors in critical-section release (master after wine-11.20), fiber data initial value. Windows and drawing: 32-bit DIB alpha, glyph outline size, freeing unlinked windows, NtUserGetAtomName overflow, class registration thread safety, window shape and surface flushing, D3D present rect, WM_PRINT clip, tool-window minimum width, signed drag-and-drop coordinates, monitors without an id, DirectX registry sizes, renderer query sizes, DPI contexts when reparenting. Network and server: AFD connect failure events, IPv6 MTU discovery, kernel notification event state, a d3dkmt leak, a sizeof fix.",
       "testStrategy": "No self-contained check. A complete WoW64 build and an application run are required before tagging: the Steam client logs in, downloads and launches several games of each graphics route; an installer reports free space; a launcher that opens child windows and tool windows draws them; text renders in a GDI-drawn game or launcher; time shown in a game matches the system clock.",
       "verification": [
         {
           "path": "dlls/ntdll/loader.c",
           "contains": "    if (wm) *hModule = wm->ldr.DllBase;"
-        },
-        {
-          "path": "dlls/ntdll/locale.c",
-          "contains": "        idx = user_ui_languages_default[0];"
         },
         {
           "path": "dlls/ntdll/sync.c",

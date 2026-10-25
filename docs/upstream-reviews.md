@@ -671,7 +671,7 @@ No self-contained check. A complete WoW64 build and an application run must show
 
 ## ntdll, win32u and server fixes (Wine 11.1 to master)
 
-Candidate patch set `cx26.3-wine11.0-runeon.27` also adds `patches/upstream/0148`: forty WineHQ commits applied unchanged in upstream order, test-only hunks omitted, carried under the `ntdll`/`win32u`/`server` exception in §3 of `CLAUDE.md` (maintainer decision 2026-10-26). One, `06c0cb5c5e`, is on master after `wine-11.20` and not yet in a release.
+Candidate patch set `cx26.3-wine11.0-runeon.27` also adds `patches/upstream/0148`: thirty-nine WineHQ commits applied unchanged in upstream order, test-only hunks omitted, carried under the `ntdll`/`win32u`/`server` exception in §3 of `CLAUDE.md` (maintainer decision 2026-10-26). One, `06c0cb5c5e`, is on master after `wine-11.20` and not yet in a release.
 
 ### Selection
 
@@ -688,7 +688,7 @@ Of the 753 commits in `wine-11.0..master` that change `dlls/ntdll`, `dlls/win32u
 | Area | Commits |
 |---|---|
 | Time | `f6c53a242a` threadpool timers across a system time change; `9c027fac91`, `bfae6eb8b4` time zones with inverse DST (wineserver and ntdll) |
-| Locale | `32324bf1ef` `LOCALE_CUSTOM_UI_DEFAULT` returns the user UI language; `b4622e972d` win32u `get_locale_data()` table lookup |
+| Locale | `b4622e972d` win32u `get_locale_data()` table lookup |
 | Files and volumes | `1ebcc3fb9b` anonymous files; `c403790475` empty volume information instead of failure; `e8781e7c8d` Unix paths without a drive (WineHQ bug 60021); `2ecc2f84b4` `NtQueryFullAttributesFile` status; `93939c0659` `NtUnlockFile` on an unlocked range (WineHQ bug 59711); `dab7d8deda`, `5f881b67ea` directory entries fully initialized; `bf98c93e00` file mode mask comparison |
 | Processes and synchronisation | `c69173c460` zero-length process memory reads; `720ea07775`, `ca175f340c` no context access or debug events for system threads; `8c1dcfc77d` `LdrLoadDll` leaves the output handle alone on error; `06c0cb5c5e` semaphore errors ignored when releasing a critical section; `5f47658c5c` fiber data starts at 0x1e00 as on Windows |
 | Windows and drawing | `5aa9e20efe` 32-bit DIB alpha ignored; `66a1d04995` glyph outline size (WineHQ bug 58314); `63f8091369` freeing unlinked windows; `3e132b3cbb` `NtUserGetAtomName` overflow; `27aad48fa8` class registration thread safety (a deadlock upstream saw); `4d6a6cd036`, `65a3d0cf1c` window shape and surface flushing; `9ad182656c` D3D present rect in screen coordinates; `79e718d7bf` `WM_PRINT` clip for children; `336df56a67` tool-window minimum width (WineHQ bug 60276); `e45f9ad9bd` signed drag-and-drop coordinates (winemac packs them the same way); `1c4cb6c6bf` monitors without an id; `da3b638c85` DirectX registry value sizes; `0405e200e2` renderer query sizes; `730d06d7b7` DPI awareness contexts when reparenting; `b1a9794b14` builtin class id for menus |
@@ -698,6 +698,7 @@ Of the 753 commits in `wine-11.0..master` that change `dlls/ntdll`, `dlls/win32u
 
 | Commits | Reason |
 |---|---|
+| `32324bf1ef` (`LOCALE_CUSTOM_UI_DEFAULT` returns the user UI language) | Uses `user_ui_languages_default`, added by the preferred-UI-language series (`c1197354df` … `f91f4404dd`) the base lacks; it would not compile. Found by the identifier check. |
 | `e44e721ca9` (menu name ANSI conversion) | Its `user32/class.c` hunk sits next to `0063`. |
 | `5e50024ec7`, `bf2a7ffd7a` (`LdrLoadDll` and `NtFlushVirtualMemory` prototypes) | Change prototypes in `winternl.h` and spec files shared between modules. |
 | `f5e390911f` | ARM64EC only. |
