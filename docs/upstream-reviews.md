@@ -566,7 +566,7 @@ No self-contained check exists: the behaviour needs Cocoa views and CGL contexts
 
 ## macOS fix batch 1 (Wine 11.0 to master, 2026-10-22)
 
-Candidate patch set `cx26.3-wine11.0-runeon.27` adds `patches/upstream/0145` after `0144`: twelve WineHQ commits applied unchanged in upstream order, test-only hunks omitted. It is the first batch carried under the macOS-fix exception in §3 of `CLAUDE.md` (maintainer decision 2026-10-26). Before that rule, every sweep left `winemac.drv`, `win32u` and `ntdll` out, so most macOS fixes since `wine-11.0` were never carried.
+Candidate patch set `cx26.3-wine11.0-runeon.27` adds `patches/upstream/0145` after `0144`: nine WineHQ commits applied unchanged in upstream order, test-only hunks omitted. Seven are the first batch carried under the macOS-fix exception in §3 of `CLAUDE.md` (maintainer decision 2026-10-26); `92df8e37e5` is an ordinary user-mode fix and `d56f36c1aa` was approved individually. Before that rule, every sweep left `winemac.drv`, `win32u` and `ntdll` out, so most macOS fixes since `wine-11.0` were never carried.
 
 ### Selection
 
@@ -577,33 +577,32 @@ Candidates are every commit in `wine-11.0..master` (master at `e3c3d34867`, 2026
 - 93 do not apply. Almost all belong to the upstream rework of OpenGL contexts and client surfaces in `win32u` and `winemac.drv`, or to clean-ups; the fixes among them need that rework or an adaptation and are deferred.
 - 24 more, found through the `__APPLE__` search, move CD-ROM and DVD ioctls from `ntdll` to `mountmgr`, add Linux syscall emulation, or reorder address-space setup: features and refactors.
 
-For each taken commit, a script compared the pinned CrossOver files with `wine-11.0` and checked that no hunk falls within three lines of a CrossOver change; every later upstream commit that names it was searched for (§3).
+For each candidate, a script compared the pinned CrossOver files with `wine-11.0` and checked that no hunk falls within three lines of a CrossOver change; every later upstream commit that names it was searched for (§3).
 
 ### Taken
 
 | Commit | Release | Change |
 |---|---|---|
-| `98a370e5e1`, `c8b7150680` | 11.2, 11.7 | `NtQueryVolumeInformationFile` reports the free space macOS makes available for important data, as Finder does, and falls back to `statfs` when that is 0 (non-APFS volumes). Taken together. |
-| `7d29860d06` | 11.3 | Clipboard formats are registered through `NtUserRegisterWindowMessage` (WineHQ bug 59257). |
-| `92df8e37e5` | 11.3 | gdiplus no longer assumes an enum type is unsigned (seen with clang on macOS). |
+| `98a370e5e1`, `c8b7150680` | 11.2, 11.7 | `NtQueryVolumeInformationFile` reports the free space macOS makes available for important data, as Finder does, and falls back to `statfs` when that is 0 (non-APFS volumes). Taken together. As upstream, a property query that succeeds with no value is not checked; no volume doing that was seen. |
+| `7d29860d06` | 11.3 | Clipboard formats are registered through `NtUserRegisterWindowMessage` (WineHQ bug 59257); the base registered them in the user atom table while winemac looked them up with `NtAddAtom`. |
+| `92df8e37e5` | 11.3 | gdiplus parameter check that assumed an enum type is unsigned, found by Wine Mono's macOS CI. Not macOS-specific code; taken as an ordinary user-mode fix. |
 | `4f1ecabee9` | 11.5 | `GetKeyNameText` no longer matches keys whose scan code is 0. |
-| `3b1ab64042` | 11.6 | Generated keyboard layouts keep the current user locale. |
 | `1bfb493cd0` | 11.7 | A window that becomes invalid between `WM_QUERYENDSESSION` and `WM_ENDSESSION` is treated as having agreed, instead of blocking the session end. |
-| `d14d0b22b4` | 11.10 | IME open status follows whether the keyboard layout has an IME. |
+| `d56f36c1aa` | 11.8 | A window restored from the Dock is activated before `SC_RESTORE`, so it gets `WM_ACTIVATE` first as on Windows (upstream: Warhammer: Vermintide 2 could not return to fullscreen after losing focus). It also reverts `win32u` and `winex11.drv` code that macOS does not reach: `winemac.drv` does not implement `GetWindowStateUpdates`, so `handle_internal_message` returns early. For that reason it is outside the macOS exception; it was approved individually on 2026-10-26 after confirming upstream master still carries it, and is applied unchanged. Its later fix `852e39a89c` relies on an unlock call only `winex11.drv` implements. |
 | `eefbbc07a8` | 11.10 | `ClipCursor` with the reset flag releases the clip instead of returning early. |
-| `d56f36c1aa` | 11.8 | A window restored from the Dock is activated before `SC_RESTORE`, so it gets `WM_ACTIVATE` first as on Windows (upstream: Warhammer: Vermintide 2 could not return to fullscreen after losing focus). The commit also reverts `win32u` and `winex11.drv` code that macOS does not reach (`winemac.drv` does not implement `GetWindowStateUpdates`); it is outside the macOS exception for that reason, was approved individually on 2026-10-26 after confirming upstream master still carries it, and is applied unchanged. Its later fix `852e39a89c` only concerns the X11 driver. |
-| `1a1d1f3f38` | 11.16 | A window-surface flush hides a client view left by an earlier D3D or OpenGL swapchain. Upstream fixes a regression of `b5ab3b155a`, carried in `0144`: a launcher that drew with D3D9 and then with GDI on the same window kept showing the last 3D frame. `0144` was carried without it; the search for later fixes in §3 was added because of this. |
 | `53a91cdcbe` | 11.17 | Pasteboard data is released after import (leak). |
 
 ### Left out after review
 
 | Commit | Reason |
 |---|---|
+| `3b1ab64042`, `d14d0b22b4` (keyboard layouts keep the user locale; IME open status follows the layout) | `3b1ab64042` reworks how HKLs are generated, and its companions (`c0312c4743`, `d519ce4345`) are not in the base. It also brings an upstream bug still present on master: `macdrv_ActivateKeyboardLayout` tests `HIWORD(hkl) == layout->layout_id ? layout->layout_id : layout->lang`, which is true for every layout, so an application asking for a layout gets the first enabled input source. `d14d0b22b4` needs the follow-ups `a07e981c59` (aliased HKLs are not IMEs) and `85ad031e9c` (Roman input modes report a closed IME). Chinese and Japanese input matter most to Runeon's users, so the whole group waits for its own evaluation. |
+| `1a1d1f3f38` (window-surface flush hides a client view left by a D3D or OpenGL swapchain) | Upstream fixes a regression of `b5ab3b155a` (carried in `0144`): a launcher that drew with D3D9 and then with GDI kept showing the last 3D frame. Every top-level window has a window surface, so with this change each GDI flush hides the 3D view until the next present. On CrossOver that present can come from the D3DMetal path (hack 22435), which re-shows the view only when the window thread handles an event; upstream never ran this combination, and DXMT and D3DMetal carry most Runeon games. The base also lacks `2293b0e8ca`, which keeps unused client surfaces alive, so whether the regression occurs on the base at all is unproven. Evaluated separately with a test. |
 | `e4683c4cff` (app icons through `CreateIconFromResourceEx`) | Removes two fields from `struct app_icon_entry`, shared by the PE and Unix sides of `winemac.drv`; a layout change for a cosmetic fix. |
 | `82ad0ecd12` (no `.desktop` files outside XDG desktops) | Two later shell32 fixes (`93f3d8ae9f`, `648e636256`) repair trash-directory creation it broke; not worth carrying shell32 changes for it. |
 | `07c7fcc86f` (Core Audio stream period) | The same crackling is already fixed differently by `0129`; both set `kAudioDevicePropertyBufferFrameSize`, to different values. Replacing `0129` with the upstream series (`8e09602ca6`, `da0b08472b`) is a later decision. |
 | `4cf90548f2` (wineboot without mDNS) | Passes `AI_CANONNAME | AI_DNS_ONLY`, which the base `ws2_32` only treats as DNS-only when `AI_DNS_ONLY` is the sole flag; it needs `724d5ccdbb` (wine-11.19, `ws2_32` accepts `AI_CANONNAME | AI_DNS_ONLY`), a change outside the macOS exception. Candidates for a later batch together. |
-| `3ae8338d9f` (driver notified of capture reset on destruction) | Its `winemac.drv/window.c` hunk sits next to CrossOver hack 22435 (D3DMetal client surfaces in `macdrv_DestroyWindow`). |
+| `3ae8338d9f` (driver notified of capture reset on destruction) | Moves the capture reset into `win32u` for every driver: a cross-driver change, not a macOS fix. |
 | `3dcb1a565a` (display changes through `CGDisplayRegisterReconfigurationCallback`) | Larger change next to CrossOver hack 10912 in `cocoa_app.m`; deferred for a closer review. |
 | `361b82c32e`, `a32e9be3d5` (mountmgr free space) | CrossOver changed the same file's includes and structure; the `ntdll` pair above covers the path games and installers use. |
 | `98d3e36f2b` (Core Audio `zero_bits` at wow64 attach) | Removes a Unix call entry: a unix-call table change and a refactor. |
@@ -613,8 +612,8 @@ For each taken commit, a script compared the pinned CrossOver files with `wine-1
 
 ### Deferred
 
-Fixes that do not apply because they depend on the upstream rework, each to be adapted only if the fix alone fits the base without touching CrossOver changes: OpenGL core-profile contexts (`b7ce33f16d`, `1f6bdd6360`, `fe16726680`, `e7e7825b3c`, `4b70bebd89`, `cc91be7b65`), flushing GL commands when another context is activated (`1c144117a8`), the Core Audio period series, IME fixes (`3171b388e6`, `85ad031e9c`, `a07e981c59`, `8b2f29dfc2`), mouse-motion accumulation (`21f24279ee`) and address-space reservation (`fcd111ec5a`, `f8da67d3bc`).
+To be adapted only if the fix alone fits the base without touching CrossOver changes: the keyboard and IME group above together with `a07e981c59`, `85ad031e9c`, `d519ce4345`, `3171b388e6` and `8b2f29dfc2`; `1a1d1f3f38`; OpenGL core-profile contexts (`b7ce33f16d`, `1f6bdd6360`, `fe16726680`, `e7e7825b3c`, `4b70bebd89`, `cc91be7b65`); flushing GL commands when another context is activated (`1c144117a8`); the Core Audio period series; mouse-motion accumulation (`21f24279ee`); and address-space reservation (`fcd111ec5a`, `f8da67d3bc`).
 
 ### Verification required before tagging
 
-No self-contained check. A complete WoW64 build and an application run must show that the Steam client and several games still present, take keyboard and mouse input and exit normally, and that free space reported to an installer matches Finder.
+No self-contained check. A complete WoW64 build and an application run must show that the Steam client and several games (WineD3D, DXMT, D3DMetal) still present, take keyboard and mouse input and exit normally; text copies both ways between a Windows program and macOS; a game that confines the cursor releases it; a fullscreen game minimised to the Dock and restored returns to fullscreen; free space Steam reports for its library drive matches Finder; and quitting Runeon with Steam running ends the session normally.

@@ -1,26 +1,24 @@
 From: Wine upstream contributors (see commit list)
 Subject: [PATCH] Carry WineHQ fixes for macOS-specific behaviour.
 
-Twelve WineHQ commits from wine-11.2 to wine-11.17, applied unchanged in
-upstream order; test-only hunks are omitted. They are the first batch
+Nine WineHQ commits from wine-11.2 to wine-11.17, applied unchanged in
+upstream order; test-only hunks are omitted. Seven are the first batch
 carried under the macOS-fix rule in CLAUDE.md section 3: each fixes a
 defect present in the pinned base, touches only Wine code that CrossOver
-keeps unchanged, and changes no protocol or shared structure. d56f36c1aa
-also changes win32u and winex11 code that macOS does not reach; it was
-approved individually and is carried unchanged. See
-docs/upstream-reviews.md, "macOS fix batch 1".
+keeps unchanged, and changes no protocol or shared structure. 92df8e37e5
+(gdiplus) is an ordinary user-mode fix. d56f36c1aa also changes win32u
+and winex11 code that macOS does not reach; it was approved individually
+and is carried unchanged. See docs/upstream-reviews.md, "macOS fix
+batch 1".
 
   98a370e5e1 (wine-11.2, Tim Clem): ntdll: Report free space for "important" data on macOS.
   7d29860d06 (wine-11.3, Rémi Bernon): winemac: Register clipboard format with NtUserRegisterWindowMessage.
   92df8e37e5 (wine-11.3, Esme Povirk): gdiplus: Remove an assumption that an enum type is unsigned.
   4f1ecabee9 (wine-11.5, Marc-Aurel Zent): winemac: Avoid matching scan code 0 in GetKeyNameText.
-  3b1ab64042 (wine-11.6, Rémi Bernon): winemac: Keep current user locale in the generated HKLs.
   c8b7150680 (wine-11.7, Tim Clem): ntdll: Fall back to statfs if "important" free space is 0 on macOS.
   1bfb493cd0 (wine-11.7, Tim Clem): winemac.drv: Handle windows becoming invalid between WM_QUERYENDSESSION and WM_ENDSESSION.
   d56f36c1aa (wine-11.8, Zhiyi Zhang): Revert "win32u: Don't forcefully activate windows before restoring them.".
-  d14d0b22b4 (wine-11.10, Marc-Aurel Zent): winemac: Set IME open status depending on HKL.
   eefbbc07a8 (wine-11.10, Feifan He): winemac: Handle reset parameter in ClipCursor.
-  1a1d1f3f38 (wine-11.16, Zhiyi Zhang): winemac.drv: Hide client_view when flushing window surfaces.
   53a91cdcbe (wine-11.17, Brendan Shanks): winemac: Fix memory leak in get_format_entries().
 
 diff --git a/dlls/gdiplus/imageattributes.c b/dlls/gdiplus/imageattributes.c
@@ -180,164 +178,10 @@ index 2d15f12..9897f80 100644
              }
          }
 diff --git a/dlls/winemac.drv/keyboard.c b/dlls/winemac.drv/keyboard.c
-index 7b00fed..e5e5750 100644
+index 7b00fed..f698283 100644
 --- a/dlls/winemac.drv/keyboard.c
 +++ b/dlls/winemac.drv/keyboard.c
-@@ -37,6 +37,34 @@
- WINE_DEFAULT_DEBUG_CHANNEL(keyboard);
- WINE_DECLARE_DEBUG_CHANNEL(key);
- 
-+static BOOL is_ime_hkl( HKL hkl )
-+{
-+    /* See https://learn.microsoft.com/en-us/windows-hardware/manufacture/desktop/windows-language-pack-default-values#input-method-editors */
-+    switch (HIWORD(hkl))
-+    {
-+    case MAKELANGID(LANG_AMHARIC, SUBLANG_AMHARIC_ETHIOPIA): return TRUE;
-+    case MAKELANGID(LANG_BENGALI, SUBLANG_BENGALI_INDIA): return TRUE;
-+    case MAKELANGID(LANG_CHINESE, SUBLANG_CHINESE_SIMPLIFIED): return TRUE;
-+    case MAKELANGID(LANG_CHINESE, SUBLANG_CHINESE_TRADITIONAL): return TRUE;
-+    case MAKELANGID(LANG_GUJARATI, SUBLANG_GUJARATI_INDIA): return TRUE;
-+    case MAKELANGID(LANG_HINDI, SUBLANG_HINDI_INDIA): return TRUE;
-+    case MAKELANGID(LANG_JAPANESE, SUBLANG_JAPANESE_JAPAN): return TRUE;
-+    case MAKELANGID(LANG_KANNADA, SUBLANG_KANNADA_INDIA): return TRUE;
-+    case MAKELANGID(LANG_KOREAN, SUBLANG_KOREAN): return TRUE;
-+    case MAKELANGID(LANG_MALAYALAM, SUBLANG_MALAYALAM_INDIA): return TRUE;
-+    case MAKELANGID(LANG_MARATHI, SUBLANG_MARATHI_INDIA): return TRUE;
-+    case MAKELANGID(LANG_NEPALI, SUBLANG_NEPALI_NEPAL): return TRUE;
-+    case MAKELANGID(LANG_ODIA, SUBLANG_ODIA_INDIA): return TRUE;
-+    case MAKELANGID(LANG_PUNJABI, SUBLANG_PUNJABI_INDIA): return TRUE;
-+    case MAKELANGID(LANG_TAMIL, SUBLANG_TAMIL_INDIA): return TRUE;
-+    case MAKELANGID(LANG_TAMIL, SUBLANG_TAMIL_SRI_LANKA): return TRUE;
-+    case MAKELANGID(LANG_TELUGU, SUBLANG_TELUGU_INDIA): return TRUE;
-+    case MAKELANGID(LANG_TIGRINYA, SUBLANG_TIGRINYA_ETHIOPIA): return TRUE;
-+    case MAKELANGID(LANG_VIETNAMESE, SUBLANG_VIETNAMESE_VIETNAM): return TRUE;
-+    case MAKELANGID(LANG_YI, SUBLANG_YI_PRC): return TRUE;
-+    default: return (HIWORD(hkl) & 0xe000) == 0xe000;
-+    }
-+}
- 
- /* Indexed by Mac virtual keycode values defined above. */
- static const struct {
-@@ -313,7 +341,9 @@ static struct list layout_list = LIST_INIT( layout_list );
- struct layout
- {
-     struct list entry;
--    HKL hkl;
-+    LANGID lang;
-+    /* "Layout Id", used by NtUserGetKeyboardLayoutName / LoadKeyboardLayoutW */
-+    WORD layout_id;
-     TISInputSourceRef input_source;
-     BOOL enabled; /* is the input source enabled - ie displayed in the input source selector UI */
- };
-@@ -412,27 +442,10 @@ static DWORD get_lcid(CFStringRef lang)
-     return locale->inotneutral ? entry->id : locale->idefaultlanguage;
- }
- 
--static HKL get_hkl(CFStringRef lang, CFStringRef type)
-+static HKL get_layout_hkl(struct layout *layout, LCID locale)
- {
--    ULONG_PTR lcid = get_lcid(lang);
--    struct layout *layout;
--
--    /* Look for the last occurrence of this lcid in the list and if
--       present use that value + 0x10000 */
--    LIST_FOR_EACH_ENTRY_REV(layout, &layout_list, struct layout, entry)
--    {
--        ULONG_PTR hkl = HandleToUlong(layout->hkl);
--
--        if (LOWORD(hkl) == lcid)
--        {
--            lcid = (hkl & ~0xe0000000) + 0x10000;
--            break;
--        }
--    }
--
--    if (!CFEqual(type, kTISTypeKeyboardLayout)) lcid |= 0xe0000000;
--
--    return (HKL)lcid;
-+    if (!layout->layout_id) return UlongToHandle(MAKELONG(locale, layout->lang));
-+    return UlongToHandle(MAKELONG(locale, layout->layout_id));
- }
- 
- /******************************************************************
-@@ -468,6 +481,7 @@ static struct layout *get_layout_from_source(TISInputSourceRef input)
-  */
- static void update_layout_list(void)
- {
-+    LCID locale = LOWORD(NtUserGetKeyboardLayout(0));
-     CFArrayRef sources;
-     struct layout *layout;
-     int i;
-@@ -486,18 +500,28 @@ static void update_layout_list(void)
-         layout = get_layout_from_source(input);
-         if (!layout)
-         {
-+            static WORD next_layout_id = 1;
-+
-             CFStringRef type = CFDictionaryGetValue(dict, macdrv_input_source_type_key);
--            CFStringRef lang = CFDictionaryGetValue(dict, macdrv_input_source_lang_key);
-+            LANGID lang = get_lcid(CFDictionaryGetValue(dict, macdrv_input_source_lang_key));
-+            HKL lang_hkl = UlongToPtr(MAKELONG(lang, lang));
-+            UINT index = 0;
- 
--            layout = malloc(sizeof(*layout));
-+            LIST_FOR_EACH_ENTRY_REV(layout, &layout_list, struct layout, entry)
-+                if (layout->lang == lang) index++;
-+
-+            layout = calloc(1, sizeof(*layout));
-             layout->input_source = (TISInputSourceRef)CFRetain(input);
--            layout->hkl = get_hkl(lang, type);
-+            layout->lang = lang;
-+            if (is_ime_hkl(lang_hkl) && !index) layout->layout_id = 0; /* HKL has a builtin IME */
-+            else if (!CFEqual(type, kTISTypeKeyboardLayout)) layout->layout_id = 0xe000 | next_layout_id++;
-+            else if (index) layout->layout_id = 0xf000 | next_layout_id++;
- 
-             list_add_tail(&layout_list, &layout->entry);
--            TRACE("adding new layout %p\n", layout->hkl);
-+            TRACE("adding new layout %p\n", get_layout_hkl(layout, locale));
-         }
-         else
--            TRACE("enabling already existing layout %p\n", layout->hkl);
-+            TRACE("enabling already existing layout %p\n", get_layout_hkl(layout, locale));
- 
-         layout->enabled = TRUE;
-     }
-@@ -512,6 +536,7 @@ static void update_layout_list(void)
-  */
- HKL macdrv_get_hkl_from_source(TISInputSourceRef input)
- {
-+    LCID locale = LOWORD(NtUserGetKeyboardLayout(0));
-     struct layout *layout;
-     HKL ret = 0;
- 
-@@ -519,7 +544,7 @@ HKL macdrv_get_hkl_from_source(TISInputSourceRef input)
- 
-     update_layout_list();
-     layout = get_layout_from_source(input);
--    if (layout) ret = layout->hkl;
-+    if (layout) ret = get_layout_hkl(layout, locale);
- 
-     pthread_mutex_unlock(&layout_list_mutex);
- 
-@@ -1327,6 +1352,8 @@ BOOL macdrv_ActivateKeyboardLayout(HKL hkl, UINT flags)
- 
-     TRACE("hkl %p flags %04x\n", hkl, flags);
- 
-+    NtUserPostMessage( NULL, WM_WINE_IME_NOTIFY, IMN_WINE_SET_OPEN_STATUS, is_ime_hkl(hkl) );
-+
-     if (hkl == thread_data->active_keyboard_layout)
-         return TRUE;
- 
-@@ -1335,7 +1362,7 @@ BOOL macdrv_ActivateKeyboardLayout(HKL hkl, UINT flags)
- 
-     LIST_FOR_EACH_ENTRY(layout, &layout_list, struct layout, entry)
-     {
--        if (layout->hkl == hkl)
-+        if (HIWORD(hkl) == layout->layout_id ? layout->layout_id : layout->lang)
-         {
-             if (macdrv_select_input_source(layout->input_source))
-             {
-@@ -1379,7 +1406,7 @@ INT macdrv_GetKeyNameText(LONG lparam, LPWSTR buffer, INT size)
+@@ -1379,7 +1379,7 @@ INT macdrv_GetKeyNameText(LONG lparam, LPWSTR buffer, INT size)
      scan = (lparam >> 16) & 0x1FF;
      for (keyc = 0; keyc < ARRAY_SIZE(thread_data->keyc2scan); keyc++)
      {
@@ -346,23 +190,6 @@ index 7b00fed..e5e5750 100644
          {
              const UCKeyboardLayout *uchr;
              UInt32 deadKeyState = 0;
-@@ -1472,6 +1499,7 @@ INT macdrv_GetKeyNameText(LONG lparam, LPWSTR buffer, INT size)
-  */
- UINT macdrv_GetKeyboardLayoutList(INT size, HKL *list)
- {
-+    LCID locale = LOWORD(NtUserGetKeyboardLayout(0));
-     int count = 0;
-     struct layout *layout;
- 
-@@ -1487,7 +1515,7 @@ UINT macdrv_GetKeyboardLayoutList(INT size, HKL *list)
-         if (list)
-         {
-             if (count >= size) break;
--            list[count] = layout->hkl;
-+            list[count] = get_layout_hkl(layout, locale);
-             TRACE("\t%d: %p\n", count, list[count]);
-         }
-         count++;
 diff --git a/dlls/winemac.drv/mouse.c b/dlls/winemac.drv/mouse.c
 index c655f56..ee876d5 100644
 --- a/dlls/winemac.drv/mouse.c
@@ -378,38 +205,6 @@ index c655f56..ee876d5 100644
      {
          rect = CGRectMake(clip->left, clip->top, max(1, clip->right - clip->left),
                            max(1, clip->bottom - clip->top));
-diff --git a/dlls/winemac.drv/surface.c b/dlls/winemac.drv/surface.c
-index a849918..3948114 100644
---- a/dlls/winemac.drv/surface.c
-+++ b/dlls/winemac.drv/surface.c
-@@ -85,6 +85,7 @@ static BOOL macdrv_surface_flush(struct window_surface *window_surface, const RE
-     CGImageAlphaInfo alpha_info = (window_surface->alpha_mask ? kCGImageAlphaPremultipliedFirst : kCGImageAlphaNoneSkipFirst);
-     CGColorSpaceRef colorspace;
-     CGImageRef image;
-+    struct macdrv_win_data *data;
- 
-     colorspace = CGColorSpaceCreateWithName(kCGColorSpaceSRGB);
-     image = CGImageCreate(color_info->bmiHeader.biWidth, abs(color_info->bmiHeader.biHeight), 8, 32,
-@@ -120,6 +121,19 @@ static BOOL macdrv_surface_flush(struct window_surface *window_surface, const RE
-         }
-     }
- 
-+    /* The window may have been previously drawn with client_surface, for example, when the window
-+     * had been a target for a D3D swapchain. Hide the client_view so that it doesn't occlude the
-+     * content in the window_surface */
-+    if ((data = get_win_data(window_surface->hwnd)))
-+    {
-+        if (data->client_view)
-+        {
-+            macdrv_set_view_hidden(data->client_view, TRUE);
-+            data->client_view = NULL;
-+        }
-+        release_win_data(data);
-+    }
-+
-     return TRUE;
- }
- 
 diff --git a/dlls/winemac.drv/window.c b/dlls/winemac.drv/window.c
 index ebf8505..bfeae78 100644
 --- a/dlls/winemac.drv/window.c

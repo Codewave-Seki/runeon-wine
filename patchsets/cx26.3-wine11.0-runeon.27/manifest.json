@@ -3015,7 +3015,7 @@
     {
       "order": 175,
       "path": "patches/upstream/0145-wine-11.17-macos-fixes.patch",
-      "sha256": "1a1d1db27353c3595952387daf8d66c6c8dc79845bfc0593131520d9c48b3298",
+      "sha256": "02f78ccb602c19943bff270ffc359b41dcce9e734f6142b3faa82130988fe9f9",
       "kind": "upstream-backport",
       "status": "active",
       "risk": "medium",
@@ -3025,33 +3025,35 @@
         "7d29860d06455c5455d94d7d9910ab4a7d0f3a02",
         "92df8e37e51c9da318d70dd96c50774a5f7fe662",
         "4f1ecabee97838b197b71c75d3f6512add68ba64",
-        "3b1ab64042d214b3516fabdbca052a412da57f70",
         "c8b715068001cbae25f72372e71c70db1a06d381",
         "1bfb493cd027041b84dc5202d4125aeb02e64e37",
         "d56f36c1aa0927a19d74bef66586572ad57322de",
-        "d14d0b22b46c47aa86c33e47aa383bca745b14f2",
         "eefbbc07a838ffc9e71a963fa3aec14c9cb5a1a2",
-        "1a1d1f3f382083c8afc8311762137582e028d6fc",
         "53a91cdcbe21125913b24a48cf0f429597017d6a"
       ],
-      "summary": "First batch under the macOS-fix rule (maintainer decision 2026-10-26): twelve WineHQ fixes for macOS-specific behaviour, applied unchanged. Free disk space now reports the space macOS makes available for important data, with a statfs fallback when that is 0 on non-APFS volumes; the clipboard registers formats through NtUserRegisterWindowMessage and no longer leaks pasteboard data; GetKeyNameText no longer matches scan code 0; generated keyboard layouts keep the user locale and IME open status follows the layout; ClipCursor with reset releases the clip; a window restored from the Dock is activated before SC_RESTORE, as on Windows (d56f36c1aa, which also reverts win32u and winex11 code macOS does not reach, individually approved); a window that becomes invalid between WM_QUERYENDSESSION and WM_ENDSESSION no longer blocks logoff; a window surface flush hides a client view left by an earlier D3D or OpenGL swapchain, which fixes a regression of 0144 (b5ab3b155a) where GDI drawing stayed hidden behind the last 3D frame. gdiplus no longer assumes an enum is unsigned.",
-      "testStrategy": "No self-contained check. A complete WoW64 build and an application run are required before tagging: the Steam client and several games still present, take keyboard and mouse input and exit normally; a window that draws with D3D and then with GDI shows the GDI content; free space reported to an installer matches Finder.",
+      "summary": "First batch under the macOS-fix rule (maintainer decision 2026-10-26): nine WineHQ commits applied unchanged. Free disk space now reports the space macOS makes available for important data, with a statfs fallback when that is 0 on non-APFS volumes; the clipboard registers formats through NtUserRegisterWindowMessage and no longer leaks pasteboard data; GetKeyNameText no longer matches scan code 0; ClipCursor with reset releases the clip; a window that becomes invalid between WM_QUERYENDSESSION and WM_ENDSESSION no longer blocks the session end; a window restored from the Dock is activated before SC_RESTORE, as on Windows (d56f36c1aa, which also reverts win32u and winex11 code macOS does not reach, individually approved). 92df8e37e5 is an ordinary gdiplus parameter-check fix.",
+      "testStrategy": "No self-contained check. A complete WoW64 build and an application run are required before tagging: the Steam client and several games (WineD3D, DXMT, D3DMetal) still present, take keyboard and mouse input and exit normally; copy and paste text between a Windows program and macOS both ways; a game that confines the cursor releases it when it should; a fullscreen game minimised to the Dock and restored returns to fullscreen; free space reported by Steam for its library drive matches Finder; quitting Runeon with Steam running ends the session normally.",
       "verification": [
         {
           "path": "dlls/ntdll/unix/file.c",
           "contains": "static LONGLONG get_free_bytes_for_important_data(int fd)"
         },
         {
+          "path": "dlls/ntdll/unix/file.c",
+          "contains": "    if (space == 0)"
+        },
+        {
           "path": "dlls/winemac.drv/clipboard.c",
           "contains": "return NtUserRegisterWindowMessage(&name_str);"
         },
         {
-          "path": "dlls/winemac.drv/keyboard.c",
-          "contains": "static BOOL is_ime_hkl( HKL hkl )"
+          "path": "dlls/winemac.drv/clipboard.c",
+          "contains": "        CFRelease(data);",
+          "occurrences": 2
         },
         {
-          "path": "dlls/winemac.drv/keyboard.c",
-          "contains": "NtUserPostMessage( NULL, WM_WINE_IME_NOTIFY, IMN_WINE_SET_OPEN_STATUS, is_ime_hkl(hkl) );"
+          "path": "dlls/gdiplus/imageattributes.c",
+          "contains": "if(!imageattr || !is_valid_ColorAdjustType(type) || flags < ColorMatri"
         },
         {
           "path": "dlls/winemac.drv/keyboard.c",
@@ -3062,13 +3064,13 @@
           "contains": "    if (!reset && clip)"
         },
         {
-          "path": "dlls/winemac.drv/surface.c",
-          "contains": "had been a target for a D3D swapchain. Hide the client_view so that it doesn't occlude the"
+          "path": "dlls/winemac.drv/dllmain.c",
+          "contains": "BOOL invalid = (error == ERROR_INVALID_WINDOW_HANDLE);",
+          "occurrences": 2
         },
         {
-          "path": "dlls/winemac.drv/clipboard.c",
-          "contains": "        CFRelease(data);",
-          "occurrences": 2
+          "path": "dlls/win32u/message.c",
+          "contains": "switch (LOWORD(state_cmd))"
         },
         {
           "path": "dlls/winemac.drv/window.c",
