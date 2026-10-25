@@ -16,10 +16,11 @@ video frame while the game runs underneath.
 b5ab3b155a presents the surface on every swap, and on the flush opengl32
 requests after front-buffer drawing (GL_FLUSH_PRESENT), so the surface being
 drawn is the one shown, as on Windows where all contexts on a window draw to
-the same buffers. 62da9c02a7, which upstream
-took first, stops context_sync_drawables() from presenting a drawable merely
-because a context was made current on it; with b5ab3b155a in place that
-would let any context switch steal the window's view.
+the same buffers. 62da9c02a7, which upstream took first, stops
+context_sync_drawables() from presenting a drawable merely because a context
+was made current on it. No driver in the base acts on that flag, so it is a
+no-op on its own; with b5ab3b155a in place it would let any context switch
+steal the window's view.
 
 diff --git a/dlls/win32u/opengl.c b/dlls/win32u/opengl.c
 index 3b76f56e46..968d3b7dfd 100644

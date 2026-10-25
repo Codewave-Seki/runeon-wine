@@ -2986,7 +2986,7 @@
     {
       "order": 174,
       "path": "patches/upstream/0144-wine-11.4-winemac-present-on-swap.patch",
-      "sha256": "3c8b9b36d6bcc95de013f4c9ac45a72cc74176541276f647432c397ab2afff1d",
+      "sha256": "eefa34b532d1245b8c336a612b427eff1683ba7a66848a737e38295c1ecfbdd8",
       "kind": "upstream-backport",
       "status": "active",
       "risk": "medium",
@@ -2996,7 +2996,7 @@
         "b5ab3b155a58823595a6a7bdbefb5b4e98736957"
       ],
       "summary": "Present a window's OpenGL surface when it is swapped, so the surface being drawn is the one shown. In the base a second device drawing to the window, such as the DirectShow Video Mixing Renderer in windowless mode, left its surface as the window's only visible view, and after it was gone the application's own swaps stayed hidden: the window kept the last video frame while the game ran. Context switches no longer present a drawable on their own. winemac.drv and win32u are ABI-sensitive; the maintainer approved this patch individually on 2026-10-25, and the approval covers this patch alone.",
-      "testStrategy": "No self-contained check: the behaviour needs Cocoa views and CGL contexts. A complete WoW64 build and an application run are required before tagging: a D3D9 game whose opening video plays through the Video Mixing Renderer must show its own frames after the video is skipped, and other OpenGL (WineD3D) games and the Steam client must present as before.",
+      "testStrategy": "No self-contained check: the behaviour needs Cocoa views and CGL contexts. A complete WoW64 build and an application run are required before tagging: a D3D9 game whose opening video plays through the Video Mixing Renderer in windowless mode must not flicker during the video and must show its own frames after it is skipped; at least one single-window WineD3D game and the Steam client must present as before; if available, a D3DMetal or DXMT game that plays a video and is then closed. Not covered: the swap-interval flush case left out with b3c408b3c0.",
       "verification": [
         {
           "path": "dlls/win32u/opengl.c",

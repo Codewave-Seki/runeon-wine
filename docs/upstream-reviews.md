@@ -518,7 +518,7 @@ Static and integration checks prove the series applies and its anchors are prese
 
 ## OpenGL surface presentation on swap (Wine 11.3–11.4)
 
-Candidate patch set `cx26.3-wine11.0-runeon.26` adds `patches/upstream/0144` after `0143`: WineHQ commits `62da9c02a7` (wine-11.3, Paul Gofman) and `b5ab3b155a` (wine-11.4, Rémi Bernon), applied unchanged as one patch because they decide one behaviour, which OpenGL surface a window shows. Upstream took them in this order and the second relies on the first.
+Candidate patch set `cx26.3-wine11.0-runeon.26` adds `patches/upstream/0144` after `0143`: WineHQ commits `62da9c02a7` (wine-11.3, Paul Gofman) and `b5ab3b155a` (wine-11.4, Rémi Bernon), applied unchanged as one patch because they decide one behaviour, which OpenGL surface a window shows. Upstream took them in this order and the second relies on the first. `.25` already ships as a built Dev runtime, so this goes into a new patch set rather than reopening it.
 
 `winemac.drv` and `win32u` are ABI-sensitive (§3 of `CLAUDE.md`). The maintainer approved this patch individually on 2026-10-25; the approval does not widen the rule for other patches. Neither commit changes a structure, export or driver entry point: one flag argument in `context_sync_drawables()` and the bodies of `macdrv_surface_flush()` and `macdrv_surface_swap()`.
 
@@ -528,7 +528,7 @@ Amnesia: Memories (D3D9 through WineD3D) plays its opening videos through the Di
 
 - the game's device created its surface on the window when it started, and every later swap went to it;
 - the first video's device created a second surface on the same window; `macdrv_client_surface_present()` made it the window's visible view and hid the game's; the next videos reused it through `get_window_unused_drawable()`;
-- skipping stopped the graph and released the presenter, but that surface had no detach or destroy, and the game's swaps never presented its own surface again. In the base, `macdrv_surface_swap()` only flushes the context; only the Vulkan path calls `client_surface_present()`.
+- skipping stopped the graph and released the presenter, but that surface had no detach or destroy, and the game's swaps never presented its own surface again. In the base, `macdrv_surface_swap()` only flushes the context; the OpenGL path never calls `client_surface_present()` (the Vulkan path and CrossOver's D3DMetal presentation event do).
 
 The same "skipping the intro video freezes the screen on a Mac" report exists for other games on CrossOver, which fits this mechanism, but no WineHQ bug is linked to these commits.
 
@@ -544,8 +544,20 @@ Both apply with zero fuzz on top of `0143`; `0080`, `0114` and `0117` also touch
 
 | Change | Reason |
 |---|---|
-| `02d01544dd` (DC own drawable in `get_updated_drawable()` on flush) | Same area and release, but it addresses a different path (flushing through a DC whose drawable differs from the context's) and the defect above does not need it. |
+| `02d01544dd` (DC own drawable in `get_updated_drawable()` on flush) | Lets a context flush with no HDC find the DC's own drawable (pbuffer or D3D swapchain) through a new `owner_hdc`, reached only after the client surface was detached. It also inserts a field into `struct opengl_drawable`, changing the layout win32u shares with the drivers. The defect above does not need it. |
+| `b3c408b3c0` (`flags |= GL_FLUSH_INTERVAL` in `opengl_drawable_flush()`) | Landed between the two taken commits. Without it, a flush that coincides with a swap-interval change drops `GL_FLUSH_PRESENT`, so that one front-buffer flush does not present; swaps always present. A separate win32u change that would need its own approval. |
+| `ae1053abc3` (opengl32 reads the drawable after `wgl_context_flush()`) | The base has the same pattern in the `GL_FLUSH_FORCE_SWAP` branch, which is not reachable on macOS because the macdrv buffer map is the identity. |
+
+### New behaviour and risks
+
+Every swap now makes the swapped surface the window's visible view. Two devices that swap alternately on one window, such as a game that keeps calling `Present` while a windowless video plays, would switch the whole client view between them each frame; upstream behaves the same. A front-buffer `glFlush`/`glFinish` now flushes the surface, which for a double-buffered context is a buffer flip. On a window with one surface, presenting it again changes nothing.
+
+CrossOver-specific, from reading only: `macdrv_DestroyWindow()` releases D3DMetal client surfaces while holding `win_data_mutex`, the reverse of the `surfaces_lock` → `win_data_mutex` order that `client_surface_present()` takes. Vulkan presents and window moves already take that order; this patch adds every OpenGL swap.
 
 ### Verification required before tagging
 
-No self-contained check exists: the behaviour needs Cocoa views and CGL contexts. A complete WoW64 build and an application run must show the game's own frames after the skipped video, and other WineD3D games and the Steam client must present as before.
+No self-contained check exists: the behaviour needs Cocoa views and CGL contexts. A complete WoW64 build and an application run must show:
+
+- no flicker while the windowless video plays, and the game's own frames after it is skipped;
+- unchanged presentation in at least one single-window WineD3D game and the Steam client;
+- if available, a D3DMetal or DXMT game that plays a video and is then closed.
