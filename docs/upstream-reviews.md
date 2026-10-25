@@ -561,3 +561,60 @@ No self-contained check exists: the behaviour needs Cocoa views and CGL contexts
 - no flicker while the windowless video plays, and the game's own frames after it is skipped;
 - unchanged presentation in at least one single-window WineD3D game and the Steam client;
 - if available, a D3DMetal or DXMT game that plays a video and is then closed.
+
+<a id="macos-fix-batch-1"></a>
+
+## macOS fix batch 1 (Wine 11.0 to master, 2026-10-22)
+
+Candidate patch set `cx26.3-wine11.0-runeon.27` adds `patches/upstream/0145` after `0144`: eleven WineHQ commits applied unchanged in upstream order, test-only hunks omitted. It is the first batch carried under the macOS-fix exception in §3 of `CLAUDE.md` (maintainer decision 2026-10-26). Before that rule, every sweep left `winemac.drv`, `win32u` and `ntdll` out, so most macOS fixes since `wine-11.0` were never carried.
+
+### Selection
+
+Candidates are every commit in `wine-11.0..master` (master at `e3c3d34867`, 2026-10-22) that changes `winemac.drv`, `winecoreaudio.drv`, the macOS preloader or `mountmgr.sys/diskarb.c`, names macOS, Darwin, Apple, Cocoa, MoltenVK or Rosetta in its message, or changes code guarded by `__APPLE__` or macdrv in `dlls`, `loader` or `server`: 167 commits. Each was checked against the pinned archive plus `0001`–`0144`:
+
+- 8 are already carried or in the base.
+- 42 apply with zero fuzz on their own. Most are clean-ups, deprecated-API replacements or ARM64-only changes; the defect fixes among them are taken below or left out with a reason.
+- 93 do not apply. Almost all belong to the upstream rework of OpenGL contexts and client surfaces in `win32u` and `winemac.drv`, or to clean-ups; the fixes among them need that rework or an adaptation and are deferred.
+- 24 more, found through the `__APPLE__` search, move CD-ROM and DVD ioctls from `ntdll` to `mountmgr`, add Linux syscall emulation, or reorder address-space setup: features and refactors.
+
+For each taken commit, a script compared the pinned CrossOver files with `wine-11.0` and checked that no hunk falls within three lines of a CrossOver change; every later upstream commit that names it was searched for (§3).
+
+### Taken
+
+| Commit | Release | Change |
+|---|---|---|
+| `98a370e5e1`, `c8b7150680` | 11.2, 11.7 | `NtQueryVolumeInformationFile` reports the free space macOS makes available for important data, as Finder does, and falls back to `statfs` when that is 0 (non-APFS volumes). Taken together. |
+| `7d29860d06` | 11.3 | Clipboard formats are registered through `NtUserRegisterWindowMessage` (WineHQ bug 59257). |
+| `92df8e37e5` | 11.3 | gdiplus no longer assumes an enum type is unsigned (seen with clang on macOS). |
+| `4f1ecabee9` | 11.5 | `GetKeyNameText` no longer matches keys whose scan code is 0. |
+| `3b1ab64042` | 11.6 | Generated keyboard layouts keep the current user locale. |
+| `1bfb493cd0` | 11.7 | A window that becomes invalid between `WM_QUERYENDSESSION` and `WM_ENDSESSION` is treated as having agreed, instead of blocking the session end. |
+| `d14d0b22b4` | 11.10 | IME open status follows whether the keyboard layout has an IME. |
+| `eefbbc07a8` | 11.10 | `ClipCursor` with the reset flag releases the clip instead of returning early. |
+| `1a1d1f3f38` | 11.16 | A window-surface flush hides a client view left by an earlier D3D or OpenGL swapchain. Upstream fixes a regression of `b5ab3b155a`, carried in `0144`: a launcher that drew with D3D9 and then with GDI on the same window kept showing the last 3D frame. `0144` was carried without it; the search for later fixes in §3 was added because of this. |
+| `53a91cdcbe` | 11.17 | Pasteboard data is released after import (leak). |
+
+### Left out after review
+
+| Commit | Reason |
+|---|---|
+| `e4683c4cff` (app icons through `CreateIconFromResourceEx`) | Removes two fields from `struct app_icon_entry`, shared by the PE and Unix sides of `winemac.drv`; a layout change for a cosmetic fix. |
+| `82ad0ecd12` (no `.desktop` files outside XDG desktops) | Two later shell32 fixes (`93f3d8ae9f`, `648e636256`) repair trash-directory creation it broke; not worth carrying shell32 changes for it. |
+| `07c7fcc86f` (Core Audio stream period) | The same crackling is already fixed differently by `0129`; both set `kAudioDevicePropertyBufferFrameSize`, to different values. Replacing `0129` with the upstream series (`8e09602ca6`, `da0b08472b`) is a later decision. |
+| `4cf90548f2` (wineboot without mDNS) | Passes `AI_CANONNAME | AI_DNS_ONLY`, which the base `ws2_32` only treats as DNS-only when `AI_DNS_ONLY` is the sole flag; without the matching `ws2_32` change it has no effect. |
+| `3ae8338d9f` (driver notified of capture reset on destruction) | Its `winemac.drv/window.c` hunk sits next to CrossOver hack 22435 (D3DMetal client surfaces in `macdrv_DestroyWindow`). |
+| `3dcb1a565a` (display changes through `CGDisplayRegisterReconfigurationCallback`) | Larger change next to CrossOver hack 10912 in `cocoa_app.m`; deferred for a closer review. |
+| `361b82c32e`, `a32e9be3d5` (mountmgr free space) | CrossOver changed the same file's includes and structure; the `ntdll` pair above covers the path games and installers use. |
+| `d56f36c1aa` (revert of forced window activation before restore) | Changes `win32u` behaviour on every platform, so it is outside the macOS exception; pending individual approval. |
+| `98d3e36f2b` (Core Audio `zero_bits` at wow64 attach) | Removes a Unix call entry: a unix-call table change and a refactor. |
+| `ab9ab01153` (USB interface information in winebus) | A feature for device identity. |
+| ARM64 commits (`569a7553b2`, `920240e73e`, `2a61baa185`, …) | Runeon runs x86_64 under Rosetta. |
+| Clean-ups and deprecated-API replacements (`340872e8e5`, `a83c128ce6`, `f330e62e0a`, `5b649b7208`, `fc45e3f8f1`, `0e3f38cecc`, …) | Not defect fixes. |
+
+### Deferred
+
+Fixes that do not apply because they depend on the upstream rework, each to be adapted only if the fix alone fits the base without touching CrossOver changes: OpenGL core-profile contexts (`b7ce33f16d`, `1f6bdd6360`, `fe16726680`, `e7e7825b3c`, `4b70bebd89`, `cc91be7b65`), flushing GL commands when another context is activated (`1c144117a8`), the Core Audio period series, IME fixes (`3171b388e6`, `85ad031e9c`, `a07e981c59`, `8b2f29dfc2`), mouse-motion accumulation (`21f24279ee`) and address-space reservation (`fcd111ec5a`, `f8da67d3bc`).
+
+### Verification required before tagging
+
+No self-contained check. A complete WoW64 build and an application run must show that the Steam client and several games still present, take keyboard and mouse input and exit normally, and that free space reported to an installer matches Finder.
