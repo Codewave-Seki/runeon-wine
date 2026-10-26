@@ -720,3 +720,12 @@ Of the 753 commits in `wine-11.0..master` that change `dlls/ntdll`, `dlls/win32u
 ### Verification required before tagging
 
 No self-contained check. A complete WoW64 build and an application run must show that the Steam client logs in, downloads and launches several games of each graphics route; a launcher with child and tool windows draws them; text renders in a GDI-drawn game or launcher; and files dragged from Finder onto a window on a second display left of the main one land where dropped.
+
+### Local candidate results for `.27` (2026-10-26)
+
+Candidate built from `94dd4e2` in empty source and build directories (complete WoW64 build).
+
+- Thread-pool and waitable timers (a probe that does not change the system time): pass on `.26` and `.27`, x64 and x86, within 2 ms.
+- `ddraw1` upstream tests, x86, compared with `.26`: no new failure; the four `test_execute_buffer_updates` failures on `.26` pass on `.27` (`365e610147`). Both versions stall at the same point in `test_caps` during wined3d adapter initialisation; swapping in the `.26` `winemac.drv`, `wined3d` and `ddraw` does not remove it, so it predates `.27`.
+- Maintainer's application run: the Steam client logs in, downloads and launches games; Heroes of Might and Magic: Olden Era (D3DMetal), Survival Log (DXMT), Dying Light and Telma-H (graphics route not recorded) run and present; a wired controller reads correctly in Steam's controller test; cursor release, minimise to the Dock and restore, launcher windows and text drawing look as before; Steam's free space matches Finder.
+- Not checked: a game confirmed on the WineD3D route in this run (WineD3D is covered only by the `ddraw1` tests above), rich-text clipboard both ways, Finder drag and drop (including onto a display left of the main one), controller unplug and replug.
