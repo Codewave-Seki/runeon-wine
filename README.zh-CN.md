@@ -10,7 +10,7 @@ Runeon Wine 是 Runeon Steam Baseline runtime 的公开源码维护仓库，包�
 
 - CodeWeavers 源码：`crossover-sources-26.3.0.tar.gz`，Wine `11.0`，固定于 [`base/crossover-26.3-wine-11.0.json`](base/crossover-26.3-wine-11.0.json)
 <!-- release-facts:current-patch-set -->
-- 当前正式源码：[`cx26.3-wine11.0-runeon.26`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.26)，对应 seed `2026.10.25.2`（App `>=1.14 (16)`）。定义见 [`patchsets/cx26.3-wine11.0-runeon.26`](patchsets/cx26.3-wine11.0-runeon.26/manifest.json)
+- 当前正式源码：[`cx26.3-wine11.0-runeon.27`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.27)，对应 seed `2026.10.26`（App `>=1.14 (16)`）。定义见 [`patchsets/cx26.3-wine11.0-runeon.27`](patchsets/cx26.3-wine11.0-runeon.27/manifest.json)
 - 上游审查范围：完整审计至 `wine-11.15`，筛选回移至 `wine-11.20`；见 [MAINTENANCE.md](MAINTENANCE.md#review-records)
 
 ## 仓库结构
@@ -44,7 +44,7 @@ scripts/integration-check.sh "$source_root"
 `integration-check.sh` 把全部补丁按顺序应用到固定基线的临时副本，检查校验标记，并确认同一 series 不能重复应用。为 Release 构建源码包：
 
 ```bash
-export RUNEON_WINE_PATCHSET_DEFINITION=patchsets/cx26.3-wine11.0-runeon.26
+export RUNEON_WINE_PATCHSET_DEFINITION=patchsets/cx26.3-wine11.0-runeon.27
 source_root="$(scripts/fetch-source.sh)"
 scripts/apply-series.sh "$source_root"
 scripts/build-source-bundle.sh "$source_root" dist
@@ -59,7 +59,8 @@ scripts/build-patchset-bundle.sh dist
 
 | 补丁集 | 状态 | Seed | 说明 |
 |---|---|---|---|
-| [`.26`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.26) | 正式版，latest | `2026.10.25.2` | 当前版本；分发给 App `>=1.14 (16)` |
+| [`.27`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.27) | 正式版，latest | `2026.10.26` | 当前版本；分发给 App `>=1.14 (16)` |
+| [`.26`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.26) | 正式版 | `2026.10.25.2` | 已被接替，保留 |
 | [`.25`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.25) | 预发布 | `2026.10.25.1` | Dev 候选，已被 `.26` 接替，未用于 Production |
 | [`.24`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.24) | 正式版 | `2026.10.25` | 已被接替，保留 |
 | [`.23`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.23) | 正式版 | `2026.10.24` | 已被接替，保留 |
