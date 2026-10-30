@@ -1,0 +1,158 @@
+From: Runeon contributors
+Subject: [PATCH] win32u: Optionally switch to a standard emulated display mode at process start.
+
+Some games look the desktop size up in a table of common PC resolutions,
+by aspect ratio, and fail when it is missing. A scaled Mac display reports
+sizes no Windows display has, such as 1512x982; one game indexed its table
+with the -1 the lookup returned and crashed seconds after start. The same
+game runs once the desktop is a common 16:10 size.
+
+When HKCU\Software\Wine\AppDefaults\<app.exe>\Runeon\StandardDisplayMode is
+a non-zero DWORD, the process switches the emulated display mode, once it
+has a desktop, to the largest 16:10 mode in the existing mode list that fits
+the host mode (16:9 when no 16:10 mode does), with CDS_FULLSCREEN and
+without CDS_UPDATEREGISTRY. This is the path a fullscreen game takes under
+EmulateModeset: explorer's display settings restorer puts the registry mode
+back when the process exits, including when it is killed, and window
+placement, scaling and mouse mapping stay consistent for every process.
+
+It only runs when mode changes are emulated, outside a virtual desktop, and
+while the current mode is the host mode or the mode this policy chose; a
+second opted-in process then takes the restore over, so a launcher stub
+exiting does not restore the mode under the game it started. While such a
+process runs, the whole session sees the emulated mode, as with any
+fullscreen game. Without the value, or when any condition fails, nothing
+changes.
+
+--- a/dlls/win32u/class.c
++++ b/dlls/win32u/class.c
+@@ -255,6 +255,7 @@
+     sysparams_init();
+     winstation_init();
+     register_desktop_class();
++    apply_standard_display_mode();
+ }
+ 
+ /***********************************************************************
+--- a/dlls/win32u/sysparams.c
++++ b/dlls/win32u/sysparams.c
+@@ -167,6 +167,8 @@
+ static pthread_mutex_t display_lock = PTHREAD_MUTEX_INITIALIZER;
+ 
+ static BOOL emulate_modeset;
++/* Runeon: AppDefaults\<app.exe>\Runeon\StandardDisplayMode, see apply_standard_display_mode */
++static BOOL standard_display_mode;
+ BOOL decorated_mode = TRUE;
+ UINT64 thunk_lock_callback = 0;
+ 
+@@ -4427,7 +4429,72 @@
+     if (ret) ERR( "Changing %s display settings returned %d.\n", debugstr_us(devname), ret );
+     return ret;
+ }
++
++/* Runeon: some games look the desktop size up in a table of common PC resolutions and fail
++ * on a scaled Mac size such as 1512x982, which no Windows display reports. When the process
++ * opted in, switch the emulated mode to the largest 16:10 mode that fits the screen (16:9
++ * when none does), exactly as a fullscreen game would; explorer restores the previous mode
++ * when this process exits. Real host modes are never touched: this only runs when mode
++ * changes are emulated, outside a virtual desktop, and while nobody else changed the mode.
++ */
++void apply_standard_display_mode(void)
++{
++    DEVMODEW current = {.dmSize = sizeof(DEVMODEW)}, target = {.dmSize = sizeof(DEVMODEW)};
++    const DEVMODEW *mode;
++    struct source *source;
++    BOOL found = FALSE, owned;
++    UINT pass;
++    LONG ret;
++
++    if (!standard_display_mode) return;
++    if (!emulate_modeset || is_virtual_desktop())
++    {
++        WARN( "StandardDisplayMode needs emulated mode changes outside a virtual desktop, ignoring.\n" );
++        return;
++    }
++    if (!(source = find_source( NULL ))) return;
++    source_get_current_settings( source, &current );
+ 
++    for (pass = 0; pass < 2 && !found; pass++)
++    {
++        for (mode = source->modes; mode && mode->dmSize; mode = NEXT_DEVMODEW(mode))
++        {
++            UINT width = mode->dmPelsWidth, height = mode->dmPelsHeight;
++
++            if (width > source->physical.dmPelsWidth || height > source->physical.dmPelsHeight) continue;
++            if (mode->dmBitsPerPel != current.dmBitsPerPel) continue;
++            if (pass == 0 ? width * 10 != height * 16 : width * 9 != height * 16) continue;
++            if (found && width * height < target.dmPelsWidth * target.dmPelsHeight) continue;
++            if (found && width * height == target.dmPelsWidth * target.dmPelsHeight &&
++                mode->dmDisplayFrequency != current.dmDisplayFrequency) continue;
++            target = *mode;
++            found = TRUE;
++        }
++    }
++
++    /* Another opted-in process (a launcher stub of the same game) may have switched already;
++     * switching again hands the restore over to this process. */
++    owned = (current.dmPelsWidth == source->physical.dmPelsWidth &&
++             current.dmPelsHeight == source->physical.dmPelsHeight) ||
++            (found && current.dmPelsWidth == target.dmPelsWidth &&
++             current.dmPelsHeight == target.dmPelsHeight);
++    if (found && target.dmPelsWidth == source->physical.dmPelsWidth &&
++        target.dmPelsHeight == source->physical.dmPelsHeight)
++        found = FALSE; /* the screen already has a standard size */
++    source_release( source );
++
++    if (!found || !owned)
++    {
++        TRACE( "keeping %ux%u (found %d, owned %d)\n", current.dmPelsWidth, current.dmPelsHeight, found, owned );
++        return;
++    }
++
++    target.dmFields = DM_BITSPERPEL | DM_PELSWIDTH | DM_PELSHEIGHT | DM_DISPLAYFREQUENCY;
++    ret = NtUserChangeDisplaySettings( NULL, &target, NULL, CDS_FULLSCREEN, NULL );
++    WARN( "standard display mode %ux%u@%u for this process, result %d\n", target.dmPelsWidth,
++          target.dmPelsHeight, target.dmDisplayFrequency, ret );
++}
++
+ static BOOL source_enum_display_settings( const struct source *source, UINT index, DEVMODEW *devmode, UINT flags )
+ {
+     DEVMODEW current_mode = {.dmSize = sizeof(DEVMODEW)};
+@@ -5850,6 +5917,9 @@
+ 
+     static const WCHAR oneW[] = {'1',0};
+     static const WCHAR x11driverW[] = {'\\','X','1','1',' ','D','r','i','v','e','r',0};
++    static const WCHAR runeonW[] = {'\\','R','u','n','e','o','n',0};
++    char runeon_buf[offsetof(KEY_VALUE_PARTIAL_INFORMATION, Data[sizeof(DWORD)])];
++    HKEY runeonkey;
+ 
+     pthread_mutexattr_init( &attr );
+     pthread_mutexattr_settype( &attr, PTHREAD_MUTEX_RECURSIVE );
+@@ -5930,6 +6000,17 @@
+         {
+             memcpy( appname + i, x11driverW, sizeof(x11driverW) );
+             appkey = reg_open_key( tmpkey, appname, lstrlenW( appname ) * sizeof(WCHAR) );
++
++            /* @@ Wine registry key: HKCU\Software\Wine\AppDefaults\app.exe\Runeon */
++            memcpy( appname + i, runeonW, sizeof(runeonW) );
++            if ((runeonkey = reg_open_key( tmpkey, appname, lstrlenW( appname ) * sizeof(WCHAR) )))
++            {
++                KEY_VALUE_PARTIAL_INFORMATION *info = (void *)runeon_buf;
++                if (query_reg_ascii_value( runeonkey, "StandardDisplayMode", info, sizeof(runeon_buf) ) &&
++                    info->Type == REG_DWORD && info->DataLength == sizeof(DWORD))
++                    standard_display_mode = !!*(DWORD *)info->Data;
++                NtClose( runeonkey );
++            }
+             NtClose( tmpkey );
+         }
+     }
+--- a/dlls/win32u/win32u_private.h
++++ b/dlls/win32u/win32u_private.h
+@@ -319,6 +319,7 @@
+ extern void gdi_init(void);
+ extern void winstation_init(void);
+ extern void sysparams_init(void);
++extern void apply_standard_display_mode(void);
+ extern int muldiv( int a, int b, int c );
+ 
+ extern HKEY reg_create_key( HKEY root, const WCHAR *name, ULONG name_len,
