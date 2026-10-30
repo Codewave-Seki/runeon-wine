@@ -5,7 +5,7 @@ Some games look the desktop size up in a table of common PC resolutions,
 by aspect ratio, and fail when it is missing. A scaled Mac display reports
 sizes no Windows display has, such as 1512x982; one game indexed its table
 with the -1 the lookup returned and crashed seconds after start. The same
-game runs once the desktop is a common 16:10 size.
+game runs once the desktop has a 16:10 size.
 
 When HKCU\Software\Wine\AppDefaults\<app.exe>\Runeon\StandardDisplayMode is
 a non-zero DWORD, the process switches the emulated display mode, once it
@@ -16,10 +16,11 @@ EmulateModeset: explorer's display settings restorer puts the registry mode
 back when the process exits, including when it is killed, and window
 placement, scaling and mouse mapping stay consistent for every process.
 
-It only runs when mode changes are emulated, outside a virtual desktop, and
-while the current mode is the host mode or the mode this policy chose; a
-second opted-in process then takes the restore over, so a launcher stub
-exiting does not restore the mode under the game it started. While such a
+It only runs when this process emulates mode changes, outside a virtual
+desktop, and while the current mode is the host mode or the mode this
+policy chose; with EmulateModeset set for the whole prefix the host mode is
+left alone. A second opted-in process takes the restore over, so a launcher
+stub exiting does not restore the mode under the game it started. While such a
 process runs, the whole session sees the emulated mode, as with any
 fullscreen game. Without the value, or when any condition fails, nothing
 changes.
@@ -45,7 +46,7 @@ changes.
  BOOL decorated_mode = TRUE;
  UINT64 thunk_lock_callback = 0;
  
-@@ -4427,7 +4429,72 @@
+@@ -4427,7 +4429,80 @@
      if (ret) ERR( "Changing %s display settings returned %d.\n", debugstr_us(devname), ret );
      return ret;
  }
@@ -54,8 +55,9 @@ changes.
 + * on a scaled Mac size such as 1512x982, which no Windows display reports. When the process
 + * opted in, switch the emulated mode to the largest 16:10 mode that fits the screen (16:9
 + * when none does), exactly as a fullscreen game would; explorer restores the previous mode
-+ * when this process exits. Real host modes are never touched: this only runs when mode
-+ * changes are emulated, outside a virtual desktop, and while nobody else changed the mode.
++ * when this process exits. It only runs when this process emulates mode changes, outside a
++ * virtual desktop, and while nobody else changed the mode, so with EmulateModeset set for
++ * the whole prefix the host mode is left alone.
 + */
 +void apply_standard_display_mode(void)
 +{
@@ -67,12 +69,19 @@ changes.
 +    LONG ret;
 +
 +    if (!standard_display_mode) return;
-+    if (!emulate_modeset || is_virtual_desktop())
++    if (!emulate_modeset)
 +    {
-+        WARN( "StandardDisplayMode needs emulated mode changes outside a virtual desktop, ignoring.\n" );
++        WARN( "StandardDisplayMode needs emulated mode changes, ignoring.\n" );
 +        return;
 +    }
 +    if (!(source = find_source( NULL ))) return;
++    /* only reliable once find_source() has loaded the driver and started explorer */
++    if (is_virtual_desktop())
++    {
++        WARN( "StandardDisplayMode does not apply inside a virtual desktop, ignoring.\n" );
++        source_release( source );
++        return;
++    }
 +    source_get_current_settings( source, &current );
  
 +    for (pass = 0; pass < 2 && !found; pass++)
@@ -111,14 +120,14 @@ changes.
 +
 +    target.dmFields = DM_BITSPERPEL | DM_PELSWIDTH | DM_PELSHEIGHT | DM_DISPLAYFREQUENCY;
 +    ret = NtUserChangeDisplaySettings( NULL, &target, NULL, CDS_FULLSCREEN, NULL );
-+    WARN( "standard display mode %ux%u@%u for this process, result %d\n", target.dmPelsWidth,
++    TRACE( "standard display mode %ux%u@%u for this process, result %d\n", target.dmPelsWidth,
 +          target.dmPelsHeight, target.dmDisplayFrequency, ret );
 +}
 +
  static BOOL source_enum_display_settings( const struct source *source, UINT index, DEVMODEW *devmode, UINT flags )
  {
      DEVMODEW current_mode = {.dmSize = sizeof(DEVMODEW)};
-@@ -5850,6 +5917,9 @@
+@@ -5850,6 +5925,9 @@
  
      static const WCHAR oneW[] = {'1',0};
      static const WCHAR x11driverW[] = {'\\','X','1','1',' ','D','r','i','v','e','r',0};
@@ -128,7 +137,7 @@ changes.
  
      pthread_mutexattr_init( &attr );
      pthread_mutexattr_settype( &attr, PTHREAD_MUTEX_RECURSIVE );
-@@ -5930,6 +6000,17 @@
+@@ -5930,6 +6008,17 @@
          {
              memcpy( appname + i, x11driverW, sizeof(x11driverW) );
              appkey = reg_open_key( tmpkey, appname, lstrlenW( appname ) * sizeof(WCHAR) );

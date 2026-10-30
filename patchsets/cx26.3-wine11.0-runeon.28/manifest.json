@@ -3376,12 +3376,12 @@
     {
       "order": 179,
       "path": "patches/runeon/0149-win32u-standard-display-mode-policy.patch",
-      "sha256": "d3acd5e49ce358c0b0d3a1a94e4ed7f37987472ee6085193d82d5ff340e177ed",
+      "sha256": "2347fb0508ae567223a194ac43f0e63f7f07505d7f563ef3968c86d7299a8d9b",
       "kind": "runeon-product",
       "status": "active",
-      "risk": "medium",
+      "risk": "high",
       "summary": "Optionally switch a process to the largest standard 16:10 (else 16:9) emulated display mode at start, for games that fail on a scaled Mac desktop size, using the existing CDS_FULLSCREEN path that explorer restores on process exit; gated on a per-application registry policy and on EmulateModeset. win32u change individually approved by the maintainer (2026-10-30).",
-      "testStrategy": "MinGW probes under the patched runtime with EmulateModeset on: an unopted process keeps the host mode; the opted-in image switches when started directly and as a child process; the mode is restored on normal exit and on TerminateProcess; a second opted-in process keeps the mode after the first exits and restores it on its own exit; a game that crashed on 1512x982 runs with the policy.",
+      "testStrategy": "MinGW probes under the patched runtime with EmulateModeset on: an unopted process keeps the host mode; the opted-in image switches when started directly and as a child process; the mode is restored on normal exit and on TerminateProcess; a second opted-in process keeps the mode after the first exits and restores it on its own exit; a game that crashed on 1512x982 runs with the policy. Runs inside user32 process attach with the loader lock held, hence high risk.",
       "verification": [
         {
           "path": "dlls/win32u/sysparams.c",
