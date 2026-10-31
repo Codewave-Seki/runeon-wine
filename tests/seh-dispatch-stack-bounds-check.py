@@ -174,12 +174,19 @@ int main(void)
                                                          : (EXCEPTION_REGISTRATION_RECORD *)~(ULONG_PTR)0;
             collided_rsp = top + offsets[i];
             handler_calls = collided_unwinds = 0;
+#ifdef CHECK_DUMP
+            collided_dumps = 0;
+#endif
             assert( run( top - 64, 0, &flags ) == STATUS_UNHANDLED_EXCEPTION );
             assert( handler_calls == 1 );
             if (offsets[i] == -8)
                 assert( collided_unwinds == 1 && !(flags & EXCEPTION_STACK_INVALID) );
             else
                 assert( collided_unwinds == 0 && (flags & EXCEPTION_STACK_INVALID) );
+#ifdef CHECK_DUMP
+            /* the dispatched exception is named exactly when the search ends */
+            assert( collided_dumps == (offsets[i] == -8 ? 0 : 1) );
+#endif
         }
     }
     collided_branch = 0;
@@ -216,19 +223,27 @@ def main() -> int:
     helper = extract(source, 'static inline BOOL is_valid_unwind_rsp(')
     dispatch = extract(source, 'NTSTATUS call_seh_handlers(')
     dispatch = re.sub(r'\bNTSTATUS call_seh_handlers\(', 'static NTSTATUS call_seh_handlers(', dispatch, count=1)
+    # Patch sets that also name the dispatched exception call a logging
+    # helper on the same exit; count its calls instead of logging.
+    dump = 'dump_collided_exception(' in dispatch
+    if dump:
+        helper += ('static int collided_dumps;\n'
+                   'static void dump_collided_exception( const EXCEPTION_RECORD *rec ) { (void)rec; collided_dumps++; }\n')
     with tempfile.TemporaryDirectory(prefix='runeon-seh-bounds.') as temp:
         c_file = Path(temp) / 'check.c'
         binary = Path(temp) / 'check'
         c_file.write_text(PRELUDE + helper + dispatch + MAIN)
         subprocess.run(['cc', '-std=c11', '-D_DEFAULT_SOURCE', '-D_DARWIN_C_SOURCE', '-Wall', '-Werror',
                         '-Wno-unused-function'] + (['-DCHECK_COLLIDED'] if collided else []) +
+                       (['-DCHECK_DUMP'] if dump else []) +
                        ['-o', str(binary), str(c_file)], check=True)
         result = subprocess.run([str(binary)], capture_output=True, text=True)
         if result.returncode != 0 or result.stdout.strip() != 'PASS':
             sys.stderr.write(result.stdout + result.stderr)
             return 1
     print('PASS: SEH dispatch stops at the thread stack bounds without reading past StackBase'
-          + (', including after a collided unwind' if collided else ''))
+          + (', including after a collided unwind' if collided else '')
+          + (', and names the dispatched exception when it stops' if dump and collided else ''))
     return 0
 
 

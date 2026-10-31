@@ -137,3 +137,4 @@ patches/runeon/0151-server-save-registry-in-child-process.patch
 patches/runeon/0152-ntdll-load-unix-library-outside-virtual-lock.patch
 patches/runeon/0153-winemac-resync-displays-only-after-resign.patch
 patches/runeon/0154-mmdevapi-follow-audio-device-changes.patch
+patches/runeon/0155-ntdll-name-exception-after-collided-unwind.patch

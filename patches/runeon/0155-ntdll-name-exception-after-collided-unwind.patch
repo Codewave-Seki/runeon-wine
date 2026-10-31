@@ -1,0 +1,64 @@
+From: Runeon Contributors <dev@runeon.com>
+Subject: [PATCH] ntdll: Name the dispatched exception when a collided unwind ends the search.
+
+When the stack check added for a collided unwind ends the x64 handler
+search, the process dies without the application's own crash handler
+running, and the log only shows the unwind context that left the stack.
+The exception that was being dispatched, which is what actually failed,
+is not recorded anywhere.
+
+Log it at that point: its code, its address with the containing module
+and offset when one is found, and the first two exception parameters
+(for an access violation, the access type and the faulting address).
+
+This only adds an ERR line on the path that already ends the search;
+dispatch and the unwind are unchanged.
+
+diff --git a/dlls/ntdll/signal_x86_64.c b/dlls/ntdll/signal_x86_64.c
+--- a/dlls/ntdll/signal_x86_64.c
++++ b/dlls/ntdll/signal_x86_64.c
+@@ -237,6 +237,28 @@
+ static inline BOOL is_valid_unwind_rsp( ULONG64 rsp )
+ {
+     return rsp <= (ULONG64)NtCurrentTeb()->Tib.StackBase - sizeof(ULONG64);
++}
++
++
++/**********************************************************************
++ *           dump_collided_exception
++ *
++ * Ending the search after a collided unwind leaves the process to die
++ * without the application's own crash handler running, so this line is the
++ * only record of the exception that was being dispatched.
++ */
++static void dump_collided_exception( const EXCEPTION_RECORD *rec )
++{
++    LDR_DATA_TABLE_ENTRY *module;
++    ULONG_PTR info0 = rec->NumberParameters > 0 ? rec->ExceptionInformation[0] : 0;
++    ULONG_PTR info1 = rec->NumberParameters > 1 ? rec->ExceptionInformation[1] : 0;
++
++    if (!LdrFindEntryForAddress( rec->ExceptionAddress, &module ))
++        ERR( "dispatching code=%lx at %p (%s+%Ix) info=%Ix,%Ix\n", rec->ExceptionCode, rec->ExceptionAddress,
++             debugstr_us( &module->BaseDllName ), (ULONG_PTR)rec->ExceptionAddress - (ULONG_PTR)module->DllBase,
++             info0, info1 );
++    else
++        ERR( "dispatching code=%lx at %p info=%Ix,%Ix\n", rec->ExceptionCode, rec->ExceptionAddress, info0, info1 );
+ }
+ 
+ 
+@@ -315,6 +337,7 @@
+                 {
+                     ERR( "invalid stack pointer %p after collided unwind (%p-%p)\n", (void *)context.Rsp,
+                          NtCurrentTeb()->Tib.StackLimit, NtCurrentTeb()->Tib.StackBase );
++                    dump_collided_exception( rec );
+                     rec->ExceptionFlags |= EXCEPTION_STACK_INVALID;
+                     return STATUS_UNHANDLED_EXCEPTION;
+                 }
+@@ -353,6 +376,7 @@
+                 {
+                     ERR( "invalid stack pointer %p after collided TEB unwind (%p-%p)\n", (void *)context.Rsp,
+                          NtCurrentTeb()->Tib.StackLimit, NtCurrentTeb()->Tib.StackBase );
++                    dump_collided_exception( rec );
+                     rec->ExceptionFlags |= EXCEPTION_STACK_INVALID;
+                     return STATUS_UNHANDLED_EXCEPTION;
+                 }

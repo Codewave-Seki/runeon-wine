@@ -2733,7 +2733,7 @@
       "provenance": {
         "repository": "https://github.com/athei/wine",
         "commit": "6a52255e56a56e7366d5013075d2ce81149fa624",
-        "author": "Alexander Thei\u00dfen",
+        "author": "Alexander Theißen",
         "note": "Adapted downstream fix, code unchanged; also carried as Highball's patch 0020 (gauthierpiarrette/highball-engine 8ea60710f2bc5bc84a79f71cb37a17b57bf49ca3)."
       },
       "verification": [
@@ -3512,6 +3512,28 @@
         {
           "path": "dlls/winecoreaudio.drv/coreaudio.c",
           "contains": "static NTSTATUS unix_wait_device_change(void *args)"
+        }
+      ]
+    },
+    {
+      "order": 185,
+      "path": "patches/runeon/0155-ntdll-name-exception-after-collided-unwind.patch",
+      "sha256": "27c49fd45ddda596cffe74cad2c6ea131bf8cb57081274a5220b7b6661ce61db",
+      "kind": "runeon-product",
+      "status": "active",
+      "risk": "low",
+      "summary": "When the 0121 stack check ends the x64 handler search after a collided unwind, also log the exception that was being dispatched: its code, its address with the containing module and offset when LdrFindEntryForAddress() finds one, and the first two exception parameters (for an access violation, the access type and the faulting address). The process then dies without the application's own crash handler running, so this ERR line is the only record of the failing exception. Logging only: dispatch and the unwind are unchanged. Individually approved by the maintainer (2026-11-01); no opt-in, see MAINTENANCE.md.",
+      "testStrategy": "tests/seh-dispatch-stack-bounds-check.py --collided, run by scripts/integration-check.sh, replaces the logging helper with a counter and asserts that it runs exactly once when either collided-unwind branch ends the search and never when the unwind is allowed; with either new call removed the assertion fails. The ERR text and LdrFindEntryForAddress() lookup are covered only by code review and the complete WoW64 build, not by a run against a real crash.",
+      "verification": [
+        {
+          "path": "dlls/ntdll/signal_x86_64.c",
+          "contains": "static void dump_collided_exception( const EXCEPTION_RECORD *rec )",
+          "occurrences": 1
+        },
+        {
+          "path": "dlls/ntdll/signal_x86_64.c",
+          "contains": "ERR( \"dispatching code=%lx at %p (%s+%Ix) info=",
+          "occurrences": 1
         }
       ]
     }

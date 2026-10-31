@@ -90,6 +90,7 @@ Runeon product patches are opt-in by default, as `CLAUDE.md` requires. A specifi
 | `0152` | A builtin module's first Unix library load held `virtual_mutex`, so every other thread's memory operations and page faults waited for `dlopen()`. | Only the `dlopen()` moves outside the lock; the handle is recorded and looked up under it, and a duplicate reference is dropped. |
 | `0153` | winemac re-read the display list on every activation notification, also repeated ones with no resign in between. | The re-read still happens on the first activation, after a real resign, after a screen configuration change and after a permission dialog. |
 | `0154` | Audio devices added, removed or made default while a program runs reach it as on Windows, instead of never. | `winecoreaudio.drv` only; IMMNotificationClient callbacks and `AUDCLNT_E_DEVICE_INVALIDATED` on a stream whose device is gone. The default microphone stays the one chosen in macOS. Every process that loads mmdevapi keeps a watch thread and writes `DeviceState` on a change; DirectSound and winmm only log the new errors. |
+| `0155` | When the `0121` check ends the search after a collided unwind, the process dies without its own crash handler running; logging the exception that was being dispatched is the only record of what failed. | One `ERR` line on that exit only: code, address with module and offset, and the first two exception parameters. Dispatch and the unwind are unchanged. |
 
 ## Release policy
 
