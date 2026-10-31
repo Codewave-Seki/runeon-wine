@@ -729,3 +729,37 @@ Candidate built from `94dd4e2` in empty source and build directories (complete W
 - `ddraw1` upstream tests, x86, compared with `.26`: no new failure; the four `test_execute_buffer_updates` failures on `.26` pass on `.27` (`365e610147`). Both versions stall at the same point in `test_caps` during wined3d adapter initialisation; swapping in the `.26` `winemac.drv`, `wined3d` and `ddraw` does not remove it, so it predates `.27`.
 - Maintainer's application run: the Steam client logs in, downloads and launches games; Heroes of Might and Magic: Olden Era (D3DMetal), Survival Log (DXMT), Dying Light and Telma-H (graphics route not recorded) run and present; a wired controller reads correctly in Steam's controller test; cursor release, minimise to the Dock and restore, launcher windows and text drawing look as before; Steam's free space matches Finder.
 - Not checked: a game confirmed on the WineD3D route in this run (WineD3D is covered only by the `ddraw1` tests above), rich-text clipboard both ways, Finder drag and drop (including onto a display left of the main one), controller unplug and replug.
+
+<a id="recall-fix-series"></a>
+
+## Stall and correctness fixes from AsherJN/recall
+
+Candidate patch set `cx26.3-wine11.0-runeon.29` adds `patches/runeon/0150`–`0154` after `0149`. The source is [AsherJN/recall](https://github.com/AsherJN/recall) at commit `a436e4cd4fac`, whose Wine patches are LGPL-2.1-or-later and target the same CrossOver 26.3.0 source. All changes taken are by AsherJN. WineHQ and CodeWeavers had not fixed any of them as of this base.
+
+`ntdll`, `server` and `winemac.drv` are ABI-sensitive. The maintainer approved the series patch by patch on 2026-10-31; the approval does not widen the rule for other patches. None of them changes the wineserver protocol or matches a process. `0154` adds a unix call to the shared audio driver table, so mmdevapi and the driver must come from the same build; the runtime is replaced as a whole.
+
+### Taken
+
+| Patch | Change | Evidence on `runeon.28` |
+|---|---|---|
+| `0150` | Thread exit no longer close()s the msync alert index as a file descriptor. | `tests/msync-alert-fd-probe.c`, x86_64, `WINEMSYNC=1`: 2 failed reads of 6000 in each of 3 runs; 0 without msync. The alert indices seen in a server trace ranged from 115 to 6835. |
+| `0151` | The periodic registry save runs in a forked child on macOS. | `tests/registry-save-stall-probe.c`, no msync, about 10 MB in HKCU: one 813.9 ms stall at the 30-second save. |
+| `0152` | `dlopen()` of a builtin module's Unix library runs outside `virtual_mutex`. | `tests/unixlib-load-lock-probe.c`, warm Rosetta cache: slowest VirtualAlloc/VirtualFree 2.9 ms during the loads, 0.0 ms idle (3 runs). Small; kept only if the patched runtime shows a smaller stall. |
+| `0153` | The displays-changed event on activation only follows a real resign, a screen change or a permission dialog. | Not reproduced: `tests/activation-click-probe.c` with `WINEDEBUG=+event`, 43 left clicks in a window gave one `DISPLAYS_CHANGED`, at the first activation. Adopted by maintainer decision on the recall project's report for full-screen games; to be checked in a full-screen game. |
+| `0154` | mmdevapi follows Core Audio device and default device changes and notifies clients. | `tests/audio-device-change-probe.c`: switching the Mac output device several times in 60 seconds gave no notification. |
+
+Adapted: `0151` forks only on macOS and closes inherited descriptors in the child; `0152` checks the library path again before recording the handle; `0154` places one `create_stream` hunk by hand, pins mmdevapi and the driver for its watch thread, and adds the unix call as not implemented to the ALSA, PulseAudio and OSS drivers.
+
+### Left out
+
+| Change | Reason |
+|---|---|
+| `WINE_SYSCALL_LOG`, `WINESERVER_REGISTRY_LOG` and the display log patches | Diagnostics only. |
+| The Bluetooth microphone policy in `wine-audio-devices.patch` | Overrides the microphone the user chose in macOS. |
+| The rest of `wine-winemac-activation.patch`, mouselook, the canvas patch | Features or behaviour changes beyond the defects above. |
+| `wine-portable-directory-boolean.patch`, `wine-service-security.patch` | Outside the five defects the maintainer selected; not reviewed. |
+| The DXMT patches | DXMT is maintained outside this repository. |
+
+### Not verified yet
+
+Behaviour on the patched runtime: each probe above is rerun on a complete i386/x86_64 WoW64 build, with Steam and representative games, with and without msync and Retina mode, and `0153` in a full-screen game.

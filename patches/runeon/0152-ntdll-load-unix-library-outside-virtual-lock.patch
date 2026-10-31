@@ -1,0 +1,82 @@
+From: AsherJN
+Subject: [PATCH] ntdll: Load a builtin module's Unix library outside virtual_mutex.
+
+Adapted for CrossOver 26.3 from AsherJN/recall commit a436e4cd4fac44693b4d699acc030d17eec6f36e
+(patches/wine-ntdll-syscall-log.patch, the get_builtin_unix_funcs hunk
+only; its lock diagnostics are not carried). A downstream fix, not a
+WineHQ backport.
+
+The first call into a builtin module's Unix library dlopen()s it while
+holding virtual_mutex, which every virtual memory operation and page fault
+of the process also takes, so all other threads wait for the load. Under
+Rosetta a first load can be slow.
+
+Copy the library path under the lock, dlopen() without it, and record the
+handle under the lock again, only if the module found at that address
+still has the same library path. If another thread recorded a handle
+first, or the module went away meanwhile, the extra reference is dropped.
+
+--- a/dlls/ntdll/unix/virtual.c
++++ b/dlls/ntdll/unix/virtual.c
+@@ -839,6 +839,15 @@ void *get_builtin_so_handle( void *module )
+ }
+ 
+ 
++static struct builtin_module *find_builtin_unix_module( void *module )
++{
++    struct builtin_module *builtin;
++
++    LIST_FOR_EACH_ENTRY( builtin, &builtin_modules, struct builtin_module, entry )
++        if (builtin->module == module) return builtin;
++    return NULL;
++}
++
+ /***********************************************************************
+  *           get_builtin_unix_funcs
+  */
+@@ -848,25 +857,38 @@ static NTSTATUS get_builtin_unix_funcs( void *module, BOOL wow, const void **fun
+     sigset_t sigset;
+     NTSTATUS status = STATUS_DLL_NOT_FOUND;
+     struct builtin_module *builtin;
++    char *unix_path = NULL;
++    void *handle;
+ 
+     server_enter_uninterrupted_section( &virtual_mutex, &sigset );
+-    LIST_FOR_EACH_ENTRY( builtin, &builtin_modules, struct builtin_module, entry )
++    if ((builtin = find_builtin_unix_module( module )) && builtin->unix_path && !builtin->unix_handle)
++        unix_path = strdup( builtin->unix_path );
++    server_leave_uninterrupted_section( &virtual_mutex, &sigset );
++
++    /* Load the Unix library without holding virtual_mutex: dlopen() can be slow,
++     * under Rosetta especially, and every memory operation and page fault of
++     * the process's other threads would wait for it. */
++    handle = unix_path ? dlopen( unix_path, RTLD_NOW ) : NULL;
++    if (unix_path && !handle) WARN_(module)( "failed to load %s: %s\n", debugstr_a(unix_path), dlerror() );
++
++    server_enter_uninterrupted_section( &virtual_mutex, &sigset );
++    if ((builtin = find_builtin_unix_module( module )))
+     {
+-        if (builtin->module != module) continue;
+-        if (builtin->unix_path && !builtin->unix_handle)
++        /* the module may have been unloaded and another one mapped at its address */
++        if (handle && !builtin->unix_handle && builtin->unix_path && !strcmp( builtin->unix_path, unix_path ))
+         {
+-            builtin->unix_handle = dlopen( builtin->unix_path, RTLD_NOW );
+-            if (!builtin->unix_handle)
+-                WARN_(module)( "failed to load %s: %s\n", debugstr_a(builtin->unix_path), dlerror() );
++            builtin->unix_handle = handle;
++            handle = NULL;
+         }
+         if (builtin->unix_handle)
+         {
+             *funcs = dlsym( builtin->unix_handle, ptr_name );
+             status = *funcs ? STATUS_SUCCESS : STATUS_ENTRYPOINT_NOT_FOUND;
+         }
+-        break;
+     }
+     server_leave_uninterrupted_section( &virtual_mutex, &sigset );
++    if (handle) dlclose( handle );  /* another thread loaded it first, or the module went away */
++    free( unix_path );
+     return status;
+ }
+ 

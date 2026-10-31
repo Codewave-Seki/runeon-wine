@@ -1,0 +1,38 @@
+From: AsherJN
+Subject: [PATCH] ntdll: Do not close the msync alert index on thread exit.
+
+Adapted for CrossOver 26.3 from AsherJN/recall commit a436e4cd4fac44693b4d699acc030d17eec6f36e
+(patches/wine-ntdll-syscall-log.patch, the pthread_exit_wrapper hunk only;
+its diagnostics are not carried). A downstream fix, not a WineHQ backport.
+
+Under msync, a thread's in-process alert "fd" is the index of its alert
+object in the server's shared object table, not a file descriptor, yet
+thread exit still close()d it. That closed whatever the process had open
+under that number: a file, a pipe or a socket of another thread, which
+then failed or read the wrong data.
+
+Close the alert fd on thread exit only when msync is off. Without
+WINEMSYNC nothing changes.
+
+--- a/dlls/ntdll/unix/thread.c
++++ b/dlls/ntdll/unix/thread.c
+@@ -76,6 +76,7 @@
+ #include "wine/server.h"
+ #include "wine/debug.h"
+ #include "unix_private.h"
++#include "msync.h"
+ 
+ WINE_DEFAULT_DEBUG_CHANNEL(thread);
+ WINE_DECLARE_DEBUG_CHANNEL(seh);
+@@ -1104,7 +1105,10 @@ static void contexts_from_server( CONTEXT *context, struct context_data server_c
+  */
+ static DECLSPEC_NORETURN void pthread_exit_wrapper( int status )
+ {
+-    close( ntdll_get_thread_data()->alert_fd );
++    /* Under msync the alert "fd" is the thread's index in the server's shared
++     * object table, not a descriptor; closing it would close whatever file
++     * the process has open under that number. */
++    if (!do_msync()) close( ntdll_get_thread_data()->alert_fd );
+     close( ntdll_get_thread_data()->wait_fd[0] );
+     close( ntdll_get_thread_data()->wait_fd[1] );
+     close( ntdll_get_thread_data()->reply_fd );
