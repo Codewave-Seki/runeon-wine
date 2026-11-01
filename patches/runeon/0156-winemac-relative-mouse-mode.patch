@@ -1,0 +1,806 @@
+From: AsherJN
+Subject: [PATCH] winemac.drv: Deliver raw relative motion while a client hides and confines the cursor.
+
+Adapted for CrossOver 26.3 from AsherJN/recall commit a436e4cd4fac44693b4d699acc030d17eec6f36e
+(patches/wine-mouselook.patch). A downstream change, not a WineHQ backport.
+
+A Windows game aims by hiding the cursor, then confining it (ClipCursor)
+or moving it back to the centre every frame (SetCursorPos), and reading
+the motion. On macOS each re-centre is a synchronous warp of the Mac
+pointer on the main thread while the game thread waits, the warp
+discards the mouse motion queued behind it, and the motion that does
+arrive carries macOS's pointer acceleration.
+
+While the client hides the cursor (no cursor, or one with no visible
+pixels) and either confines it or warps it while hidden, freeze the Mac
+pointer and deliver all motion as relative movement. Wine's cursor
+position is then authoritative: SetCursorPos and GetCursorPos are
+answered without the main thread, clicks and scrolls are delivered at
+Wine's position, and the pointer is placed there when the mode ends.
+The mode ends when the cursor is shown, the clip is released, the
+application resigns, the key window changes or a window is dragged.
+
+Motion comes from the Game Controller framework's GCMouse: whole mouse
+counts without pointer acceleration, as Windows gives games, at the
+mouse's report rate but delivered at most 1,000 times a second. Pointer
+events stand in for trackpads, which keep macOS's acceleration, and
+while GCMouse reports nothing for a mouse.
+
+Changes from the original: the mode follows what the client does, never
+which program it is, so the per-executable list is gone; it is on unless
+the Mac Driver option RelativeMouse is set to N (AppDefaults included);
+the Game Controller framework is linked; the input statistics, test
+hotkey, interval settings, IOHID source, click timing and fullscreen
+canvas code are not carried, and the pointer fallback uses the existing
+relative move scale.
+
+diff --git a/dlls/winemac.drv/Makefile.in b/dlls/winemac.drv/Makefile.in
+index b2f87ce..880bed8 100644
+--- a/dlls/winemac.drv/Makefile.in
++++ b/dlls/winemac.drv/Makefile.in
+@@ -8,6 +8,7 @@ UNIX_LIBS    = \
+ 	-framework Carbon \
+ 	-framework CoreVideo \
+ 	-framework Foundation \
++	-framework GameController \
+ 	-framework IOKit \
+ 	-framework Metal \
+ 	-framework OpenGL \
+diff --git a/dlls/winemac.drv/cocoa_app.h b/dlls/winemac.drv/cocoa_app.h
+index f9acd28..153a83b 100644
+--- a/dlls/winemac.drv/cocoa_app.h
++++ b/dlls/winemac.drv/cocoa_app.h
+@@ -86,6 +86,16 @@ @interface WineApplicationController : NSObject <NSApplicationDelegate>
+ 
+     NSTimeInterval lastSetCursorPositionTime;
+ 
++    /* Relative mouse mode: see -relativeMouseTarget. Main thread only. */
++    WineWindow* relativeMouseWindow;
++    BOOL relativeMouseHiddenWarp;   /* the client warped the cursor while it was hidden */
++    BOOL cursorTransparent;         /* the client's cursor has no visible pixels */
++    BOOL relativeMouseUpdateScheduled;
++    double relativeRemainderX, relativeRemainderY;
++    CGPoint relativeWarpDelta;
++    NSMutableArray* rawMice;
++    BOOL rawInputStarted;
++
+     id<WineClipCursorHandler> clipCursorHandler;
+ 
+     NSImage* applicationIcon;
+diff --git a/dlls/winemac.drv/cocoa_app.m b/dlls/winemac.drv/cocoa_app.m
+index ef9ed78..65294d8 100644
+--- a/dlls/winemac.drv/cocoa_app.m
++++ b/dlls/winemac.drv/cocoa_app.m
+@@ -23,6 +23,8 @@
+ #import "cocoa_event.h"
+ #import "cocoa_window.h"
+ #import "cocoa_icon_utils.h"
++#import <GameController/GameController.h>
++#include <os/lock.h>
+ 
+ #pragma GCC diagnostic ignored "-Wdeclaration-after-statement"
+ 
+@@ -44,6 +46,139 @@
+  * configuration changed.  Main thread only. */
+ static BOOL activation_resync_needed = TRUE;
+ 
++/* Relative mouse mode state shared with Wine threads and the raw input queue.
++ * The main thread enters and leaves the mode; while it is on, Wine threads
++ * record the client's cursor position here instead of warping the Mac
++ * pointer, and the raw input queue delivers motion to raw_window. */
++static os_unfair_lock relative_lock = OS_UNFAIR_LOCK_INIT;
++static int relative_on;             /* atomic; written under relative_lock */
++static CGPoint relative_position;   /* Wine coordinates, under relative_lock */
++static BOOL relative_clipped;       /* under relative_lock */
++static CGRect relative_clip;        /* the client's clip rectangle, Wine coordinates, under relative_lock */
++static WineWindow* raw_window;      /* raw motion target, under relative_lock */
++static int raw_on;                  /* atomic; raw_window is set, written under relative_lock */
++static unsigned long long raw_last_motion;  /* atomic; uptime ns of the latest raw motion */
++
++/* At most this often (ns): each delivery costs the client thread a Wine
++ * server call, and gaming mice report up to 8,000 times a second. */
++static const unsigned long long raw_interval = 1000000;
++/* Raw motion this recent (ns) carries the movement, so pointer events are
++ * ignored; after it, pointer events stand in (a mouse GCMouse does not report). */
++static const unsigned long long raw_silence = 250000000;
++
++/* raw_queue only */
++static dispatch_queue_t raw_queue;
++static dispatch_source_t raw_timer;
++static double raw_pending_x, raw_pending_y;
++static unsigned long long raw_last_post;
++static BOOL raw_flush_armed;
++
++static unsigned long long uptime_ns(void)
++{
++    return clock_gettime_nsec_np(CLOCK_UPTIME_RAW);
++}
++
++/* Follows Wine's cursor, as Wine clips it, to place the Mac pointer when the
++ * mode ends.  Called with relative_lock held. */
++static void relative_move_position(int x, int y)
++{
++    relative_position.x += x;
++    relative_position.y += y;
++    if (relative_clipped)
++    {
++        relative_position.x = MAX(CGRectGetMinX(relative_clip), MIN(relative_position.x, CGRectGetMaxX(relative_clip) - 1));
++        relative_position.y = MAX(CGRectGetMinY(relative_clip), MIN(relative_position.y, CGRectGetMaxY(relative_clip) - 1));
++    }
++}
++
++/* Delivers the whole counts received so far; the fraction stays pending. */
++static void raw_flush(void)
++{
++    int x = raw_pending_x, y = raw_pending_y;  /* truncation keeps the remainder */
++    unsigned long long now = uptime_ns();
++
++    raw_flush_armed = FALSE;
++    if (!x && !y) return;
++
++    os_unfair_lock_lock(&relative_lock);
++    if (raw_window)
++    {
++        macdrv_event* event = macdrv_create_event(MOUSE_MOVED_RELATIVE, raw_window);
++        event->mouse_moved.x = x;
++        event->mouse_moved.y = y;
++        event->mouse_moved.time_ms = [[WineApplicationController sharedController] ticksForEventTime:now / 1e9];
++        [raw_window.queue postEvent:event];
++        macdrv_release_event(event);
++        relative_move_position(x, y);
++        raw_pending_x -= x;
++        raw_pending_y -= y;
++        raw_last_post = now;
++    }
++    else
++        raw_pending_x = raw_pending_y = 0;
++    os_unfair_lock_unlock(&relative_lock);
++}
++
++/* A GCMouse report: whole mouse counts, without macOS's pointer acceleration,
++ * as Windows gives games.  Delivered at most once per raw_interval; motion in
++ * between accumulates and is never dropped. */
++static void raw_motion(float dx, float dy)
++{
++    unsigned long long now = uptime_ns();
++
++    __atomic_store_n(&raw_last_motion, now, __ATOMIC_RELAXED);
++    if (!__atomic_load_n(&raw_on, __ATOMIC_ACQUIRE))
++    {
++        raw_pending_x = raw_pending_y = 0;
++        return;
++    }
++
++    raw_pending_x += dx;
++    raw_pending_y -= dy;  /* GCMouse's Y axis points up, Windows' down */
++    if (now - raw_last_post >= raw_interval)
++        raw_flush();
++    else if (!raw_flush_armed)
++    {
++        raw_flush_armed = TRUE;
++        dispatch_source_set_timer(raw_timer, dispatch_time(DISPATCH_TIME_NOW, raw_last_post + raw_interval - now),
++                                  DISPATCH_TIME_FOREVER, 0);
++    }
++}
++
++/* Whether every frame of a cursor is fully transparent: some clients hide the
++ * cursor by setting an empty image rather than no cursor. */
++static BOOL cursor_frames_transparent(NSArray* frames)
++{
++    if (![frames count]) return NO;
++    for (NSDictionary* frame in frames)
++    {
++        CGImageRef image = (CGImageRef)frame[@"image"];
++        size_t width = CGImageGetWidth(image), height = CGImageGetHeight(image), i;
++        unsigned char* pixels;
++        CGColorSpaceRef space;
++        CGContextRef context;
++        BOOL clear = NO;
++
++        if (!width || !height || width > 512 || height > 512) return NO;
++        if (!(pixels = calloc(width * height, 4))) return NO;
++        space = CGColorSpaceCreateDeviceRGB();
++        context = CGBitmapContextCreate(pixels, width, height, 8, width * 4, space,
++                                        (CGBitmapInfo)kCGImageAlphaPremultipliedLast);
++        if (context)
++        {
++            CGContextDrawImage(context, CGRectMake(0, 0, width, height), image);
++            clear = YES;
++            for (i = 0; i < width * height; i++)
++                if (pixels[i * 4 + 3]) { clear = NO; break; }
++            CGContextRelease(context);
++        }
++        CGColorSpaceRelease(space);
++        free(pixels);
++        if (!clear) return NO;
++    }
++    return YES;
++}
++
+ // Internal distributed notification to handle cooperative app activation in Sonoma.
+ static NSString* const WineAppWillActivateNotification = @"WineAppWillActivateNotification";
+ static NSString* const WineActivatingAppPIDKey = @"ActivatingAppPID";
+@@ -1083,12 +1218,20 @@ - (void) updateCursor:(BOOL)force
+         }
+     }
+ 
++    - (void) cursorVisibilityChanged
++    {
++        if (!clientWantsCursorHidden && !cursorTransparent)
++            relativeMouseHiddenWarp = FALSE;
++        [self updateRelativeMouse];
++    }
++
+     - (void) hideCursor
+     {
+         if (!clientWantsCursorHidden)
+         {
+             clientWantsCursorHidden = TRUE;
+             [self updateCursor:TRUE];
++            [self cursorVisibilityChanged];
+         }
+     }
+ 
+@@ -1098,6 +1241,7 @@ - (void) unhideCursor
+         {
+             clientWantsCursorHidden = FALSE;
+             [self updateCursor:FALSE];
++            [self cursorVisibilityChanged];
+         }
+     }
+ 
+@@ -1152,6 +1296,11 @@ - (void) setCursorWithFrames:(NSArray*)frames
+             return;
+ 
+         self.cursorFrames = frames;
++        if (cursorTransparent != cursor_frames_transparent(frames))
++        {
++            cursorTransparent = !cursorTransparent;
++            [self cursorVisibilityChanged];
++        }
+         cursorFrame = 0;
+         [cursorTimer invalidate];
+         self.cursorTimer = nil;
+@@ -1270,6 +1419,10 @@ - (BOOL) setCursorPosition:(CGPoint)pos
+     {
+         BOOL ret;
+ 
++        // A frozen pointer stays put: warping would also re-associate it.
++        if (relativeMouseWindow)
++            return TRUE;
++
+         if ([windowsBeingDragged count])
+             ret = FALSE;
+         else if (self.clippingCursor && [clipCursorHandler respondsToSelector:@selector(setCursorPosition:)])
+@@ -1351,6 +1504,7 @@ - (BOOL) startClippingCursor:(CGRect)rect
+         [self setCursorPosition:NSPointToCGPoint([self flippedMouseLocation:[NSEvent mouseLocation]])];
+ 
+         [self updateWindowsForCursorClipping];
++        [self updateRelativeMouse];
+ 
+         return TRUE;
+     }
+@@ -1366,6 +1520,7 @@ - (BOOL) stopClippingCursor
+         lastSetCursorPositionTime = [[NSProcessInfo processInfo] systemUptime];
+ 
+         [self updateWindowsForCursorClipping];
++        [self updateRelativeMouse];
+ 
+         return TRUE;
+     }
+@@ -1400,6 +1555,7 @@ - (void) window:(WineWindow*)window isBeingDragged:(BOOL)dragged
+             [windowsBeingDragged addObject:window];
+         else
+             [windowsBeingDragged removeObject:window];
++        [self updateRelativeMouse];
+     }
+ 
+     - (void) windowWillOrderOut:(WineWindow*)window
+@@ -1441,6 +1597,8 @@ - (void) handleWindowDrag:(WineWindow*)window begin:(BOOL)begin
+             eventType = WINDOW_DRAG_END;
+         }
+ 
++        [self updateRelativeMouse];
++
+         event = macdrv_create_event(eventType, window);
+         if (eventType == WINDOW_DRAG_BEGIN)
+             event->window_drag_begin.no_activate = [NSEvent wine_commandKeyDown];
+@@ -1448,11 +1606,271 @@ - (void) handleWindowDrag:(WineWindow*)window begin:(BOOL)begin
+         macdrv_release_event(event);
+     }
+ 
++    /*
++     * Relative mouse mode
++     *
++     * A Windows game aims by hiding the cursor, then confining it (ClipCursor)
++     * or moving it back to the centre every frame (SetCursorPos), and reading
++     * the motion.  Done literally on macOS, every re-centre is a synchronous
++     * warp of the Mac pointer while the game thread waits, each warp discards
++     * the motion queued behind it, and the motion carries macOS's pointer
++     * acceleration.
++     *
++     * Instead, while the client hides the cursor and confines or re-centres
++     * it, freeze the Mac pointer and deliver all motion as relative movement:
++     * Wine's cursor position is authoritative, re-centring and position
++     * queries are answered by Wine threads without this thread, clicks and
++     * scrolls happen at Wine's position, and the pointer reappears there when
++     * the mode ends.  The motion is raw mouse counts from GCMouse, at the
++     * mouse's report rate; pointer events stand in for trackpads and for a
++     * mouse GCMouse does not report.
++     *
++     * The mode follows what the client does, never which program it is.  The
++     * Mac Driver option RelativeMouse=N turns it off.
++     */
++    - (WineWindow*) relativeMouseTarget
++    {
++        WineWindow* window;
++
++        if (!relative_mouse || ![NSApp isActive])
++            return nil;
++        if (!clientWantsCursorHidden && !cursorTransparent)
++            return nil;
++        if (!self.clippingCursor && !relativeMouseHiddenWarp)
++            return nil;
++        // The event tap clipping handler moves the pointer itself.
++        if (clipCursorHandler && ![clipCursorHandler isKindOfClass:[WineConfinementClipCursorHandler class]])
++            return nil;
++        if ([windowsBeingDragged count])
++            return nil;
++
++        window = (WineWindow*)[NSApp keyWindow];
++        if (![window isKindOfClass:[WineWindow class]] || ![window isVisible] || [window isMiniaturized])
++            return nil;
++        return window;
++    }
++
++    /* Cursor, clipping and focus changes often come in bursts (a client hides
++       the cursor, then clips it); settle once they are all applied. */
++    - (void) updateRelativeMouse
++    {
++        if (relativeMouseUpdateScheduled)
++            return;
++        relativeMouseUpdateScheduled = TRUE;
++        dispatch_async(dispatch_get_main_queue(), ^{
++            WineWindow* target;
++
++            relativeMouseUpdateScheduled = FALSE;
++            target = [self relativeMouseTarget];
++            if (relativeMouseWindow && target != relativeMouseWindow)
++                [self leaveRelativeMouse];
++            if (target && !relativeMouseWindow)
++                [self enterRelativeMouse:target];
++        });
++    }
++
++    - (void) enterRelativeMouse:(WineWindow*)window
++    {
++        NSRect content = [window contentRectForFrameRect:[window frame]];
++        NSPoint location = [NSEvent mouseLocation];
++        CGPoint position;
++
++        [self startRawInput];
++
++        relativeWarpDelta = CGPointZero;
++        if (!NSMouseInRect(location, NSInsetRect(content, 1, 1), NO))
++        {
++            // Freeze the pointer over the window, so clicks go to it.  The warp
++            // shows up in the next pointer event's delta; subtract it there.
++            NSPoint center = NSMakePoint(NSMidX(content), NSMidY(content));
++            CGPoint from = NSPointToCGPoint([self flippedMouseLocation:location]);
++            CGPoint to = NSPointToCGPoint([self flippedMouseLocation:center]);
++
++            CGSetLocalEventsSuppressionInterval(0);
++            if (CGWarpMouseCursorPosition(to) == kCGErrorSuccess)
++            {
++                relativeWarpDelta = CGPointMake(to.x - from.x, to.y - from.y);
++                location = center;
++            }
++            CGSetLocalEventsSuppressionInterval(0.25);
++        }
++
++        if (CGAssociateMouseAndMouseCursorPosition(false) != kCGErrorSuccess)
++        {
++            relativeWarpDelta = CGPointZero;
++            return;
++        }
++
++        position = cgpoint_win_from_mac(NSPointToCGPoint([self flippedMouseLocation:location]));
++
++        relativeMouseWindow = [window retain];
++        relativeRemainderX = relativeRemainderY = 0;
++        os_unfair_lock_lock(&relative_lock);
++        relative_position = CGPointMake(floor(position.x), floor(position.y));
++        __atomic_store_n(&relative_on, 1, __ATOMIC_RELEASE);
++        os_unfair_lock_unlock(&relative_lock);
++        [self updateRawInput];
++    }
++
++    - (void) leaveRelativeMouse
++    {
++        WineWindow* window = relativeMouseWindow;
++        CGPoint position;
++
++        if (!window) return;
++
++        // Stop raw input first, so the position read below is final.
++        relativeMouseWindow = nil;
++        [self updateRawInput];
++        os_unfair_lock_lock(&relative_lock);
++        __atomic_store_n(&relative_on, 0, __ATOMIC_RELEASE);
++        position = relative_position;
++        os_unfair_lock_unlock(&relative_lock);
++
++        CGAssociateMouseAndMouseCursorPosition(true);
++
++        // Show the pointer where the client left its cursor; not when the
++        // application lost activation, the user is going somewhere else.
++        if ([NSApp isActive] && [window isVisible])
++            [self setCursorPosition:cgpoint_mac_from_win(position)];
++
++        [window release];
++        relativeRemainderX = relativeRemainderY = 0;
++        relativeWarpDelta = CGPointZero;
++        forceNextMouseMoveAbsolute = TRUE;
++    }
++
++    - (BOOL) recordRelativeMousePosition:(CGPoint)pos
++    {
++        if (!relativeMouseWindow) return NO;
++        os_unfair_lock_lock(&relative_lock);
++        relative_position = pos;
++        os_unfair_lock_unlock(&relative_lock);
++        return YES;
++    }
++
++    - (void) noteClientWarp
++    {
++        if (!relativeMouseHiddenWarp && (clientWantsCursorHidden || cursorTransparent))
++        {
++            relativeMouseHiddenWarp = TRUE;
++            [self updateRelativeMouse];
++        }
++    }
++
++    /* Pointer events stand in for raw motion. */
++    - (void) handleRelativeMouseMove:(NSEvent*)anEvent
++    {
++        double scale = retina_on ? 2 : 1;
++        WineWindow* window = mouseCaptureWindow ? mouseCaptureWindow : relativeMouseWindow;
++        macdrv_event* event;
++        int x, y;
++
++        if (__atomic_load_n(&raw_on, __ATOMIC_ACQUIRE) &&
++            uptime_ns() - __atomic_load_n(&raw_last_motion, __ATOMIC_RELAXED) < raw_silence)
++        {
++            relativeWarpDelta = CGPointZero;
++            return;
++        }
++
++        // deltaY is already top-down, like Windows.
++        relativeRemainderX += ([anEvent deltaX] - relativeWarpDelta.x) * scale;
++        relativeRemainderY += ([anEvent deltaY] - relativeWarpDelta.y) * scale;
++        relativeWarpDelta = CGPointZero;
++        x = relativeRemainderX;  // truncation keeps the remainder
++        y = relativeRemainderY;
++        if (!x && !y) return;
++        relativeRemainderX -= x;
++        relativeRemainderY -= y;
++
++        event = macdrv_create_event(MOUSE_MOVED_RELATIVE, window);
++        event->mouse_moved.x = x;
++        event->mouse_moved.y = y;
++        event->mouse_moved.time_ms = [self ticksForEventTime:[anEvent timestamp]];
++        event->mouse_moved.drag = [anEvent type] != NSEventTypeMouseMoved;
++        [window.queue postEvent:event];
++        macdrv_release_event(event);
++
++        os_unfair_lock_lock(&relative_lock);
++        relative_move_position(x, y);
++        os_unfair_lock_unlock(&relative_lock);
++    }
++
++    /* Starts GCMouse raw input, once, the first time the mode is entered. */
++    - (void) startRawInput
++    {
++        dispatch_queue_attr_t attributes;
++
++        if (rawInputStarted)
++            return;
++        rawInputStarted = TRUE;
++
++        attributes = dispatch_queue_attr_make_with_qos_class(DISPATCH_QUEUE_SERIAL, QOS_CLASS_USER_INTERACTIVE, 0);
++        attributes = dispatch_queue_attr_make_with_autorelease_frequency(attributes, DISPATCH_AUTORELEASE_FREQUENCY_WORK_ITEM);
++        raw_queue = dispatch_queue_create("org.winehq.wine.winemac.raw-mouse", attributes);
++        raw_timer = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, DISPATCH_TIMER_STRICT, raw_queue);
++        dispatch_source_set_event_handler(raw_timer, ^{ raw_flush(); });
++        dispatch_source_set_timer(raw_timer, DISPATCH_TIME_FOREVER, DISPATCH_TIME_FOREVER, 0);
++        dispatch_resume(raw_timer);
++
++        rawMice = [[NSMutableArray alloc] init];
++        [[NSNotificationCenter defaultCenter] addObserverForName:GCMouseDidConnectNotification object:nil
++                                                           queue:[NSOperationQueue mainQueue]
++                                                      usingBlock:^(NSNotification* note){ [self attachRawMouse:note.object]; }];
++        [[NSNotificationCenter defaultCenter] addObserverForName:GCMouseDidDisconnectNotification object:nil
++                                                           queue:[NSOperationQueue mainQueue]
++                                                      usingBlock:^(NSNotification* note){ [self detachRawMouse:note.object]; }];
++        for (GCMouse* mouse in [GCMouse mice])
++            [self attachRawMouse:mouse];
++    }
++
++    - (void) attachRawMouse:(GCMouse*)mouse
++    {
++        // Trackpads keep pointer events: aiming with one relies on macOS's
++        // pointer acceleration.  GCMouse has no public way to tell them apart
++        // except the name ("Apple Internal Keyboard / Trackpad", "Magic Trackpad").
++        if ([mouse.vendorName rangeOfString:@"Trackpad" options:NSCaseInsensitiveSearch].location != NSNotFound)
++            return;
++        if ([rawMice containsObject:mouse]) return;
++        [rawMice addObject:mouse];
++        mouse.handlerQueue = raw_queue;
++        mouse.mouseInput.mouseMovedHandler = ^(GCMouseInput* input, float deltaX, float deltaY){
++            raw_motion(deltaX, deltaY);
++        };
++    }
++
++    - (void) detachRawMouse:(GCMouse*)mouse
++    {
++        if (![rawMice containsObject:mouse]) return;
++        mouse.mouseInput.mouseMovedHandler = nil;
++        [rawMice removeObject:mouse];
++    }
++
++    /* Raw motion goes to the relative mode's window while there is one. */
++    - (void) updateRawInput
++    {
++        WineWindow* window = raw_queue ? relativeMouseWindow : nil;
++        WineWindow* previous;
++
++        os_unfair_lock_lock(&relative_lock);
++        previous = raw_window;
++        raw_window = [window retain];
++        __atomic_store_n(&raw_on, window != nil, __ATOMIC_RELEASE);
++        os_unfair_lock_unlock(&relative_lock);
++        [previous release];
++    }
++
+     - (void) handleMouseMove:(NSEvent*)anEvent
+     {
+         WineWindow* targetWindow;
+         BOOL drag = [anEvent type] != NSEventTypeMouseMoved;
+ 
++        if (relativeMouseWindow)
++        {
++            [self handleRelativeMouseMove:anEvent];
++            return;
++        }
++
+         if ([windowsBeingDragged count])
+             targetWindow = nil;
+         else if (mouseCaptureWindow)
+@@ -1700,6 +2118,7 @@ - (void) handleMouseButton:(NSEvent*)theEvent
+                 event = macdrv_create_event(MOUSE_BUTTON, window);
+                 event->mouse_button.button = [theEvent buttonNumber];
+                 event->mouse_button.pressed = pressed;
++                event->mouse_button.no_move = relativeMouseWindow != nil;
+                 event->mouse_button.x = floor(pt.x);
+                 event->mouse_button.y = floor(pt.y);
+                 event->mouse_button.time_ms = [self ticksForEventTime:[theEvent timestamp]];
+@@ -1781,6 +2200,7 @@ - (void) handleScrollWheel:(NSEvent*)theEvent
+                 pt = cgpoint_win_from_mac(pt);
+ 
+                 event = macdrv_create_event(MOUSE_SCROLL, window);
++                event->mouse_scroll.no_move = relativeMouseWindow != nil;
+                 event->mouse_scroll.x = floor(pt.x);
+                 event->mouse_scroll.y = floor(pt.y);
+                 event->mouse_scroll.time_ms = [self ticksForEventTime:[theEvent timestamp]];
+@@ -1986,6 +2406,7 @@ - (void) setupObservations
+             [keyWindows insertObject:window atIndex:0];
+             // CrossOver Hack 10912: Mac Edit menu
+             [self changeEditMenuKeyEquivalentsForWindow:window];
++            [self updateRelativeMouse];
+         }];
+ 
+         // CrossOver Hack 10912: Mac Edit menu
+@@ -1994,6 +2415,7 @@ - (void) setupObservations
+                          queue:nil
+                     usingBlock:^(NSNotification *note){
+             [self changeEditMenuKeyEquivalentsForWindow:nil];
++            [self updateRelativeMouse];
+         }];
+ 
+         [nc addObserverForName:NSWindowWillCloseNotification
+@@ -2008,6 +2430,8 @@ - (void) setupObservations
+                 lastTargetWindow = nil;
+             if (window == self.mouseCaptureWindow)
+                 self.mouseCaptureWindow = nil;
++            if (window == relativeMouseWindow)
++                [self leaveRelativeMouse];
+             if ([window isKindOfClass:[WineWindow class]] && [(WineWindow*)window isFullscreen])
+             {
+                 dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 0), dispatch_get_main_queue(), ^{
+@@ -2478,6 +2902,8 @@ - (void)applicationDidBecomeActive:(NSNotification *)notification
+         // movement deltas are invalidated.  Make sure the next mouse move event
+         // starts over from an absolute baseline.
+         forceNextMouseMoveAbsolute = TRUE;
++
++        [self updateRelativeMouse];
+     }
+ 
+     - (void)applicationDidChangeScreenParameters:(NSNotification *)notification
+@@ -2501,6 +2927,10 @@ - (void)applicationDidResignActive:(NSNotification *)notification
+         activation_resync_needed = TRUE;
+         [self invalidateGotFocusEvents];
+ 
++        // At once, not deferred: no motion may reach the client once the user
++        // has moved to another application.
++        [self leaveRelativeMouse];
++
+         if (!temporarilyIgnoreResignEventsForDialog)
+         {
+             event = macdrv_create_event(APP_DEACTIVATED, nil);
+@@ -2835,13 +3265,45 @@ int macdrv_set_cursor_position(CGPoint pos)
+ {
+     __block int ret;
+ 
++    // The Mac pointer is frozen: re-centring is Wine-side only, with no warp
++    // and no wait for the main thread.
++    if (__atomic_load_n(&relative_on, __ATOMIC_ACQUIRE))
++    {
++        os_unfair_lock_lock(&relative_lock);
++        if ((ret = relative_on))
++            relative_position = pos;
++        os_unfair_lock_unlock(&relative_lock);
++        if (ret) return ret;
++    }
++
+     OnMainThread(^{
+-        ret = [[WineApplicationController sharedController] setCursorPosition:cgpoint_mac_from_win(pos)];
++        WineApplicationController* controller = [WineApplicationController sharedController];
++
++        // The mode may have started since the check above.
++        if ([controller recordRelativeMousePosition:pos])
++        {
++            ret = TRUE;
++            return;
++        }
++        ret = [controller setCursorPosition:cgpoint_mac_from_win(pos)];
++        if (ret)
++            [controller noteClientWarp];
+     });
+ 
+     return ret;
+ }
+ 
++/***********************************************************************
++ *              macdrv_relative_mouse_active
++ *
++ * Whether the Mac pointer is frozen for relative mouse mode, so that Wine's
++ * cursor position is authoritative.
++ */
++int macdrv_relative_mouse_active(void)
++{
++    return __atomic_load_n(&relative_on, __ATOMIC_ACQUIRE);
++}
++
+ /***********************************************************************
+  *              macdrv_clip_cursor
+  *
+@@ -2880,6 +3342,11 @@ int macdrv_clip_cursor(CGRect r)
+             }
+         }
+ 
++        os_unfair_lock_lock(&relative_lock);
++        relative_clipped = clipping;
++        relative_clip = r;
++        os_unfair_lock_unlock(&relative_lock);
++
+         if (clipping)
+             ret = [controller startClippingCursor:rect];
+         else
+diff --git a/dlls/winemac.drv/macdrv_cocoa.h b/dlls/winemac.drv/macdrv_cocoa.h
+index 477efe9..ade1aa5 100644
+--- a/dlls/winemac.drv/macdrv_cocoa.h
++++ b/dlls/winemac.drv/macdrv_cocoa.h
+@@ -141,6 +141,7 @@
+ extern bool use_confinement_cursor_clipping;
+ extern bool cursor_clipping_locks_windows;
+ extern bool use_precise_scrolling;
++extern bool relative_mouse;
+ extern int gl_surface_mode;
+ extern CFDictionaryRef localized_strings;
+ extern bool retina_enabled;  /* Whether Retina mode is enabled via registry setting. */
+@@ -234,6 +235,7 @@ static inline CGPoint cgpoint_win_from_mac(CGPoint point)
+ extern void macdrv_set_cursor(CFStringRef name, CFArrayRef frames);
+ extern int macdrv_get_cursor_position(CGPoint *pos);
+ extern int macdrv_set_cursor_position(CGPoint pos);
++extern int macdrv_relative_mouse_active(void);
+ extern int macdrv_clip_cursor(CGRect rect);
+ 
+ 
+@@ -385,6 +387,7 @@ static inline CGPoint cgpoint_win_from_mac(CGPoint point)
+         struct {
+             int             button;
+             bool            pressed;
++            bool            no_move;    /* relative mouse mode: at Wine's cursor position, not x,y */
+             int             x;
+             int             y;
+             unsigned long   time_ms;
+@@ -398,6 +401,7 @@ static inline CGPoint cgpoint_win_from_mac(CGPoint point)
+         struct {
+             int             x_scroll;
+             int             y_scroll;
++            bool            no_move;    /* relative mouse mode: at Wine's cursor position, not x,y */
+             int             x;
+             int             y;
+             unsigned long   time_ms;
+diff --git a/dlls/winemac.drv/macdrv_main.c b/dlls/winemac.drv/macdrv_main.c
+index 56e7a77..b104a1a 100644
+--- a/dlls/winemac.drv/macdrv_main.c
++++ b/dlls/winemac.drv/macdrv_main.c
+@@ -57,6 +57,7 @@ bool allow_immovable_windows = true;
+ bool use_confinement_cursor_clipping = true;
+ bool cursor_clipping_locks_windows = true;
+ bool use_precise_scrolling = true;
++bool relative_mouse = true;
+ int gl_surface_mode = GL_SURFACE_IN_FRONT_OPAQUE;
+ bool retina_enabled = false;
+ bool enable_app_nap = false;
+@@ -374,6 +375,9 @@ static void setup_options(void)
+     if (!get_config_key(hkey, appkey, "UsePreciseScrolling", buffer, sizeof(buffer)))
+         use_precise_scrolling = IS_OPTION_TRUE(buffer[0]);
+ 
++    if (!get_config_key(hkey, appkey, "RelativeMouse", buffer, sizeof(buffer)))
++        relative_mouse = IS_OPTION_TRUE(buffer[0]);
++
+     if (!get_config_key(hkey, appkey, "OpenGLSurfaceMode", buffer, sizeof(buffer)))
+     {
+         static const WCHAR transparentW[] = {'t','r','a','n','s','p','a','r','e','n','t',0};
+diff --git a/dlls/winemac.drv/mouse.c b/dlls/winemac.drv/mouse.c
+index ee876d5..da87543 100644
+--- a/dlls/winemac.drv/mouse.c
++++ b/dlls/winemac.drv/mouse.c
+@@ -688,6 +688,10 @@ BOOL macdrv_GetCursorPos(LPPOINT pos)
+     CGPoint pt;
+     BOOL ret;
+ 
++    /* In relative mouse mode the Mac pointer is frozen; Wine's own position,
++       which the caller filled in, is the real one. */
++    if (macdrv_relative_mouse_active()) return TRUE;
++
+     ret = macdrv_get_cursor_position(&pt);
+     if (ret)
+     {
+@@ -888,8 +892,9 @@ void macdrv_mouse_button(HWND hwnd, const macdrv_event *event)
+         }
+     }
+ 
+-    send_mouse_input(hwnd, event->window, flags | MOUSEEVENTF_ABSOLUTE | MOUSEEVENTF_MOVE,
+-                     event->mouse_button.x, event->mouse_button.y,
++    if (!event->mouse_button.no_move)
++        flags |= MOUSEEVENTF_ABSOLUTE | MOUSEEVENTF_MOVE;
++    send_mouse_input(hwnd, event->window, flags, event->mouse_button.x, event->mouse_button.y,
+                      data, FALSE, event->mouse_button.time_ms);
+ }
+ 
+@@ -923,17 +928,19 @@ void macdrv_mouse_moved(HWND hwnd, const macdrv_event *event)
+  */
+ void macdrv_mouse_scroll(HWND hwnd, const macdrv_event *event)
+ {
++    UINT move = event->mouse_scroll.no_move ? 0 : MOUSEEVENTF_ABSOLUTE | MOUSEEVENTF_MOVE;
++
+     TRACE("win %p/%p scroll (%d,%d) at (%d,%d) time %lu (%lu ticks ago)\n", hwnd,
+           event->window, event->mouse_scroll.x_scroll, event->mouse_scroll.y_scroll,
+           event->mouse_scroll.x, event->mouse_scroll.y,
+           event->mouse_scroll.time_ms, (NtGetTickCount() - event->mouse_scroll.time_ms));
+ 
+     if (event->mouse_scroll.y_scroll)
+-        send_mouse_input(hwnd, event->window, MOUSEEVENTF_WHEEL | MOUSEEVENTF_ABSOLUTE | MOUSEEVENTF_MOVE,
++        send_mouse_input(hwnd, event->window, MOUSEEVENTF_WHEEL | move,
+                          event->mouse_scroll.x, event->mouse_scroll.y,
+                          event->mouse_scroll.y_scroll, FALSE, event->mouse_scroll.time_ms);
+     if (event->mouse_scroll.x_scroll)
+-        send_mouse_input(hwnd, event->window, MOUSEEVENTF_HWHEEL | MOUSEEVENTF_ABSOLUTE | MOUSEEVENTF_MOVE,
++        send_mouse_input(hwnd, event->window, MOUSEEVENTF_HWHEEL | move,
+                          event->mouse_scroll.x, event->mouse_scroll.y,
+                          event->mouse_scroll.x_scroll, FALSE, event->mouse_scroll.time_ms);
+ }

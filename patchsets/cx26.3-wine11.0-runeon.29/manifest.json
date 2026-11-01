@@ -3536,6 +3536,33 @@
           "occurrences": 1
         }
       ]
+    },
+    {
+      "order": 186,
+      "path": "patches/runeon/0156-winemac-relative-mouse-mode.patch",
+      "sha256": "f350370a73ae963ede2fa64a0aaf1257996aa1102cdb1b9f734dccadd4a34b9a",
+      "kind": "runeon-product",
+      "status": "active",
+      "risk": "high",
+      "summary": "Relative mouse mode in winemac.drv, adapted from AsherJN/recall wine-mouselook.patch: while a client hides the cursor (no cursor or a fully transparent one) and confines it or warps it while hidden, the Mac pointer is frozen, motion reaches Wine only as relative movement, SetCursorPos and GetCursorPos are answered Wine-side without the main thread, and clicks and scrolls are delivered at Wine's position; the pointer is placed at Wine's position when the mode ends (cursor shown, clip released, application resigned, key window changed, window dragged). Motion is GCMouse raw counts (no pointer acceleration, delivered at most 1,000 times a second); pointer events stand in for trackpads and silent mice. Never keyed on a program; on unless the Mac Driver option RelativeMouse is N, AppDefaults included. Links the GameController framework. Individually approved by the maintainer (2026-11-01); no opt-in, see MAINTENANCE.md.",
+      "testStrategy": "Covered by the complete WoW64 build and by hands-on checks on the patched runtime: first-person games that confine or re-centre a hidden cursor, a strategy game that confines a visible cursor (must stay absolute), a game drawing its own cursor, the Steam overlay, application switching, Retina mode and a trackpad. A standalone probe confirmed that GCMouse delivers motion to a non-bundled x86_64 process under Rosetta and that the confinement clipping selector exists on the test macOS. No automated test exercises the Cocoa paths.",
+      "verification": [
+        {
+          "path": "dlls/winemac.drv/cocoa_app.m",
+          "contains": "- (WineWindow*) relativeMouseTarget",
+          "occurrences": 1
+        },
+        {
+          "path": "dlls/winemac.drv/macdrv_main.c",
+          "contains": "\"RelativeMouse\"",
+          "occurrences": 1
+        },
+        {
+          "path": "dlls/winemac.drv/mouse.c",
+          "contains": "if (macdrv_relative_mouse_active()) return TRUE;",
+          "occurrences": 1
+        }
+      ]
     }
   ],
   "targetedReview": {
