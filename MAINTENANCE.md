@@ -35,6 +35,7 @@ Release status lives in the [README](README.md) table, the GitHub Releases and `
 | [GAME-GRAPHICS-INPUT-FIXES](docs/upstream-reviews.md#game-graphics-input-fixes) | Graphics and input correctness fixes games reach (37 commits) and the GL flush on context switch | `.27` |
 | [NTDLL-WIN32U-SERVER-FIXES](docs/upstream-reviews.md#ntdll-win32u-server-fixes) | Windows-behaviour fixes in ntdll, win32u and wineserver (28 commits) | `.27` |
 | [RECALL-FIX-SERIES](docs/upstream-reviews.md#recall-fix-series) | Stall and correctness fixes from AsherJN/recall (`0150`–`0154`) | `.29` |
+| [ROSETTA-CPU-FIDELITY](docs/upstream-reviews.md#rosetta-cpu-fidelity) | Opt-in Rosetta CPU fidelity in ntdll (`0157`–`0159`) and VC14 version resources (`0160`) | `.30` |
 
 The complete audit boundary is `wine-11.15`; later releases were reviewed with the filtered sweep rules. An audit is a point-in-time decision record, not a permanent allowlist: a deferred commit may enter a later patch set once its dependency chain, tests, probe and Runeon impact are established, and inclusion in an audit does not authorize publishing a runtime.
 
@@ -92,6 +93,7 @@ Runeon product patches are opt-in by default, as `CLAUDE.md` requires. A specifi
 | `0154` | Audio devices added, removed or made default while a program runs reach it as on Windows, instead of never. | `winecoreaudio.drv` only; IMMNotificationClient callbacks and `AUDCLNT_E_DEVICE_INVALIDATED` on a stream whose device is gone. The default microphone stays the one chosen in macOS. Every process that loads mmdevapi keeps a watch thread and writes `DeviceState` on a change; DirectSound and winmm only log the new errors. |
 | `0155` | When the `0121` check ends the search after a collided unwind, the process dies without its own crash handler running; logging the exception that was being dispatched is the only record of what failed. | One `ERR` line on that exit only: code, address with module and offset, and the first two exception parameters. Dispatch and the unwind are unchanged. |
 | `0156` | Games that aim with a hidden, confined or re-centred cursor get Windows-like raw mouse motion: on macOS each re-centre blocks the game on a pointer warp that drops motion, and the motion carries pointer acceleration. Every such game benefits, so it is not opt-in. | Only while the client hides the cursor and confines it or warps it while hidden, never keyed on a program; `Mac Driver` option `RelativeMouse=N` (AppDefaults included) turns it off. Visible cursors, trackpad acceleration and everything outside that state are unchanged. |
+| `0160` | Gives builtin `vcruntime140` and `msvcp140_1` the file version every Windows VC14 runtime DLL has, as `0001` did for the other VC14 builtins; a program that reads each loaded runtime's version otherwise fails its check. | Version resources of those two DLLs only (14.50.35719); no code changes. |
 
 ## Release policy
 

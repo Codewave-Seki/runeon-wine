@@ -763,3 +763,44 @@ Adapted: `0151` forks only on macOS and closes inherited descriptors in the chil
 ### Not verified yet
 
 Behaviour on the patched runtime: each probe above is rerun on a complete i386/x86_64 WoW64 build, with Steam and representative games, with and without msync and Retina mode, and `0153` in a full-screen game.
+
+<a id="rosetta-cpu-fidelity"></a>
+
+## Rosetta CPU fidelity
+
+Candidate patch set `cx26.3-wine11.0-runeon.30` adds `patches/runeon/0157`–`0160` after `0156`. These are downstream changes, not WineHQ commits; WineHQ and CodeWeavers have no equivalent on this base.
+
+Rosetta's x86 differs from a real CPU in ways a program can observe: CPUID leaf 7 omits CLFLUSHOPT, which Rosetta executes; CLWB and RDPID are missing; there are no debug registers; and a non-canonical access is reported at its address instead of as #GP. Copy protection that checks the CPU this way faults endlessly under Rosetta. CrossOver 26.3 fails the same way.
+
+`0157`–`0159` change `ntdll`, which is ABI-sensitive. The maintainer approved them as one opt-in group on 2026-11-02; the approval covers these patches only and is no precedent. They take effect only under Rosetta and only when `HKCU\Software\Wine\AppDefaults\<app.exe>\Runeon` has DWORD `RosettaCpuFidelity` = 1. Wine never decides by game name, Steam AppID or executable name; a launcher sets the value for a program it has decided needs it. The changes make the emulated CPU report and behave as Intel and Windows define it, and hide the trap flag Wine sets for stepping; while a breakpoint is armed, a trap flag the program sets with popf is hidden too and not delivered, one it sets in the context it continues with is delivered. They do not read, change or skip program code, licence data or activation results.
+
+`0160` is a data-only Windows-behaviour fix without an opt-in, approved individually on the same date and listed in `MAINTENANCE.md`.
+
+### Taken
+
+| Patch | Change | Evidence |
+|---|---|---|
+| `0157` | Opt-in policy; execution breakpoints a thread sets on itself (current-thread pseudo handle) are emulated by single-stepping, with DR6, read-back, a hidden trap flag, the program's own trap flag set in its context, breakpoints on faulting instructions and the resume flag. | Local experiments on `runeon.29`: a copy-protected game armed one execution breakpoint per thread and stopped before graphics initialisation without it. With this emulation and `0159`, 173 breakpoint checks hit and the game reached gameplay. `tests/rosetta-cpu-fidelity-probe.c`. |
+| `0158` | With the policy, a non-canonical access is reported as #GP (address -1). | The same game reads non-canonical addresses on purpose; Windows reports them with address -1. `tests/rosetta-cpu-fidelity-probe.c`. |
+| `0159` | With the policy, CPUID leaf 7 adds CLFLUSHOPT, CLWB and RDPID in this process; CLWB and RDPID are emulated; one marker per process. | Without it the game stopped in its CPU checks even with `0157`; with it the checks passed. On macOS 27.0 CPUID inside `ntdll.so` does not see the table change, so the self-check runs CPUID from code generated at run time. |
+| `0160` | Builtin `vcruntime140` and `msvcp140_1` report 14.50.35719, as the other VC14 builtins do since `0001`. As with `msvcp140` since `0001`, an MSI redistributable older than that no longer replaces the builtin copies in `system32`; with default load order the builtin was loaded before as well, so only a native override of these two DLLs sees the difference. | The game reads the version of each loaded VC14 runtime DLL; with no version on these two it failed its check and exited. With Microsoft's 14.51 DLLs it passed. `tests/vc14-version-probe.c`. |
+
+The breakpoint on a faulting instruction was not reached in the runs that passed; it is kept because it is how x86 orders a debug fault before the instruction's own fault.
+
+`0159` changes a row only when exactly one matches. The page also holds Rosetta's code; on a future layout macOS might reject the changed page and terminate the process instead of `0159` logging `table_not_found`. The scan runs before Wine's signal handlers are installed.
+
+### Left out
+
+| Change | Reason |
+|---|---|
+| Showing Windows segment selectors (CS 0x33, SS 0x2b) in exception contexts | Tried during the investigation; it did not change the result. |
+| Diagnostic logging of each breakpoint hit, the exceptions after it, and NULL heap callers | Diagnostics only. |
+| Reading back debug registers without emulating them | Tried before `0119`; it does not help a program that needs the breakpoint to fire. |
+
+### Verified
+
+On a minimal i386/x86_64 WoW64 build of the patched tree (no GStreamer, Vulkan, SDL or FreeType), fresh prefix, macOS 27.0 under Rosetta: `tests/rosetta-cpu-fidelity-probe.c` passes with the policy off, on, and set to 2 (treated as off), including the program's own trap flag while a breakpoint is armed (DR6 `0xffff4ff0` with the policy on), and with it on logs `RUNEON_ROSETTA_CPUID7 active rows=1`, leaf 7 EBX `0` to `0x01800000`, ECX `0` to `0x400000`. `tests/vc14-version-probe.c` passes for x86_64 and i386; in the `runeon.29` runtime `vcruntime140` and `msvcp140_1` carry no version resource for either architecture.
+
+### Not verified yet
+
+The complete product build, Wine's ntdll exception tests, the game with the policy on, and Steam and other games with it off. The CPUID table layout is checked only on macOS 27.0; on another layout `0159` logs `table_not_found` and CPUID is unchanged.

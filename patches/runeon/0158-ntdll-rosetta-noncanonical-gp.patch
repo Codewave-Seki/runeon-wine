@@ -1,0 +1,40 @@
+From: Runeon Contributors <dev@runeon.com>
+Subject: [PATCH] ntdll: Report non-canonical accesses as #GP under Rosetta, opt-in.
+
+On x86 an access to a non-canonical address raises a general
+protection fault, which Windows reports as an access violation reading
+address -1 (ExceptionInformation[0] = 0, [1] = ~0). Rosetta delivers it
+as a memory fault at the address itself, which a program that probes
+such addresses to check the CPU can tell apart.
+
+With the 0157 Rosetta CPU fidelity policy on, report it as Windows
+does. Without the policy nothing changes.
+
+---
+diff --git a/dlls/ntdll/unix/signal_x86_64.c b/dlls/ntdll/unix/signal_x86_64.c
+index dbf2bdb..dd72669 100644
+--- a/dlls/ntdll/unix/signal_x86_64.c
++++ b/dlls/ntdll/unix/signal_x86_64.c
+@@ -2726,6 +2726,22 @@ static void segv_handler( int signal, siginfo_t *siginfo, void *sigcontext )
+         break;
+     case TRAP_x86_PAGEFLT:  /* Page fault */
+         rec.NumberParameters = 2;
++#ifdef __APPLE__
++        /* x86 raises #GP, not a page fault, for a non-canonical address, and
++         * Windows reports it as a read of address -1. Rosetta reports the address. */
++        if (rosetta_cpu_fidelity)
++        {
++            LONG64 addr = (LONG64)siginfo->si_addr;
++
++            if ((addr >> 47) != 0 && (addr >> 47) != -1)
++            {
++                rec.ExceptionCode = EXCEPTION_ACCESS_VIOLATION;
++                rec.ExceptionInformation[0] = 0;
++                rec.ExceptionInformation[1] = 0xffffffffffffffff;
++                break;
++            }
++        }
++#endif
+         rec.ExceptionInformation[0] = (ERROR_sig(ucontext) >> 1) & 0x09;
+         rec.ExceptionInformation[1] = (ULONG_PTR)siginfo->si_addr;
+         if (!virtual_handle_fault( &rec, (void *)RSP_sig(ucontext) ) || check_invalid_gsbase( ucontext ))

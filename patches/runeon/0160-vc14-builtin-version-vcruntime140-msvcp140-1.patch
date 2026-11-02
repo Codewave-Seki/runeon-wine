@@ -1,0 +1,94 @@
+From: Runeon Contributors <dev@runeon.com>
+Subject: [PATCH] vcruntime140, msvcp140_1: Add version resources.
+
+On Windows every VC14 runtime DLL carries a file version. The builtin
+vcruntime140 and msvcp140_1 carry none, while msvcp140, msvcp140_2 and
+vcruntime140_1 report 14.50.35719 (wine-11.1, patch 0001). A program
+that checks its runtime by reading the version of each loaded VC14
+DLL fails the check and refuses to start.
+
+Give both the same 14.50.35719 version resource as the others. Data
+only: no code changes and nothing keyed on a program. WineHQ master
+still lacks these resources.
+
+---
+diff --git a/dlls/msvcp140_1/Makefile.in b/dlls/msvcp140_1/Makefile.in
+index cb13b2a..101a212 100644
+--- a/dlls/msvcp140_1/Makefile.in
++++ b/dlls/msvcp140_1/Makefile.in
+@@ -2,4 +2,5 @@ MODULE       = msvcp140_1.dll
+ PARENTSRC    = ../msvcp90
+ 
+ SOURCES = \
+-	msvcp140_1.c
++	msvcp140_1.c \
++	version.rc
+diff --git a/dlls/msvcp140_1/version.rc b/dlls/msvcp140_1/version.rc
+new file mode 100644
+index 0000000..d53d4c2
+--- /dev/null
++++ b/dlls/msvcp140_1/version.rc
+@@ -0,0 +1,23 @@
++/*
++ * Copyright 2026 Runeon Contributors
++ *
++ * This library is free software; you can redistribute it and/or
++ * modify it under the terms of the GNU Lesser General Public
++ * License as published by the Free Software Foundation; either
++ * version 2.1 of the License, or (at your option) any later version.
++ *
++ * This library is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
++ * Lesser General Public License for more details.
++ *
++ * You should have received a copy of the GNU Lesser General Public
++ * License along with this library; if not, write to the Free Software
++ * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA
++ */
++
++#define WINE_FILEDESCRIPTION_STR "Wine runtime library"
++#define WINE_FILENAME_STR "msvcp140_1.dll"
++#define WINE_FILEVERSION 14,50,35719,0
++
++#include "wine/wine_common_ver.rc"
+diff --git a/dlls/vcruntime140/Makefile.in b/dlls/vcruntime140/Makefile.in
+index 1f99225..e49bbc2 100644
+--- a/dlls/vcruntime140/Makefile.in
++++ b/dlls/vcruntime140/Makefile.in
+@@ -2,4 +2,5 @@ MODULE    = vcruntime140.dll
+ IMPORTLIB = vcruntime140
+ 
+ SOURCES = \
+-	misc.c
++	misc.c \
++	version.rc
+diff --git a/dlls/vcruntime140/version.rc b/dlls/vcruntime140/version.rc
+new file mode 100644
+index 0000000..e2ad958
+--- /dev/null
++++ b/dlls/vcruntime140/version.rc
+@@ -0,0 +1,23 @@
++/*
++ * Copyright 2026 Runeon Contributors
++ *
++ * This library is free software; you can redistribute it and/or
++ * modify it under the terms of the GNU Lesser General Public
++ * License as published by the Free Software Foundation; either
++ * version 2.1 of the License, or (at your option) any later version.
++ *
++ * This library is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
++ * Lesser General Public License for more details.
++ *
++ * You should have received a copy of the GNU Lesser General Public
++ * License along with this library; if not, write to the Free Software
++ * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA
++ */
++
++#define WINE_FILEDESCRIPTION_STR "Wine runtime library"
++#define WINE_FILENAME_STR "vcruntime140.dll"
++#define WINE_FILEVERSION 14,50,35719,0
++
++#include "wine/wine_common_ver.rc"

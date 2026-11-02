@@ -1,0 +1,339 @@
+From: Runeon Contributors <dev@runeon.com>
+Subject: [PATCH] ntdll: Emulate execution breakpoints under Rosetta, opt-in.
+
+Rosetta has no x86 debug registers. The server refuses to set them, an
+existing CrossOver change reports success anyway, and a hardware
+breakpoint a program sets on itself never fires. Copy protection that
+checks the CPU by arming an execution breakpoint and waiting for its
+debug exception then faults endlessly.
+
+This adds the opt-in Rosetta CPU fidelity policy, read once at process
+start: HKCU\Software\Wine\AppDefaults\<app.exe>\Runeon, DWORD
+RosettaCpuFidelity = 1. Any other value or a failed lookup leaves it
+off, and without it nothing changes. It is never keyed on a program in
+Wine; a launcher sets the value for a program it has decided needs it.
+
+With the policy on, under Rosetta, execution breakpoints (DR0-DR3 with
+R/W 00 in DR7) that a thread sets through NtSetContextThread on the
+current-thread pseudo handle are kept in its thread data, read back by
+NtGetContextThread on that handle, and emulated by single-stepping the
+thread: when the next instruction is a breakpoint address,
+EXCEPTION_SINGLE_STEP is raised before it runs, with the matching DR6
+bit set. The trap flag that does the stepping is the emulation's, so it
+is hidden from the exception context, NtGetContextThread on the
+current thread and the value a stepped pushf leaves on the stack. A
+trap flag the program sets in the context it continues with is its
+own: the next instruction raises EXCEPTION_SINGLE_STEP with DR6.BS. A
+breakpoint on an instruction that faults is reported before the fault,
+as on x86, and the resume flag in the reported context skips it until
+the instruction completes, so a fault Wine handles itself and retries
+does not report it again. A process with the policy on does not log
+the 0119 marker.
+
+Not emulated: breakpoints set through another handle or on other
+threads, the WoW64 path, data and I/O breakpoints, and a breakpoint on
+the first instruction after a resume unless that instruction faults.
+While a breakpoint is armed, a trap flag the program sets with popf is
+taken as the emulation's and not delivered, and another thread reading
+the context of this thread while it is suspended sees the trap flag.
+Single-stepping is slow; a thread runs stepped for as long as it has
+an execution breakpoint armed.
+---
+diff --git a/dlls/ntdll/unix/signal_x86_64.c b/dlls/ntdll/unix/signal_x86_64.c
+index 127b9b7..dbf2bdb 100644
+--- a/dlls/ntdll/unix/signal_x86_64.c
++++ b/dlls/ntdll/unix/signal_x86_64.c
+@@ -1109,6 +1109,8 @@ void *get_wow_context( CONTEXT *context )
+ 
+ 
+ #ifdef __APPLE__
++static BOOL rosetta_cpu_fidelity;  /* see rosetta_cpu_fidelity_requested() */
++
+ /* Rosetta has no x86 debug registers, so a hardware breakpoint a program sets
+  * never fires; setting them is faked as a success below. A program that relies
+  * on them fails later with nothing in default logs to say why. With
+@@ -1119,10 +1121,100 @@ static void report_unsupported_debug_registers(void)
+     static LONG reported;
+     const char *value = getenv( "RUNEON_ROSETTA_DEBUG_REGISTER_REPORT_V1" );
+ 
++    if (rosetta_cpu_fidelity) return;  /* breakpoints are emulated, see below */
+     if (!value || strcmp( value, "1" )) return;
+     if (InterlockedExchange( &reported, 1 )) return;
+     ERR_(seh)( "RUNEON_ROSETTA_DEBUG_REGISTERS_UNSUPPORTED: hardware breakpoints cannot be set\n" );
+ }
++
++/* Rosetta CPU fidelity. Rosetta's x86 differs from a real CPU in ways a program
++ * can observe: it has no debug registers, for one. Copy protection that checks
++ * the CPU this way faults endlessly. Opt-in per program only, read once at
++ * process start: HKCU\Software\Wine\AppDefaults\<app.exe>\Runeon, DWORD
++ * RosettaCpuFidelity = 1. Any other value, or a failed lookup, leaves it off. */
++static BOOL rosetta_cpu_fidelity_requested(void)
++{
++    static const WCHAR valueW[] = {'R','o','s','e','t','t','a','C','p','u','F','i','d','e','l','i','t','y',0};
++    static const WCHAR runeonW[] = {'\\','R','u','n','e','o','n',0};
++    UNICODE_STRING nameW, valuenameW;
++    HANDLE root, key = 0;
++    OBJECT_ATTRIBUTES attr;
++    char tmp[64];
++    KEY_VALUE_PARTIAL_INFORMATION *info = (KEY_VALUE_PARTIAL_INFORMATION *)tmp;
++    DWORD count;
++    BOOL enable = FALSE;
++    WCHAR *app_name;
++
++    if (!main_wargv || !main_wargv[0]) return FALSE;
++    if ((app_name = ntdll_wcsrchr( main_wargv[0], '\\' ))) app_name++;
++    else app_name = main_wargv[0];
++
++    if (!open_hkcu_key( "Software\\Wine\\AppDefaults", &root ))
++    {
++        ULONG len = wcslen( app_name ) + ARRAY_SIZE(runeonW);
++        if ((nameW.Buffer = malloc( len * sizeof(WCHAR) )))
++        {
++            wcscpy( nameW.Buffer, app_name );
++            wcscat( nameW.Buffer, runeonW );
++            nameW.Length = (len - 1) * sizeof(WCHAR);
++            InitializeObjectAttributes( &attr, &nameW, OBJ_CASE_INSENSITIVE, root, NULL );
++            if (NtOpenKey( &key, KEY_QUERY_VALUE, &attr )) key = 0;
++            free( nameW.Buffer );
++        }
++        NtClose( root );
++    }
++    if (key)
++    {
++        valuenameW.Length = sizeof(valueW) - sizeof(WCHAR);
++        valuenameW.Buffer = (WCHAR *)valueW;
++        if (!NtQueryValueKey( key, &valuenameW, KeyValuePartialInformation, tmp, sizeof(tmp) - 1, &count ) &&
++            info->Type == REG_DWORD && info->DataLength == sizeof(DWORD) && *(DWORD *)info->Data == 1)
++            enable = TRUE;
++        NtClose( key );
++    }
++    return enable;
++}
++
++/* With Rosetta CPU fidelity, execution breakpoints a thread sets on itself are
++ * emulated by single-stepping it and comparing each next instruction with
++ * DR0-DR3. Index of an enabled execution breakpoint (R/W 00) at rip, or -1. */
++static int rosetta_exec_bp_hit( ULONG_PTR rip )
++{
++    struct amd64_thread_data *data = amd64_thread_data();
++    DWORD_PTR dr7 = data->dr7, addr[4] = { data->dr0, data->dr1, data->dr2, data->dr3 };
++    int i;
++
++    for (i = 0; i < 4; i++)
++    {
++        if (!(dr7 & (3 << (i * 2))) || ((dr7 >> (16 + i * 4)) & 3)) continue;
++        if (addr[i] == rip) return i;
++    }
++    return -1;
++}
++
++static BOOL rosetta_exec_bp_any(void)
++{
++    DWORD_PTR dr7 = amd64_thread_data()->dr7;
++    int i;
++
++    for (i = 0; i < 4; i++)
++        if ((dr7 & (3 << (i * 2))) && !((dr7 >> (16 + i * 4)) & 3)) return TRUE;
++    return FALSE;
++}
++
++/* The trap flag that does the stepping is ours, not the program's: if the
++ * instruction just stepped was a pushf, clear TF in the value it pushed. */
++static void rosetta_exec_bp_hide_pushf( ULONG_PTR rip, ULONG_PTR rsp )
++{
++    BYTE code[5], flags;
++    unsigned int len = virtual_uninterrupted_read_memory( (void *)rip, code, sizeof(code) ), i;
++
++    for (i = 0; i < len && (code[i] == 0x66 || (code[i] & 0xf0) == 0x40); i++) ;
++    if (i == len || code[i] != 0x9c) return;
++    if (virtual_uninterrupted_read_memory( (void *)(rsp + 1), &flags, 1 ) != 1) return;
++    flags &= ~1;  /* TF is bit 8 of the pushed flags */
++    virtual_uninterrupted_write_memory( (void *)(rsp + 1), &flags, 1 );
++}
+ #endif
+ 
+ 
+@@ -1170,6 +1262,8 @@ NTSTATUS WINAPI NtSetContextThread( HANDLE handle, const CONTEXT *context )
+             WARN_(seh)( "Setting debug registers is not supported under Rosetta, faking success\n" );
+             ret = STATUS_SUCCESS;
+             report_unsupported_debug_registers();
++            /* with Rosetta CPU fidelity, the calling thread's breakpoints are emulated below */
++            if (rosetta_cpu_fidelity && handle == GetCurrentThread()) self = TRUE;
+         }
+ #endif
+         if (ret || !self) return ret;
+@@ -1225,6 +1319,32 @@ NTSTATUS WINAPI NtSetContextThread( HANDLE handle, const CONTEXT *context )
+         if (xs->CompactionMask) frame->xstate.Mask |= mask & ~xs->CompactionMask;
+     }
+ 
++#ifdef __APPLE__
++    if (rosetta_cpu_fidelity && handle == GetCurrentThread())
++    {
++        struct ntdll_thread_data *thread_data = ntdll_get_thread_data();
++        BOOL was_armed = thread_data->rosetta_bp_armed;
++
++        /* the resume flag skips a breakpoint on the first instruction once, as on x86 */
++        thread_data->rosetta_bp_rf_rip = ((flags & CONTEXT_CONTROL) && (context->EFlags & 0x10000)) ? context->Rip : 0;
++        /* the trap flag is hidden from the contexts the program sees, so one set here is the program's */
++        thread_data->rosetta_bp_app_tf = (flags & CONTEXT_CONTROL) && (context->EFlags & 0x100);
++        frame->eflags &= ~0x10000;
++        thread_data->rosetta_bp_armed = rosetta_exec_bp_any();
++        thread_data->rosetta_bp_prev_rip = frame->rip;
++        if (thread_data->rosetta_bp_armed)
++        {
++            frame->eflags |= 0x100;
++            frame->restore_flags |= CONTEXT_CONTROL;
++        }
++        else if (was_armed && !(flags & CONTEXT_CONTROL))
++        {
++            /* the trap flag the syscall saved is ours */
++            frame->eflags &= ~0x100;
++            frame->restore_flags |= CONTEXT_CONTROL;
++        }
++    }
++#endif
+     frame->restore_flags |= flags & ~CONTEXT_INTEGER;
+     return STATUS_SUCCESS;
+ }
+@@ -1240,6 +1360,20 @@ NTSTATUS WINAPI NtGetContextThread( HANDLE handle, CONTEXT *context )
+     DWORD needed_flags = context->ContextFlags & ~CONTEXT_AMD64;
+     BOOL self = (handle == GetCurrentThread());
+ 
++#ifdef __APPLE__
++    /* with Rosetta CPU fidelity, the calling thread's debug registers are kept here */
++    if (rosetta_cpu_fidelity && self && (needed_flags & CONTEXT_DEBUG_REGISTERS))
++    {
++        context->Dr0 = amd64_thread_data()->dr0;
++        context->Dr1 = amd64_thread_data()->dr1;
++        context->Dr2 = amd64_thread_data()->dr2;
++        context->Dr3 = amd64_thread_data()->dr3;
++        context->Dr6 = amd64_thread_data()->dr6;
++        context->Dr7 = amd64_thread_data()->dr7;
++        context->ContextFlags |= CONTEXT_DEBUG_REGISTERS;
++        needed_flags &= ~CONTEXT_DEBUG_REGISTERS;
++    }
++#endif
+     /* debug registers require a server call */
+     if (needed_flags & CONTEXT_DEBUG_REGISTERS) self = FALSE;
+ 
+@@ -1273,6 +1407,9 @@ NTSTATUS WINAPI NtGetContextThread( HANDLE handle, CONTEXT *context )
+         context->Rsp    = frame->rsp;
+         context->Rip    = frame->rip;
+         context->EFlags = frame->eflags;
++#ifdef __APPLE__
++        if (ntdll_get_thread_data()->rosetta_bp_armed) context->EFlags &= ~0x100;  /* ours, not the program's */
++#endif
+         context->SegCs  = cs64_sel;
+         context->SegSs  = ds64_sel;
+         context->ContextFlags |= CONTEXT_CONTROL;
+@@ -1621,6 +1758,9 @@ static void setup_raise_exception( ucontext_t *sigcontext, EXCEPTION_RECORD *rec
+         }
+         context->EFlags &= ~0x100;  /* clear single-step flag */
+     }
++#ifdef __APPLE__
++    if (ntdll_get_thread_data()->rosetta_bp_armed) context->EFlags &= ~0x100;  /* ours, not the program's */
++#endif
+ 
+     status = send_debug_event( rec, context, TRUE, TRUE );
+     if (status == DBG_CONTINUE || status == DBG_EXCEPTION_HANDLED)
+@@ -2524,6 +2664,32 @@ static void segv_handler( int signal, siginfo_t *siginfo, void *sigcontext )
+     rec.ExceptionAddress = (void *)RIP_sig(ucontext);
+     save_context( &context, ucontext );
+ 
++#ifdef __APPLE__
++    /* An execution breakpoint is a fault taken before its instruction runs, so on
++     * an instruction that faults the program sees the breakpoint first. Stepping
++     * only checks an instruction after the one before it, which misses the first
++     * instruction after a resume. Continuing with the resume flag skips it once. */
++    {
++        struct ntdll_thread_data *thread_data = ntdll_get_thread_data();
++        int hit;
++
++        /* the resume flag stays until the instruction completes, so a fault Wine
++         * handles itself and retries does not report the breakpoint again */
++        if (thread_data->rosetta_bp_armed && (hit = rosetta_exec_bp_hit( RIP_sig(ucontext) )) >= 0 &&
++            thread_data->rosetta_bp_rf_rip != RIP_sig(ucontext))
++        {
++            TRACE_(seh)( "execution breakpoint dr%d at faulting %p\n", hit, (void *)RIP_sig(ucontext) );
++            amd64_thread_data()->dr6 = 0xffff0ff0 | (1 << hit);
++            EFL_sig(ucontext) &= ~0x100;
++            rec.ExceptionCode = EXCEPTION_SINGLE_STEP;
++            save_context( &context, ucontext );
++            context.c.EFlags |= 0x10000;
++            setup_raise_exception( ucontext, &rec, &context );
++            return;
++        }
++    }
++#endif
++
+     switch(TRAP_sig(ucontext))
+     {
+     case TRAP_x86_OFLOW:   /* Overflow exception */
+@@ -2647,6 +2813,38 @@ static void trap_handler( int signal, siginfo_t *siginfo, void *sigcontext )
+ 
+     if (handle_syscall_trap( ucontext, siginfo )) return;
+ 
++#ifdef __APPLE__
++    if (thread_data->rosetta_bp_armed && TRAP_sig(ucontext) == TRAP_x86_TRCTRAP)
++    {
++        int hit = rosetta_exec_bp_hit( RIP_sig(ucontext) );
++        BOOL app_tf = thread_data->rosetta_bp_app_tf;
++
++        /* the resume flag only covers the instruction just executed */
++        thread_data->rosetta_bp_rf_rip = 0;
++        thread_data->rosetta_bp_app_tf = FALSE;
++        if (thread_data->rosetta_bp_prev_rip)
++            rosetta_exec_bp_hide_pushf( thread_data->rosetta_bp_prev_rip, RSP_sig(ucontext) );
++        thread_data->rosetta_bp_prev_rip = RIP_sig(ucontext);
++        if (hit < 0 && !app_tf)
++        {
++            EFL_sig(ucontext) |= 0x100;  /* a popf may have cleared it */
++            leave_handler( ucontext );
++            return;
++        }
++        TRACE_(seh)( "execution breakpoint dr%d, program single step %d at %p\n", hit, app_tf,
++                     (void *)RIP_sig(ucontext) );
++        thread_data->rosetta_bp_prev_rip = 0;
++        amd64_thread_data()->dr6 = 0xffff0ff0 | (hit >= 0 ? 1 << hit : 0) | (app_tf ? 0x4000 : 0);  /* B0-B3, BS */
++        EFL_sig(ucontext) &= ~0x100;
++        rec.ExceptionCode = EXCEPTION_SINGLE_STEP;
++        rec.ExceptionAddress = (void *)RIP_sig(ucontext);
++        save_context( &context, ucontext );
++        if (hit >= 0) context.c.EFlags |= 0x10000;  /* resume flag: continuing skips the breakpoint once */
++        setup_raise_exception( ucontext, &rec, &context );
++        return;
++    }
++#endif
++
+     rec.ExceptionAddress = (void *)RIP_sig(ucontext);
+     save_context( &context, ucontext );
+ 
+@@ -3062,6 +3260,13 @@ void signal_init_process(void)
+     /* CW Hack 23427: __builtin_available presumably isn't signal-safe. */
+     if (__builtin_available( macOS 15.0, * ))
+         sequoia_or_later = TRUE;
++
++    /* before any application code runs */
++    if (is_rosetta2 && rosetta_cpu_fidelity_requested())
++    {
++        FIXME_(seh)( "Rosetta CPU fidelity enabled\n" );
++        rosetta_cpu_fidelity = TRUE;
++    }
+ #endif
+ 
+     sig_act.sa_mask = server_block_set;
+diff --git a/dlls/ntdll/unix/unix_private.h b/dlls/ntdll/unix/unix_private.h
+index 3a81a34..a1a2aef 100644
+--- a/dlls/ntdll/unix/unix_private.h
++++ b/dlls/ntdll/unix/unix_private.h
+@@ -120,6 +120,10 @@ struct ntdll_thread_data
+     BOOL                      smc_step_request;  /* a write was just opened; single-step the writer */
+     BOOL                      smc_step_armed;    /* the trap flag was set for that step */
+     BOOL                      smc_step_app_tf;   /* the application had already set the trap flag */
++    BOOL                      rosetta_bp_armed;    /* execution breakpoints are emulated by single-stepping */
++    ULONG_PTR                 rosetta_bp_prev_rip; /* instruction the next single-step trap follows */
++    ULONG_PTR                 rosetta_bp_rf_rip;   /* resume flag: a breakpoint here is skipped once */
++    BOOL                      rosetta_bp_app_tf;   /* the program set the trap flag itself */
+ };
+ 
+ C_ASSERT( sizeof(struct ntdll_thread_data) <= sizeof(((TEB *)0)->GdiTebBatch) );

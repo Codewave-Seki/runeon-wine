@@ -1,0 +1,294 @@
+From: Runeon Contributors <dev@runeon.com>
+Subject: [PATCH] ntdll: Report CLFLUSHOPT, CLWB and RDPID in Rosetta's CPUID, opt-in.
+
+Rosetta answers CPUID leaf 7 without CLFLUSHOPT, although it executes
+it, and has no CLWB or RDPID. Copy protection that compares what CPUID
+reports with what instructions do faults endlessly.
+
+With the 0157 Rosetta CPU fidelity policy on, at process start:
+
+- Rosetta keeps its CPUID leaves as {eax, ebx, ecx, edx} rows in its
+  read-only runtime image mapped into each translated process. Find
+  the leaf 7 row after the GenuineIntel leaf 0 row, require it to match
+  what CPUID answers now and to be the only such row, and set
+  CLFLUSHOPT and CLWB (EBX bits 23, 24) and RDPID (ECX bit 22) in this
+  process's private copy of the page.
+- Check the result with CPUID run from code generated at run time:
+  Rosetta translates ntdll.so ahead of time, and CPUID there does not
+  see the change. If the answer is not exactly the old one plus the
+  three bits, restore the row.
+- Log one fixed ERR marker per process: RUNEON_ROSETTA_CPUID7 active,
+  table_not_found or selftest_failed. In the last two cases CPUID is
+  left as Rosetta answers it; 0157 and 0158 stay in effect.
+
+While leaf 7 advertises them, the illegal-instruction handler emulates
+CLWB (skipped: it only writes back a cache line; unlike x86 it does not
+fault on an inaccessible address) and RDPID (returns the processor
+number, which Windows keeps in the register RDPID reads).
+
+This depends on an undocumented Rosetta layout. When no row, or more
+than one, matches, nothing is changed. The page also holds Rosetta's
+code; if a future layout makes macOS reject the changed page, the
+process may be terminated instead. The scan runs before Wine installs
+its signal handlers, so a region unmapped during it also ends the
+process. Without the policy nothing changes.
+
+---
+diff --git a/dlls/ntdll/unix/signal_x86_64.c b/dlls/ntdll/unix/signal_x86_64.c
+index dd72669..7b175c6 100644
+--- a/dlls/ntdll/unix/signal_x86_64.c
++++ b/dlls/ntdll/unix/signal_x86_64.c
+@@ -85,6 +85,11 @@ WINE_DECLARE_DEBUG_CHANNEL(seh);
+ #include <sys/sysctl.h>
+ static BOOL is_rosetta2;
+ 
++#include <mach/mach.h>
++#include <mach/mach_vm.h>
++/* CPUID leaf 7 bits added to Rosetta's answer in this process (Rosetta CPU fidelity) */
++static unsigned int rosetta_cpuid7_ebx, rosetta_cpuid7_ecx;
++
+ /* CW Hack 23427 */
+ static BOOL sequoia_or_later = FALSE;
+ #endif
+@@ -2192,6 +2197,89 @@ static inline BOOL emulate_xgetbv( ucontext_t *sigcontext, CONTEXT *context )
+     TRACE_(seh)( "emulated an XGETBV instruction\n" );
+     return TRUE;
+ }
++
++/***********************************************************************
++ *           emulate_clwb
++ *
++ * Rosetta has no CLWB (66 [REX] 0F AE /6, memory operand). It only writes a
++ * cache line back and changes no register, flag or memory, so it is skipped;
++ * unlike x86, an inaccessible address does not fault. Only while CPUID leaf 7
++ * advertises it (Rosetta CPU fidelity).
++ */
++static BOOL emulate_clwb( ucontext_t *sigcontext, CONTEXT *context )
++{
++    BYTE instr[16];
++    unsigned int len, pos = 1, mod, rm;
++
++    if (!(rosetta_cpuid7_ebx & (1u << 24))) return FALSE;
++    len = virtual_uninterrupted_read_memory( (BYTE *)context->Rip, instr, sizeof(instr) );
++    if (len < 4 || instr[0] != 0x66) return FALSE;
++    if ((instr[pos] & 0xf0) == 0x40) pos++;
++    if (len < pos + 3 || instr[pos] != 0x0f || instr[pos + 1] != 0xae) return FALSE;
++    mod = instr[pos + 2] >> 6;
++    rm = instr[pos + 2] & 7;
++    if (mod == 3 || ((instr[pos + 2] >> 3) & 7) != 6) return FALSE;
++    pos += 3;
++    if (rm == 4)
++    {
++        if (len <= pos) return FALSE;
++        if (mod == 0 && (instr[pos] & 7) == 5) pos += 4;  /* SIB without base: disp32 */
++        pos++;
++    }
++    else if (mod == 0 && rm == 5) pos += 4;  /* RIP-relative disp32 */
++    if (mod == 1) pos += 1;
++    else if (mod == 2) pos += 4;
++    if (pos > len) return FALSE;
++
++    RIP_sig(sigcontext) += pos;
++    TRACE_(seh)( "emulated a CLWB instruction\n" );
++    return TRUE;
++}
++
++/***********************************************************************
++ *           emulate_rdpid
++ *
++ * Rosetta has no RDPID (F3 [REX] 0F C7 /7, register operand). Windows keeps
++ * the processor number in the register it reads, so return that. Only while
++ * CPUID leaf 7 advertises it (Rosetta CPU fidelity).
++ */
++static BOOL emulate_rdpid( ucontext_t *sigcontext, CONTEXT *context )
++{
++    BYTE instr[8], rex = 0;
++    unsigned int len, pos = 1;
++    ULONG_PTR value;
++
++    if (!(rosetta_cpuid7_ecx & (1u << 22))) return FALSE;
++    len = virtual_uninterrupted_read_memory( (BYTE *)context->Rip, instr, sizeof(instr) );
++    if (len < 4 || instr[0] != 0xf3) return FALSE;
++    if ((instr[pos] & 0xf0) == 0x40) rex = instr[pos++];
++    if (len < pos + 3 || instr[pos] != 0x0f || instr[pos + 1] != 0xc7) return FALSE;
++    if ((instr[pos + 2] & 0xf8) != 0xf8) return FALSE;  /* mod 3, reg 7 */
++    value = NtGetCurrentProcessorNumber();
++
++    switch ((instr[pos + 2] & 7) | ((rex & 1) << 3))
++    {
++    case 0:  RAX_sig(sigcontext) = value; break;
++    case 1:  RCX_sig(sigcontext) = value; break;
++    case 2:  RDX_sig(sigcontext) = value; break;
++    case 3:  RBX_sig(sigcontext) = value; break;
++    case 4:  RSP_sig(sigcontext) = value; break;
++    case 5:  RBP_sig(sigcontext) = value; break;
++    case 6:  RSI_sig(sigcontext) = value; break;
++    case 7:  RDI_sig(sigcontext) = value; break;
++    case 8:  R8_sig(sigcontext)  = value; break;
++    case 9:  R9_sig(sigcontext)  = value; break;
++    case 10: R10_sig(sigcontext) = value; break;
++    case 11: R11_sig(sigcontext) = value; break;
++    case 12: R12_sig(sigcontext) = value; break;
++    case 13: R13_sig(sigcontext) = value; break;
++    case 14: R14_sig(sigcontext) = value; break;
++    case 15: R15_sig(sigcontext) = value; break;
++    }
++    RIP_sig(sigcontext) += pos + 3;
++    TRACE_(seh)( "emulated an RDPID instruction\n" );
++    return TRUE;
++}
+ #endif
+ 
+ /***********************************************************************
+@@ -2704,6 +2792,8 @@ static void segv_handler( int signal, siginfo_t *siginfo, void *sigcontext )
+         if (handle_cet_nop( ucontext, &context.c )) return;
+         /* CW HACK 23427 */
+         if (emulate_xgetbv( ucontext, &context.c )) return;
++        if (emulate_rdpid( ucontext, &context.c )) return;
++        if (emulate_clwb( ucontext, &context.c )) return;
+ #endif
+         rec.ExceptionCode = EXCEPTION_ILLEGAL_INSTRUCTION;
+         break;
+@@ -3224,6 +3314,134 @@ static void *mac_thread_gsbase(void)
+     if (kr == KERN_SUCCESS) return (void*)tiinfo.thread_handle;
+     return NULL;
+ }
++
++/* CPUID leaf 7 from code generated at run time, which Rosetta translates the
++ * way it translates application code; it translates ntdll.so ahead of time,
++ * and CPUID there does not see the change made below. */
++static BOOL jit_cpuid7( unsigned int regs[4] )
++{
++    static const BYTE code[] = { 0x53,                          /* push %rbx */
++                                 0xb8, 0x07, 0x00, 0x00, 0x00,  /* mov $7,%eax */
++                                 0x31, 0xc9,                    /* xor %ecx,%ecx */
++                                 0x0f, 0xa2,                    /* cpuid */
++                                 0x89, 0x07,                    /* mov %eax,(%rdi) */
++                                 0x89, 0x5f, 0x04,              /* mov %ebx,4(%rdi) */
++                                 0x89, 0x4f, 0x08,              /* mov %ecx,8(%rdi) */
++                                 0x89, 0x57, 0x0c,              /* mov %edx,12(%rdi) */
++                                 0x5b,                          /* pop %rbx */
++                                 0xc3 };                        /* ret */
++    void *page = mmap( NULL, page_size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON, -1, 0 );
++
++    if (page == MAP_FAILED) return FALSE;
++    memcpy( page, code, sizeof(code) );
++    if (mprotect( page, page_size, PROT_READ | PROT_EXEC ))
++    {
++        munmap( page, page_size );
++        return FALSE;
++    }
++    ((void (*)(unsigned int *))page)( regs );
++    munmap( page, page_size );
++    return TRUE;
++}
++
++static BOOL set_cpuid7_row( unsigned int *ebx7, unsigned int ebx, unsigned int ecx )
++{
++    mach_vm_address_t page = (mach_vm_address_t)ebx7 & ~(mach_vm_address_t)(page_size - 1);
++    mach_vm_size_t size = ((mach_vm_address_t)(ebx7 + 2) - page + page_size - 1) & ~(mach_vm_size_t)(page_size - 1);
++
++    /* VM_PROT_COPY gives this process a private copy of the page */
++    if (mach_vm_protect( mach_task_self(), page, size, FALSE, VM_PROT_READ | VM_PROT_WRITE | VM_PROT_COPY ))
++        return FALSE;
++    ebx7[0] = ebx;
++    ebx7[1] = ecx;
++    mach_vm_protect( mach_task_self(), page, size, FALSE, VM_PROT_READ | VM_PROT_EXECUTE );
++    return TRUE;
++}
++
++/***********************************************************************
++ *           init_rosetta_cpuid7
++ *
++ * Rosetta CPU fidelity. Rosetta answers CPUID leaf 7 without CLFLUSHOPT,
++ * which it executes, and without CLWB and RDPID, which are emulated above.
++ * Copy protection that compares the leaf with what instructions do faults
++ * endlessly. Rosetta keeps its CPUID leaves as {eax, ebx, ecx, edx} rows in
++ * its read-only runtime image, mapped into each translated process: set the
++ * three bits in this process's copy of the leaf 7 row, then check the answer
++ * with CPUID itself and restore the row if it is not exactly the expected one.
++ * This relies on an undocumented layout. Unless exactly one row matches,
++ * nothing is changed and CPUID is left as Rosetta answers it. The page is
++ * also Rosetta's code; if a future layout makes the change unacceptable to
++ * macOS, the process may be terminated instead. Logs one fixed marker per
++ * process.
++ */
++static void init_rosetta_cpuid7(void)
++{
++    static const unsigned int vendor[3] = { 0x756e6547, 0x6c65746e, 0x49656e69 };  /* "Genu", "ntel", "ineI": ebx, ecx, edx */
++    static const unsigned int add_ebx = (1u << 23) | (1u << 24);  /* CLFLUSHOPT, CLWB */
++    static const unsigned int add_ecx = 1u << 22;                  /* RDPID */
++    unsigned int *row = NULL, before[4], after[4];
++    mach_vm_address_t addr = 0;
++    mach_vm_size_t size = 0;
++    unsigned int found = 0, vendors = 0;
++
++    if (!jit_cpuid7( before ))
++    {
++        ERR_(seh)( "RUNEON_ROSETTA_CPUID7 selftest_failed: no code page\n" );
++        return;
++    }
++
++    for (;;)
++    {
++        vm_region_basic_info_data_64_t info;
++        mach_msg_type_number_t count = VM_REGION_BASIC_INFO_COUNT_64;
++        mach_port_t object;
++        unsigned int *p;
++        size_t j, n;
++
++        if (mach_vm_region( mach_task_self(), &addr, &size, VM_REGION_BASIC_INFO_64,
++                            (vm_region_info_t)&info, &count, &object )) break;
++        if ((info.protection & VM_PROT_ALL) == (VM_PROT_READ | VM_PROT_EXECUTE) && size <= 0x400000)
++        {
++            p = (unsigned int *)(ULONG_PTR)addr;
++            n = size / sizeof(*p);
++            for (j = 4; j + 32 < n; j++)
++            {
++                unsigned int *row1 = p + j, *ebx7 = row1 + 6 * 4 + 1;
++
++                /* leaf 0 ends with the vendor string, leaf 1 follows, leaf 7 six rows on */
++                if (row1[-3] != vendor[0] || row1[-2] != vendor[1] || row1[-1] != vendor[2]) continue;
++                vendors++;
++                if ((row1[0] & 0xfff00000) || !(row1[3] & (1u << 25))) continue;  /* leaf 1: SSE */
++                if (ebx7[-1] || ebx7[0] != before[1] || ebx7[1] != before[2] || ebx7[1]) continue;
++                if (ebx7[0] & ~0x128u) continue;  /* at most BMI1, AVX2, BMI2 */
++                row = ebx7;
++                found++;
++            }
++        }
++        addr += size;
++    }
++
++    if (found != 1)
++    {
++        ERR_(seh)( "RUNEON_ROSETTA_CPUID7 table_not_found rows=%u vendor_matches=%u leaf7=%08x,%08x\n",
++                   found, vendors, before[1], before[2] );
++        return;
++    }
++    if (!set_cpuid7_row( row, before[1] | add_ebx, before[2] | add_ecx ) || !jit_cpuid7( after ))
++        memset( after, 0, sizeof(after) );
++    if (after[1] != (before[1] | add_ebx) || after[2] != (before[2] | add_ecx) ||
++        after[0] != before[0] || after[3] != before[3])
++    {
++        set_cpuid7_row( row, before[1], before[2] );
++        ERR_(seh)( "RUNEON_ROSETTA_CPUID7 selftest_failed rows=%u got=%08x,%08x,%08x,%08x\n",
++                   found, after[0], after[1], after[2], after[3] );
++        return;
++    }
++    rosetta_cpuid7_ebx = add_ebx;
++    rosetta_cpuid7_ecx = add_ecx;
++    ERR_(seh)( "RUNEON_ROSETTA_CPUID7 active rows=%u leaf7 ebx %08x->%08x ecx %08x->%08x\n",
++               found, before[1], after[1], before[2], after[2] );
++}
+ #endif
+ 
+ 
+@@ -3282,6 +3500,7 @@ void signal_init_process(void)
+     {
+         FIXME_(seh)( "Rosetta CPU fidelity enabled\n" );
+         rosetta_cpu_fidelity = TRUE;
++        init_rosetta_cpuid7();
+     }
+ #endif
+ 
