@@ -804,3 +804,101 @@ On a minimal i386/x86_64 WoW64 build of the patched tree (no GStreamer, Vulkan, 
 ### Not verified yet
 
 The complete product build, Wine's ntdll exception tests, the game with the policy on, and Steam and other games with it off. The CPUID table layout is checked only on macOS 27.0; on another layout `0159` logs `table_not_found` and CPUID is unchanged.
+
+<a id="backports-11.21-sweep"></a>
+
+## Wine 11.21 user-mode fix sweep
+
+Candidate patch set `cx26.3-wine11.0-runeon.31` adds `patches/upstream/0164-wine-11.21-targeted-fixes.patch` after `0163`. It squashes 27 WineHQ commits first released in `wine-11.21`. The patch lists every commit with its author, and the manifest records the full commit IDs. Test-only hunks are omitted.
+
+### Selection
+
+All 261 commits of `wine-11.20..wine-11.21` were reviewed with the rules of the [previous sweep](#backports-11.20-sweep), against a tree made of the pinned CrossOver archive plus patches `0001`–`0163`:
+
+- 32 commits change only tests.
+- 77 commits change only `ntdll`, `server`, `win32u`, `winemac.drv`, `wow64`, `include`, the build tools, bundled libraries, translations or the X11 and Wayland drivers. Most are feature work: d3dkmt swapchains and sync objects, memory-reservation changes, ARM64EC/noentry build support and token creation. Each was read; none is carried (see "Needs a maintainer decision"). `06c0cb5c5e` (ntdll critical sections) is already carried in `0148`.
+- Of the 152 user-mode commits, the sweep takes crash, memory-safety, leak, hang and error-path fixes in DLLs that Steam, launchers, installers or games load, and two d3d11 fixes under the graphics rule. It leaves out feature series (mfwmaaec, ncrypt keys and padding, bcrypt DES, wbemprox services, msxml3 DTD and notation nodes, dmusic compressed waves, the winecoreaudio SpatialMixer, wpnapps stubs, the advapi32 user name rework), stubs and clean-ups.
+
+Each taken commit applies to that tree in upstream order, which shows that the base still carries the unfixed code. No later master commit names a taken one (checked up to `7692c6213e`).
+
+### Taken
+
+| Area | Commits | Defect fixed |
+|---|---|---|
+| dplayx | `81db815a81`, `dd586289a4` | The Unicode `IDirectPlay4::GetSessionDesc` returned ANSI strings, and the Unicode `IDirectPlayLobby3::Connect` returned an ANSI interface; a Unicode caller reads them as WCHAR strings. |
+| crypt32 | `a358d7ecf1` | Signature verification re-sorted the authenticated attributes before hashing them, so a valid signature whose attributes are not in DER order was rejected (`TRUST_E_CERT_SIGNATURE` through wintrust). A launcher or installer checking its own signature then refuses to start (Wine-Bug 60273). |
+| user32 | `cd3e9ba0a7` | `DialogBox` truncated a 64-bit `EndDialog` result to 32 bits; a caller using it as a pointer crashes. |
+| winebus.sys | `e90cb1c257` | `SDL_Init` installed SDL's own handler for termination signals that winedevice leaves at the default, such as SIGTERM, so the signal became an SDL quit event that nothing handles and no longer stopped the process. |
+| wininet | `3fef3b5d3a`, `70b5903fde` | An uncommitted cache file was deleted while its handle was still open, so the delete failed and the file stayed (Wine-Bug 60560). `HttpSendRequestExA` set the converted buffer's `dwStructSize` to a pointer size. |
+| comctl32 | `4b2e49fb5a` | ComboBoxEx passed a NULL item text to `lstrcpynW` when the dropdown closed: a crash (Wine-Bug 60495). |
+| mmdevapi | `4751826ecd` | The allocation check in `MMDevCol_Create` tested the count instead of the allocation. |
+| winecoreaudio.drv | `5a66c3e869` | The QPC position of a stream was computed as `counter * 10000000 / frequency`, which overflows after about 25.6 hours of host uptime; on macOS the counter runs from boot, so clock positions are wrong on most long-running Macs. The frequency is already 10 MHz, so the counter is returned as is. Also changes winealsa, wineoss and winepulse, which are not built on macOS. |
+| dbghelp | `bcff0d4155` | `MiniDumpWriteDump` on its own process ran on a new thread; a crash handler that has suspended its other threads first deadlocked. It now runs on the calling thread, as on Windows (Wine-Bug 60547). |
+| gdiplus | `21ffe25da3`, `7c7438bddb`, `088fedbdbc`, `8de6d2d2a5` | An uninitialised path was freed on an error path; flattening a Bezier with non-finite points or zero flatness looped forever (Wine-Bug 60041); a negative offset in `GdipDrawCurve3` read before the point array; an open figure followed by another left one edge on its scanlines and hit an assertion in software filling. |
+| dmusic | `0568158eca`, `c56f0edd92`, `0738d528db` | A second `fmt ` chunk leaked the first format; a `fmt ` chunk shorter than `WAVEFORMATEX` was read past its allocation; the chunk size was never checked against the format. |
+| wmp | `d52e0901b5` | `IOleObject::GetClientSite` returned the site without a reference, so the caller's release freed it. |
+| d3d11 | `55719ae5f1`, `ca0bb83d63` | `FinishCommandList` wrote through a NULL output pointer instead of returning `E_UNEXPECTED` (Wine-Bug 60467); `ID3D10Device1::SetExceptionMode` returned `E_NOTIMPL` where Windows returns success. Taken under the graphics rule; only wined3d-backed D3D10/11 reaches them. |
+| comsvcs | `c85f71ce3f` | `guid_from_string` validated only the first character of the second GUID group and indexed its conversion table with the unchecked rest. |
+| d2d1 | `6f981b85d7`, `9b1eb46383`, `9e375e9f93`, `535d68f02a` | A leaked readback texture on WIC target failure; the `Inputs` property pointer used after the property array may have been reallocated; `GetPropertyNameLength` returned an error code as a length; a failed effect creation released the context instead of the effect. |
+| dwrite | `7219e03eff` | A font set property lookup could return an uninitialised pointer. |
+
+### Left out after review
+
+| Commit | Reason |
+|---|---|
+| `01a9c6c8ac` dnsapi, `d7f953859d` winhttp, `5f5b46ccd2` crypt32, `fdbe8914d7` msv1_0, `224a61be55` wintab32 | The base does not have the defect: the code is absent (no hosts-file reader, PFX export or credential attribute query) or already correct (CrossOver's winhttp option size; wintab32 registers and unregisters its class with the same NULL instance). |
+| `3630b2d151`, `0408d15bef`, `cbb82a7d8e`, `038eccf05e`, `d0e2a7d200`, `b132754ce5`, `8ac1870e39`, `c3c5a9d190`, `cfde576623`, `20f41e857a` msxml3 | Fix the msxml3 implementation that replaced libxml2 after 11.0; the base still uses libxml2. |
+| `66caeb46ae` cmd | The HELP use-after-free is in the word-iterator code that the base does not have. |
+| `569e6b6a75` winhttp | Raises the reply line limit to 64 KB (Wine-Bug 60562). CrossOver's `read_reply` differs, so it needs a hand adaptation; no product failure is known. |
+| `cdc6f6c942` wininet | Depends on the `write_cache_file()` helper the base does not have. |
+| `a3e7d10b56` comsvcs | The base's holder predates upstream's rewrite and releases the driver only in `Close`; adding the reference is not a mechanical change there. |
+| `244a31a814` kernelbase | Lets `SHRegGetUSValueW` run with NULL data and size; with default data that then dereferences the NULL size in `SHRegQueryUSValueW`. A behaviour change, not a crash fix. |
+| `e3c3d34867` oleaut32, `8023acff4a` rpcrt4, `a0f1ef41f4` msvcrt, `c1f55d60f3` wininet, `70577c3e3c` dwrite, `93b006bfe4`, `3b8a6501a2`, `8bb2a57669`, `191766ac0a`, `9af1cb53eb`, `7832417985` gdiplus, `1e3979fd3c` comctl32, `3c3421b563` advapi32 | Correctness or rendering changes with no crash, leak, hang or error path; `3c3421b563` changes a debug string only. |
+| `6c11b196e2`, `a7ca6ed5cb`, `d45ac538c0` user32/comctl32 | Reorder control state flags around `SetCapture()`; a behaviour change. |
+| `2cdb2c4128`, `e6d169b724` userenv | The calls already succeed in Wine; they only match Windows' stricter parameter rules. |
+| `1f8d7f1cd3` winegstreamer, `1695ab626a` mf | Change which media streams are selected; a playback behaviour change that needs its own testing. |
+| `b315cdff0a` mfplat, `bfdb48f4e1` d3d12, `f2f287c927` wmp, `943fb73d5f`, `4f7d045312` infosoft, `d658978505` hhctrl | Stubs and QueryInterface changes, or DLLs games do not load. |
+| `3493088b1c`, `2a662c61b5` setupapi | Device driver installation only; the first restructures `SetupCopyOEMInf`. |
+| `5b39e109cb`, `c99f5c7b03` appwiz.cpl | The addon installer, not loaded by games. |
+| `bf225d4305` xinput | A performance fix for a commit the base does not carry. |
+| `8891603b59` mmdevapi | Follows `da0b08472b` (11.16), which the base does not carry. |
+| `42809af4b3` wined3d | Vulkan renderer only. |
+
+### Needs a maintainer decision
+
+These are in ABI-sensitive code and are not covered by the macOS or Windows-behaviour exceptions without a judgment call. None is carried.
+
+| Commit | Area | Notes |
+|---|---|---|
+| `c37cb58e4c` | ntdll threadpool | Raises the idle worker timeout from 5 to 60 seconds; Windows 10 uses about 67. Upstream reports that it avoids a copy-protection crash when a worker exits while code is still being decrypted. The base has 5000 ms. Windows-behaviour, but the value differs between Windows versions, so it is reviewed one by one. |
+| `5fcf25652c` | ntdll virtual memory | Rechecks that an aligned address still fits the reserved area (Wine-Bug 60534). Address-space layout; related to `0076`. |
+| `96283c8170` | ntdll virtual memory | Skips freeing thread data at process exit (Wine-Bug 60545). |
+| `45f00f925f` | win32u | Runs `cleanup_devices()` before releasing the display device mutex, so another process cannot see GPU keys deleted (Wine-Bug 55346). A cross-process race, not a Windows-behaviour difference. |
+| `98ebfcd75f` | winemac.drv | Advertises `PFD_SUPPORT_GDI` for single-buffered pixel formats. No defect is stated; it is closer to a feature, and `opengl.c` carries CrossOver changes. |
+| `6725f8d94f` | winemac.drv | Switches the IME view back to `NSTextInput`; no defect is stated and it touches CrossOver window code. |
+| `9f4469dbfb`, `1698588a0c`, `ef95772aee`, `9bc785a86e`, `5273b891fe`, `5a29cf122a` | wow64, ntdll, server | Token creation and `NtTerminateProcess(NULL)`; change the server protocol or wow64 thunks. |
+
+### Adaptations
+
+| Commit | Adaptation |
+|---|---|
+| `a358d7ecf1` crypt32 | The new declaration goes after `cng_prepare_signature()` in `crypt32_private.h`; the upstream context names a declaration added after 11.0. The code changes apply unchanged. |
+| `e90cb1c257` winebus.sys | The base already loads `SDL_SetHint` for CrossOver's rumble hints, so only the `SDL_HINT_NO_SIGNAL_HANDLERS` line is added, before `SDL_Init`. |
+| `4751826ecd` mmdevapi | The same one-line change; CrossOver's branch also leaves the device lock. |
+| `0568158eca`, `c56f0edd92`, `0738d528db` dmusic | The same lines in the base's `fmt ` case, which upstream reordered in `b8b7181ec9` (not taken). |
+
+### Known risk
+
+`bcff0d4155` includes the calling thread in the dump and reads its context with `GetThreadContext` on itself, without suspending it; the dump then shows that thread inside `MiniDumpWriteDump`, as on Windows. A crash reporter that wrote dumps through the helper thread before will now write them on its own stack.
+
+`cd3e9ba0a7` widens `dialog_box_loop` in user32's `wow_handlers32`; `user.exe16` keeps its own `INT` declaration, as upstream does. Both are 32-bit there, so the 16-bit path is unchanged.
+
+### Downstream fixes in the same patch set
+
+`0162` (wined3d) and `0163` (ntdll) are downstream, approved individually by the maintainer on 2026-11-04 and listed in `MAINTENANCE.md`. For `0162`, `wined3d_stateblock_state_cleanup()` and `wined3d_stateblock_reset()` in WineHQ master (`7692c6213e`) still match the base, so there is no upstream commit to take.
+
+### Validation
+
+`scripts/static-check.sh` and `scripts/integration-check.sh` pass for `.31`. Every taken commit applies in order without fuzz, except the adapted ones. Not done yet: a complete i386/x86_64 build, Wine's tests for the affected modules against `.30`, and product acceptance.
+
+`upstreamAuditThrough` stays at `wine-11.15`. The base manifest records `upstreamSweepThrough: wine-11.21`.

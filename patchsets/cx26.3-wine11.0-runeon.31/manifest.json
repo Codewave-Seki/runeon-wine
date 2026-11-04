@@ -3695,6 +3695,73 @@
           "contains": "ERR_(seh)( \"fault in system call: code=%x ip=%lx (%s %s+%lx)"
         }
       ]
+    },
+    {
+      "order": 194,
+      "path": "patches/upstream/0164-wine-11.21-targeted-fixes.patch",
+      "sha256": "8f3e85d08c1670f363039c4c2545a8fb4a63b7bb2c23ec0da3f3d96765b72d87",
+      "kind": "upstream-backport",
+      "status": "active",
+      "risk": "medium",
+      "firstWineRelease": "wine-11.21",
+      "upstreamCommits": [
+        "81db815a8135b91991deddb0353f08dcad221407",
+        "a358d7ecf13b420d7fa65d54fcad1f96003d7a48",
+        "cd3e9ba0a76a2d19148f4239d85b2429bb5a4b02",
+        "e90cb1c257b8042d7122bc6b4ad4f99b4f60892a",
+        "3fef3b5d3a575c98247539a14a62da3aeab2d206",
+        "4b2e49fb5a9d8a1665660e4a431944fd9db593cc",
+        "4751826ecd7fbc46a1448660f31cd8fdcf4ebea6",
+        "bcff0d4155f3392b2a85f3d72d21aed9f76d0a2e",
+        "21ffe25da3405d98a88caff7605fc8d8d81b95d1",
+        "0568158ecabc9ec2cef0bdc21754728546d6f7c0",
+        "c56f0edd92bd8992e5617ccce55c9d73171bdd59",
+        "0738d528db522f52d9d75f2aec712688dd31d1d2",
+        "d52e0901b5fef8d9c5321482b2027eec0bfc2dbd",
+        "55719ae5f1156c48efb321d630aeecd9c46811a3",
+        "ca0bb83d633daadeb101b2623be1565847e3017d",
+        "c85f71ce3f92b8a4cb01f9d13d8daf1b355bbeca",
+        "70b5903fde8886868183eeba4c568051f639cc9b",
+        "6f981b85d74e1884cce920c678a0d1ed282fde86",
+        "9b1eb4638339928286eb4edf5427910ee6691aa0",
+        "9e375e9f9350cb20b415e66ac510ca54127f13b2",
+        "535d68f02a08fc160cd20d67b90c27aaebb70b54",
+        "7219e03eff63e6b607a446f507a0cf2e755f85b3",
+        "dd586289a438763034f19be6c87802ed5579c517",
+        "7c7438bddbe171f29b0a4f15cc7bb351cd37f80a",
+        "088fedbdbc881cbb9baa89d933b18e1bb7293d16",
+        "8de6d2d2a5c2e1397041e3a1a1d5b5ae19039c1c",
+        "5a66c3e86945710eba479f35374e317de3bb853a"
+      ],
+      "summary": "Squashed user-mode fixes first released in wine-11.21 for DLLs used by Steam, launchers, installers and games: crash, memory-safety, leak, hang and error-path fixes in dplayx, crypt32 (valid signatures with non-canonically ordered authenticated attributes were rejected), user32 (64-bit dialog results), winebus (SDL no longer takes over signal handlers), wininet, comctl32, mmdevapi, dbghelp (minidump of the own process deadlocked when the caller had suspended other threads), gdiplus, dmusic, wmp, d2d1, dwrite, comsvcs, and the winecoreaudio.drv QPC overflow that broke audio clock positions after about 25.6 hours of uptime; plus two d3d11 fixes under the graphics rule. ABI-sensitive commits, feature series and behaviour changes are excluded; see docs/upstream-reviews.md#backports-11.21-sweep.",
+      "adaptation": "Six commits are placed mechanically: the a358d7ecf1 declaration after cng_prepare_signature() in crypt32_private.h; only the e90cb1c257 hint, after CrossOver's rumble hints, since the base already loads SDL_SetHint; 4751826ecd in CrossOver's locked branch of MMDevCol_Create(); 0568158eca, c56f0edd92 and 0738d528db in the base's fmt case, which upstream reordered in b8b7181ec9. Production code is otherwise identical.",
+      "testStrategy": "Every commit applies in upstream order without fuzz on top of patches 0001-0163, except those documented as adapted; full Wine build and product smoke validation are required before tagging. Upstream test hunks are omitted.",
+      "verification": [
+        {
+          "path": "dlls/crypt32/msg.c",
+          "contains": "ret = CRYPT_AsnEncodePKCSAttributesUnsorted("
+        },
+        {
+          "path": "dlls/winebus.sys/bus_sdl.c",
+          "contains": "pSDL_SetHint(SDL_HINT_NO_SIGNAL_HANDLERS, \"1\");"
+        },
+        {
+          "path": "dlls/winecoreaudio.drv/coreaudio.c",
+          "contains": "*params->qpcpos = stamp.QuadPart;"
+        },
+        {
+          "path": "dlls/dbghelp/minidump.c",
+          "contains": "BOOL is_current_thread = (tid == GetCurrentThreadId());"
+        },
+        {
+          "path": "dlls/gdiplus/graphicspath.c",
+          "contains": "if (current->depth >= 16 ||"
+        },
+        {
+          "path": "dlls/dmusic/wave.c",
+          "contains": "if (chunk.size < sizeof(PCMWAVEFORMAT)) return E_FAIL;"
+        }
+      ]
     }
   ],
   "targetedReview": {

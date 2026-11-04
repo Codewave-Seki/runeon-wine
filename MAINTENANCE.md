@@ -36,6 +36,7 @@ Release status lives in the [README](README.md) table, the GitHub Releases and `
 | [NTDLL-WIN32U-SERVER-FIXES](docs/upstream-reviews.md#ntdll-win32u-server-fixes) | Windows-behaviour fixes in ntdll, win32u and wineserver (28 commits) | `.27` |
 | [RECALL-FIX-SERIES](docs/upstream-reviews.md#recall-fix-series) | Stall and correctness fixes from AsherJN/recall (`0150`–`0154`) | `.29` |
 | [ROSETTA-CPU-FIDELITY](docs/upstream-reviews.md#rosetta-cpu-fidelity) | Opt-in Rosetta CPU fidelity in ntdll (`0157`–`0159`) and VC14 version resources (`0160`) | `.30` |
+| [BACKPORTS-11.21-SWEEP](docs/upstream-reviews.md#backports-11.21-sweep) | Filtered user-mode sweep, wine-11.21 | `.31` |
 
 The complete audit boundary is `wine-11.15`; later releases were reviewed with the filtered sweep rules. An audit is a point-in-time decision record, not a permanent allowlist: a deferred commit may enter a later patch set once its dependency chain, tests, probe and Runeon impact are established, and inclusion in an audit does not authorize publishing a runtime.
 

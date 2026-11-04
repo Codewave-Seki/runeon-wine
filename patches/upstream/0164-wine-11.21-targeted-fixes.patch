@@ -1,0 +1,749 @@
+From: Wine upstream contributors (see commit list)
+Subject: [PATCH] Backport targeted Wine 11.21 fixes.
+
+Squashed backport of 27 WineHQ commits first released in wine-11.21,
+applied in upstream order on top of cx26.3-wine11.0-runeon.31 patches
+0001-0163. Test-only hunks are omitted.
+Adaptations, marked [adapted] below: the a358d7ecf1 declaration is placed
+after cng_prepare_signature() in crypt32_private.h, which lacks a later
+upstream declaration; e90cb1c257 adds only the hint, after CrossOver's
+rumble hints, because the base already loads SDL_SetHint; 4751826ecd is
+the same one-line change in CrossOver's locked branch of
+MMDevCol_Create(); 0568158eca, c56f0edd92 and 0738d528db are the same
+lines in the base's fmt case, which upstream reordered in b8b7181ec9.
+
+  81db815a81 Alex Henrie: dplayx: Pass bAnsi=FALSE from IDirectPlay4Impl_GetSessionDesc.
+  a358d7ecf1 Michael Nelson: crypt32: Preserve authenticated attribute order when verifying signatures. [adapted]
+  cd3e9ba0a7 Abdullah Ahmed: user32: Avoid 64-bit value truncation of dialog return values.
+  e90cb1c257 Fabien Romano: winebus: Preserve signal handlers when initializing SDL. [adapted]
+  3fef3b5d3a James Hawkins: wininet: Delete uncommitted cache file after closing its handle.
+  4b2e49fb5a Vishnunithyasoundhar S: comctl32/comboex: Don't pass a NULL string to the CBEN_ENDEDIT notif.
+  4751826ecd Alex Henrie: mmdevapi: Fix error check in MMDevCol_Create. [adapted]
+  bcff0d4155 Harrison Short: dbghelp: Write minidump on the calling thread.
+  21ffe25da3 Sven Baars: gdiplus: Make sure anchor_path is initialized when calling GdipDeletePath() (Coverity).
+  0568158eca Anton Baskanov: dmusic: Free the old format in parse_wave_chunk. [adapted]
+  c56f0edd92 Anton Baskanov: dmusic: Allocate enough space for WAVEFORMATEX in parse_wave_chunk. [adapted]
+  0738d528db Anton Baskanov: dmusic: Check the fmt chunk size in parse_wave_chunk. [adapted]
+  d52e0901b5 Alistair Leslie-Hughes: wmp: AddRef returned object in IOleObject::GetClientSite.
+  55719ae5f1 Ali Milhim: d3d11: Return E_UNEXPECTED from FinishCommandList() with a NULL command list.
+  ca0bb83d63 Alistair Leslie-Hughes: d3d11: Fake success in ID3D10Device1::SetExceptionMode.
+  c85f71ce3f Alistair Leslie-Hughes: comsvcs: Correct checking a hex value in guid_from_string.
+  70b5903fde Alistair Leslie-Hughes: wininet: Correct sizeof usage in HttpSendRequestExA.
+  6f981b85d7 Nikolay Sivov: d2d1: Fix texture object leak on failure path during WIC target initialization.
+  9b1eb46383 Nikolay Sivov: d2d1: Avoid accessing potentially reallocated memory.
+  9e375e9f93 Nikolay Sivov: d2d1/effect: Fix GetPropertyNameLength() for invalid property index.
+  535d68f02a Nikolay Sivov: d2d1/effect: Fix inconsistent cleanup on failure path to create an effect instance.
+  7219e03eff Nikolay Sivov: dwrite: Make sure property value pointer is always initialized.
+  dd586289a4 Alistair Leslie-Hughes: dplayx: Call correct interface in IDirectPlayLobby3::Connect.
+  7c7438bddb Vitaly Lipatov: gdiplus: Don't loop forever on Bezier curves that can't be flattened.
+  088fedbdbc Vitaly Lipatov: gdiplus: Reject a negative offset in GdipDrawCurve3() and GdipDrawCurve3I().
+  8de6d2d2a5 Vitaly Lipatov: gdiplus: Close every open figure when converting a path to edges.
+  5a66c3e869 Paul Gofman: mmdevapi: Don't try to convert QPC and avoid overflow.
+
+diff --git a/dlls/comctl32/comboex.c b/dlls/comctl32/comboex.c
+--- a/dlls/comctl32/comboex.c
++++ b/dlls/comctl32/comboex.c
+@@ -221,6 +221,9 @@ COMBOEX_NotifyItem (const COMBOEX_INFO *infoPtr, UINT code, NMCOMBOBOXEXW *hdr)
+ 
+ static INT COMBOEX_NotifyEndEdit (const COMBOEX_INFO *infoPtr, NMCBEENDEDITW *neew, LPCWSTR wstr)
+ {
++    /* Items with empty text have a NULL text pointer. */
++    if (!wstr) wstr = L"";
++
+     /* Change the Text item from Unicode to ANSI if necessary for NOTIFY */
+     if (infoPtr->NtfUnicode) {
+ 	lstrcpynW(neew->szText, wstr, CBEMAXSTRLEN);
+diff --git a/dlls/comsvcs/main.c b/dlls/comsvcs/main.c
+--- a/dlls/comsvcs/main.c
++++ b/dlls/comsvcs/main.c
+@@ -813,7 +813,7 @@ static HRESULT guid_from_string(const WCHAR *s, GUID *ret)
+ 
+     for (i = 0; i < 4; i++)
+     {
+-        if (!is_valid_hex(s[0])) return FALSE;
++        if (!is_valid_hex(s[i])) return FALSE;
+         guid.Data2 = (guid.Data2 << 4) | guid_conv_table[s[i]];
+     }
+     s += 4;
+diff --git a/dlls/crypt32/crypt32_private.h b/dlls/crypt32/crypt32_private.h
+--- a/dlls/crypt32/crypt32_private.h
++++ b/dlls/crypt32/crypt32_private.h
+@@ -26,6 +26,16 @@ BOOL CNG_ImportPubKey(CERT_PUBLIC_KEY_INFO *pubKeyInfo, BCRYPT_KEY_HANDLE *key);
+ BOOL cng_prepare_signature(const char *alg_oid, BYTE *encoded_sig, DWORD encoded_sig_len,
+     BYTE **sig_value, DWORD *sig_len);
+ 
++/* Encodes attributes as a SET OF while preserving the order in which they
++ * appear in attributes->rgAttr, rather than sorting them into DER order.
++ * Needed when hashing PKCS#7 authenticated attributes in order to verify a
++ * signature: the signature covers the attributes exactly as the signer
++ * encoded them, and that encoding is not required to be canonical.
++ * On success *pbEncoded is LocalAlloc'd and the caller frees it.
++ */
++BOOL CRYPT_AsnEncodePKCSAttributesUnsorted(const CRYPT_ATTRIBUTES *attributes,
++ BYTE **pbEncoded, DWORD *pcbEncoded);
++
+ /* a few asn.1 tags we need */
+ #define ASN_BOOL            (ASN_UNIVERSAL | ASN_PRIMITIVE | 0x01)
+ #define ASN_BITSTRING       (ASN_UNIVERSAL | ASN_PRIMITIVE | 0x03)
+diff --git a/dlls/crypt32/encode.c b/dlls/crypt32/encode.c
+--- a/dlls/crypt32/encode.c
++++ b/dlls/crypt32/encode.c
+@@ -1234,6 +1234,7 @@ struct DERSetDescriptor
+     size_t                  itemSize;
+     size_t                  itemOffset;
+     CryptEncodeObjectExFunc encode;
++    BOOL                    noSort;
+ };
+ 
+ static BOOL WINAPI CRYPT_DEREncodeItemsAsSet(DWORD dwCertEncodingType,
+@@ -1291,8 +1292,9 @@ static BOOL WINAPI CRYPT_DEREncodeItemsAsSet(DWORD dwCertEncodingType,
+         {
+             if (dwFlags & CRYPT_ENCODE_ALLOC_FLAG)
+                 pbEncoded = *(BYTE **)pbEncoded;
+-            qsort(setOf.rgBlob, setOf.cBlob, sizeof(CRYPT_DER_BLOB),
+-             BLOBComp);
++            if (!desc->noSort)
++                qsort(setOf.rgBlob, setOf.cBlob, sizeof(CRYPT_DER_BLOB),
++                 BLOBComp);
+             *pbEncoded++ = ASN_CONSTRUCTOR | ASN_SETOF;
+             CRYPT_EncodeLen(bytesNeeded - lenBytes - 1, pbEncoded, &lenBytes);
+             pbEncoded += lenBytes;
+@@ -1903,7 +1905,7 @@ static BOOL WINAPI CRYPT_AsnEncodePKCSAttributes(DWORD dwCertEncodingType,
+     {
+         const CRYPT_ATTRIBUTES *attributes = pvStructInfo;
+         struct DERSetDescriptor desc = { attributes->cAttr, attributes->rgAttr,
+-         sizeof(CRYPT_ATTRIBUTE), 0, CRYPT_AsnEncodePKCSAttribute };
++         sizeof(CRYPT_ATTRIBUTE), 0, CRYPT_AsnEncodePKCSAttribute, FALSE };
+ 
+         ret = CRYPT_DEREncodeItemsAsSet(X509_ASN_ENCODING, lpszStructType,
+          &desc, dwFlags, pEncodePara, pbEncoded, pcbEncoded);
+@@ -1916,6 +1918,16 @@ static BOOL WINAPI CRYPT_AsnEncodePKCSAttributes(DWORD dwCertEncodingType,
+     return ret;
+ }
+ 
++BOOL CRYPT_AsnEncodePKCSAttributesUnsorted(const CRYPT_ATTRIBUTES *attributes,
++ BYTE **pbEncoded, DWORD *pcbEncoded)
++{
++    struct DERSetDescriptor desc = { attributes->cAttr, attributes->rgAttr,
++     sizeof(CRYPT_ATTRIBUTE), 0, CRYPT_AsnEncodePKCSAttribute, TRUE };
++
++    return CRYPT_DEREncodeItemsAsSet(X509_ASN_ENCODING, NULL, &desc,
++     CRYPT_ENCODE_ALLOC_FLAG, NULL, (BYTE *)pbEncoded, pcbEncoded);
++}
++
+ /* Like CRYPT_AsnEncodePKCSContentInfo, but allows the OID to be NULL */
+ static BOOL WINAPI CRYPT_AsnEncodePKCSContentInfoInternal(
+  DWORD dwCertEncodingType, LPCSTR lpszStructType, const void *pvStructInfo,
+diff --git a/dlls/crypt32/msg.c b/dlls/crypt32/msg.c
+--- a/dlls/crypt32/msg.c
++++ b/dlls/crypt32/msg.c
+@@ -1136,9 +1136,22 @@ static BOOL CSignedMsgData_UpdateAuthenticatedAttributes(
+                 LPBYTE encodedAttrs;
+                 DWORD size;
+ 
+-                ret = CryptEncodeObjectEx(X509_ASN_ENCODING, PKCS_ATTRIBUTES,
+-                 &msg_data->info->rgSignerInfo[i].AuthAttrs,
+-                 CRYPT_ENCODE_ALLOC_FLAG, NULL, &encodedAttrs, &size);
++                /* The signature covers the authenticated attributes exactly
++                 * as the signer encoded them, and that encoding is not
++                 * required to be in canonical DER SET OF order.  Sorting
++                 * them here would change the digest and reject a valid
++                 * signature, so preserve the decoded order when verifying.
++                 * When signing, sort as DER requires.
++                 */
++                if (flag == Verify)
++                    ret = CRYPT_AsnEncodePKCSAttributesUnsorted(
++                     &msg_data->info->rgSignerInfo[i].AuthAttrs,
++                     &encodedAttrs, &size);
++                else
++                    ret = CryptEncodeObjectEx(X509_ASN_ENCODING,
++                     PKCS_ATTRIBUTES,
++                     &msg_data->info->rgSignerInfo[i].AuthAttrs,
++                     CRYPT_ENCODE_ALLOC_FLAG, NULL, &encodedAttrs, &size);
+                 if (ret)
+                 {
+                     ret = CryptHashData(
+diff --git a/dlls/d2d1/effect.c b/dlls/d2d1/effect.c
+--- a/dlls/d2d1/effect.c
++++ b/dlls/d2d1/effect.c
+@@ -3076,10 +3076,8 @@ static UINT32 STDMETHODCALLTYPE d2d_effect_properties_GetPropertyNameLength(ID2D
+ 
+     TRACE("iface %p, index %u.\n", iface, index);
+ 
+-    if (!(prop = d2d_effect_properties_get_property_by_index(properties, index)))
+-        return D2DERR_INVALID_PROPERTY;
+-
+-    return wcslen(prop->name);
++    prop = d2d_effect_properties_get_property_by_index(properties, index);
++    return prop ? wcslen(prop->name) : 0;
+ }
+ 
+ static D2D1_PROPERTY_TYPE STDMETHODCALLTYPE d2d_effect_properties_GetType(ID2D1Properties *iface,
+@@ -3479,7 +3477,7 @@ HRESULT d2d_effect_create(struct d2d_device_context *context, const CLSID *effec
+ 
+     if (FAILED(hr = d2d_transform_graph_create(input_count, &object->graph)))
+     {
+-        ID2D1EffectContext_Release(&effect_context->ID2D1EffectContext_iface);
++        ID2D1Effect_Release(&object->ID2D1Effect_iface);
+         return hr;
+     }
+ 
+diff --git a/dlls/d2d1/factory.c b/dlls/d2d1/factory.c
+--- a/dlls/d2d1/factory.c
++++ b/dlls/d2d1/factory.c
+@@ -844,6 +844,7 @@ static HRESULT parse_effect_inputs(IXmlReader *reader, struct d2d_effect_registr
+ 
+     min_inputs = d2d_effect_properties_get_property_by_name(effect->properties, L"MinInputs");
+     max_inputs = d2d_effect_properties_get_property_by_name(effect->properties, L"MaxInputs");
++    inputs = d2d_effect_properties_get_property_by_name(effect->properties, L"Inputs");
+ 
+     if (!IXmlReader_IsEmptyElement(reader))
+     {
+diff --git a/dlls/d2d1/wic_render_target.c b/dlls/d2d1/wic_render_target.c
+--- a/dlls/d2d1/wic_render_target.c
++++ b/dlls/d2d1/wic_render_target.c
+@@ -270,6 +270,7 @@ HRESULT d2d_wic_render_target_init(struct d2d_wic_render_target *render_target,
+     if (FAILED(hr = ID3D10Device1_QueryInterface(d3d_device, &IID_IDXGIDevice, (void **)&dxgi_device)))
+     {
+         WARN("Failed to get DXGI device, hr %#lx.\n", hr);
++        ID3D10Texture2D_Release(render_target->readback_texture);
+         IDXGISurface_Release(render_target->dxgi_surface);
+         return hr;
+     }
+@@ -279,6 +280,7 @@ HRESULT d2d_wic_render_target_init(struct d2d_wic_render_target *render_target,
+     if (FAILED(hr))
+     {
+         WARN("Failed to create D2D device, hr %#lx.\n", hr);
++        ID3D10Texture2D_Release(render_target->readback_texture);
+         IDXGISurface_Release(render_target->dxgi_surface);
+         return hr;
+     }
+diff --git a/dlls/d3d11/device.c b/dlls/d3d11/device.c
+--- a/dlls/d3d11/device.c
++++ b/dlls/d3d11/device.c
+@@ -2730,6 +2730,11 @@ static HRESULT STDMETHODCALLTYPE d3d11_device_context_FinishCommandList(ID3D11De
+     ID3D11Device5_AddRef(object->device);
+ 
+     TRACE("Created command list %p.\n", object);
++    if (!command_list)
++    {
++        ID3D11CommandList_Release(&object->ID3D11CommandList_iface);
++        return E_UNEXPECTED;
++    }
+     *command_list = &object->ID3D11CommandList_iface;
+ 
+     return S_OK;
+@@ -6860,7 +6865,7 @@ static HRESULT STDMETHODCALLTYPE d3d10_device_SetExceptionMode(ID3D10Device1 *if
+ {
+     FIXME("iface %p, flags %#x stub!\n", iface, flags);
+ 
+-    return E_NOTIMPL;
++    return S_OK;
+ }
+ 
+ static UINT STDMETHODCALLTYPE d3d10_device_GetExceptionMode(ID3D10Device1 *iface)
+diff --git a/dlls/dbghelp/minidump.c b/dlls/dbghelp/minidump.c
+--- a/dlls/dbghelp/minidump.c
++++ b/dlls/dbghelp/minidump.c
+@@ -68,9 +68,6 @@ static BOOL fetch_process_info(struct dump_context* dc)
+                 if (!dc->threads) break;
+                 for (i = 0; i < spi->dwThreadCount; i++)
+                 {
+-                    /* don't include current thread */
+-                    if (HandleToULong(spi->ti[i].ClientId.UniqueThread) == GetCurrentThreadId())
+-                        continue;
+                     dc->threads[dc->num_threads].tid        = HandleToULong(spi->ti[i].ClientId.UniqueThread);
+                     dc->threads[dc->num_threads].prio_class = spi->ti[i].dwBasePriority; /* FIXME */
+                     dc->threads[dc->num_threads].curr_prio  = spi->ti[i].dwCurrentPriority;
+@@ -151,12 +148,15 @@ static BOOL fetch_thread_info(struct dump_context* dc, int thd_idx,
+         mdThd->Teb = (ULONG_PTR)tbi.TebBaseAddress;
+         if (tbi.ExitStatus == STILL_ACTIVE)
+         {
+-            mdThd->SuspendCount = SuspendThread(hThread);
++            BOOL is_current_thread = (tid == GetCurrentThreadId());
++            if (!is_current_thread)
++                mdThd->SuspendCount = SuspendThread(hThread);
+             ctx->ContextFlags = CONTEXT_ALL;
+             if (!GetThreadContext(hThread, ctx))
+                 memset(ctx, 0, sizeof(*ctx));
+             fetch_thread_stack(dc, tbi.TebBaseAddress, ctx, &mdThd->Stack);
+-            ResumeThread(hThread);
++            if (!is_current_thread)
++                ResumeThread(hThread);
+         }
+         else
+             mdThd->SuspendCount = (DWORD)-1;
+@@ -890,9 +890,8 @@ static unsigned         dump_misc_info(struct dump_context* dc)
+     return sizeof(mmi);
+ }
+ 
+-static DWORD CALLBACK write_minidump(void *_args)
++static BOOL write_minidump(struct dump_context *dc)
+ {
+-    struct dump_context *dc = _args;
+     static const MINIDUMP_DIRECTORY emptyDir = {UnusedStream, {0, 0}};
+     MINIDUMP_HEADER     mdHead;
+     MINIDUMP_DIRECTORY  mdDir;
+@@ -1071,22 +1070,7 @@ BOOL WINAPI MiniDumpWriteDump(HANDLE hProcess, DWORD pid, HANDLE hFile,
+     dc.except_param = (ExceptionParam && ExceptionParam->ExceptionPointers) ? ExceptionParam : NULL;
+     dc.user_stream = UserStreamParam;
+ 
+-    /* have a dedicated thread for fetching info on self */
+-    if (dc.pid != GetCurrentProcessId())
+-        ret = write_minidump(&dc);
+-    else
+-    {
+-        DWORD  exit_code;
+-        HANDLE h = CreateThread(NULL, 0, write_minidump, &dc, 0, NULL);
+-        if (h)
+-        {
+-            if (WaitForSingleObject(h, INFINITE) == WAIT_OBJECT_0 && GetExitCodeThread(h, &exit_code))
+-                ret = exit_code;
+-            else
+-                TerminateThread(h, 0);
+-            CloseHandle(h);
+-        }
+-    }
++    ret = write_minidump(&dc);
+ 
+     if (sym_initialized)
+         SymCleanup(hProcess);
+diff --git a/dlls/dmusic/wave.c b/dlls/dmusic/wave.c
+--- a/dlls/dmusic/wave.c
++++ b/dlls/dmusic/wave.c
+@@ -145,8 +145,18 @@ static HRESULT parse_wave_chunk(struct wave *This, IStream *stream, struct chunk
+         switch (MAKE_IDTYPE(chunk.id, chunk.type))
+         {
+         case mmioFOURCC('f','m','t',' '):
+-            if (!(This->format = malloc(chunk.size))) return E_OUTOFMEMORY;
++            free(This->format);
++            if (!(This->format = calloc(1, max(sizeof(WAVEFORMATEX), chunk.size)))) return E_OUTOFMEMORY;
+             hr = stream_chunk_get_data(stream, &chunk, This->format, chunk.size);
++            if (This->format->wFormatTag == WAVE_FORMAT_PCM)
++            {
++                if (chunk.size < sizeof(PCMWAVEFORMAT)) return E_FAIL;
++            }
++            else
++            {
++                if (chunk.size < sizeof(WAVEFORMATEX)) return E_FAIL;
++                if (chunk.size < sizeof(WAVEFORMATEX) + This->format->cbSize) return E_FAIL;
++            }
+             break;
+ 
+         case mmioFOURCC('d','a','t','a'):
+diff --git a/dlls/dplayx/dplay.c b/dlls/dplayx/dplay.c
+--- a/dlls/dplayx/dplay.c
++++ b/dlls/dplayx/dplay.c
+@@ -3691,7 +3691,7 @@ static HRESULT WINAPI IDirectPlay4Impl_GetSessionDesc( IDirectPlay4 *iface, void
+         DWORD *lpdwDataSize )
+ {
+     IDirectPlayImpl *This = impl_from_IDirectPlay4( iface );
+-    return DP_GetSessionDesc( This, lpData, lpdwDataSize, TRUE );
++    return DP_GetSessionDesc( This, lpData, lpdwDataSize, FALSE );
+ }
+ 
+ static HRESULT WINAPI IDirectPlay2AImpl_Initialize( IDirectPlay2A *iface, GUID *guid )
+diff --git a/dlls/dplayx/dplobby.c b/dlls/dplayx/dplobby.c
+--- a/dlls/dplayx/dplobby.c
++++ b/dlls/dplayx/dplobby.c
+@@ -273,7 +273,7 @@ static HRESULT WINAPI IDirectPlayLobby3AImpl_Connect( IDirectPlayLobby3A *iface,
+ static HRESULT WINAPI IDirectPlayLobby3Impl_Connect( IDirectPlayLobby3 *iface, DWORD flags,
+         IDirectPlay2 **dp, IUnknown *unk)
+ {
+-    return IDirectPlayLobby_ConnectEx( iface, flags, &IID_IDirectPlay2A, (void**)dp, unk );
++    return IDirectPlayLobby_ConnectEx( iface, flags, &IID_IDirectPlay2, (void**)dp, unk );
+ }
+ 
+ /********************************************************************
+diff --git a/dlls/dwrite/font.c b/dlls/dwrite/font.c
+--- a/dlls/dwrite/font.c
++++ b/dlls/dwrite/font.c
+@@ -7449,7 +7449,7 @@ static IDWriteLocalizedStrings * fontset_entry_get_property(struct dwrite_fontse
+         DWRITE_FONT_PROPERTY_ID property)
+ {
+     struct file_stream_desc stream_desc = { 0 };
+-    IDWriteLocalizedStrings *value;
++    IDWriteLocalizedStrings *value = NULL;
+ 
+     assert(property > DWRITE_FONT_PROPERTY_ID_NONE && property <= DWRITE_FONT_PROPERTY_ID_TYPOGRAPHIC_FACE_NAME);
+ 
+diff --git a/dlls/gdiplus/graphics.c b/dlls/gdiplus/graphics.c
+--- a/dlls/gdiplus/graphics.c
++++ b/dlls/gdiplus/graphics.c
+@@ -2994,7 +2994,7 @@ GpStatus WINGDIPAPI GdipDrawCurve3(GpGraphics *graphics, GpPen *pen,
+ {
+     TRACE("(%p, %p, %p, %d, %d, %d, %.2f)\n", graphics, pen, points, count, offset, numberOfSegments, tension);
+ 
+-    if(offset >= count || numberOfSegments > count - offset - 1 || numberOfSegments <= 0){
++    if(offset < 0 || offset >= count || numberOfSegments > count - offset - 1 || numberOfSegments <= 0){
+         return InvalidParameter;
+     }
+ 
+@@ -3011,7 +3011,7 @@ GpStatus WINGDIPAPI GdipDrawCurve3I(GpGraphics *graphics, GpPen *pen,
+         return OutOfMemory;
+     }
+ 
+-    if(offset >= count || numberOfSegments > count - offset - 1 || numberOfSegments <= 0){
++    if(offset < 0 || offset >= count || numberOfSegments > count - offset - 1 || numberOfSegments <= 0){
+         return InvalidParameter;
+     }
+ 
+@@ -3789,7 +3789,7 @@ end:
+ static GpStatus SOFTWARE_GdipDrawThinPath(GpGraphics *graphics, GpPen *pen, GpPath *path)
+ {
+     GpStatus stat;
+-    GpPath *flat_path, *anchor_path;
++    GpPath *flat_path, *anchor_path = NULL;
+     GpRegion *anchor_region;
+     GpMatrix* transform;
+     GpRectF gp_bound_rect;
+diff --git a/dlls/gdiplus/graphicspath.c b/dlls/gdiplus/graphicspath.c
+--- a/dlls/gdiplus/graphicspath.c
++++ b/dlls/gdiplus/graphicspath.c
+@@ -153,10 +153,12 @@ struct flatten_bezier_job
+     REAL x3;
+     REAL y3;
+     path_list_node_t *end;
++    unsigned int depth;
+     struct list entry;
+ };
+ 
+-static BOOL flatten_bezier_add(struct list *jobs, path_list_node_t *start, REAL x2, REAL y2, REAL x3, REAL y3, path_list_node_t *end)
++static BOOL flatten_bezier_add(struct list *jobs, path_list_node_t *start, REAL x2, REAL y2, REAL x3, REAL y3,
++                               path_list_node_t *end, unsigned int depth)
+ {
+     struct flatten_bezier_job *job = malloc(sizeof(struct flatten_bezier_job));
+     if (!job)
+@@ -168,6 +170,7 @@ static BOOL flatten_bezier_add(struct list *jobs, path_list_node_t *start, REAL
+     job->x3 = x3;
+     job->y3 = y3;
+     job->end = end;
++    job->depth = depth;
+ 
+     list_add_after(jobs, &job->entry);
+     return TRUE;
+@@ -202,9 +205,14 @@ static BOOL flatten_bezier(path_list_node_t *start, REAL x2, REAL y2, REAL x3, R
+     struct list jobs;
+     struct flatten_bezier_job *current, *next;
+ 
++    /* such curves never become flat, replace them with a line */
++    if (!(flatness > 0.0f) || !isfinite(start->pt.X) || !isfinite(start->pt.Y) || !isfinite(x2) || !isfinite(y2) ||
++        !isfinite(x3) || !isfinite(y3) || !isfinite(end->pt.X) || !isfinite(end->pt.Y))
++        return TRUE;
++
+     flatness = 0.62f * flatness;
+     list_init( &jobs );
+-    flatten_bezier_add(&jobs, start, x2, y2, x3, y3, end);
++    flatten_bezier_add(&jobs, start, x2, y2, x3, y3, end, 0);
+     LIST_FOR_EACH_ENTRY( current, &jobs, struct flatten_bezier_job, entry )
+     {
+         start = current->start;
+@@ -235,6 +243,11 @@ static BOOL flatten_bezier(path_list_node_t *start, REAL x2, REAL y2, REAL x3, R
+         pt = end->pt;
+         pt_st = start->pt;
+ 
++        /* the curve can't be split any further within float precision */
++        if (current->depth >= 16 || (mp[2].X == pt_st.X && mp[2].Y == pt_st.Y) ||
++            (mp[2].X == pt.X && mp[2].Y == pt.Y))
++            continue;
++
+         /* Test for closely spaced points that don't need to be flattened
+          * Also avoids limited-precision errors in flatness check
+          */
+@@ -263,9 +276,9 @@ static BOOL flatten_bezier(path_list_node_t *start, REAL x2, REAL y2, REAL x3, R
+             };
+ 
+         /* do the same with halves */
+-        if (!flatten_bezier_add(&current->entry, node,  mp[3].X, mp[3].Y, mp[4].X, mp[4].Y, end))
++        if (!flatten_bezier_add(&current->entry, node,  mp[3].X, mp[3].Y, mp[4].X, mp[4].Y, end, current->depth + 1))
+             break;
+-        if (!flatten_bezier_add(&current->entry, start, mp[0].X, mp[0].Y, mp[1].X, mp[1].Y, node))
++        if (!flatten_bezier_add(&current->entry, start, mp[0].X, mp[0].Y, mp[1].X, mp[1].Y, node, current->depth + 1))
+             break;
+     }
+ 
+diff --git a/dlls/gdiplus/region.c b/dlls/gdiplus/region.c
+--- a/dlls/gdiplus/region.c
++++ b/dlls/gdiplus/region.c
+@@ -1099,7 +1099,12 @@ static GpStatus flat_path_to_edge_list(GpPath *path, const RECT *bounds, struct
+         BYTE type = path->pathdata.Types[i];
+ 
+         if ((type&PathPointTypePathTypeMask) == PathPointTypeStart)
++        {
++            /* Figures are implicitly closed when filled. */
++            if (!(path->pathdata.Types[i-1] & PathPointTypeCloseSubpath))
++                stat = line_to_edge_list(path->pathdata.Points[i-1], path->pathdata.Points[subpath_start], bounds, edges);
+             subpath_start = i;
++        }
+ 
+         if ((type&PathPointTypePathTypeMask) == PathPointTypeLine)
+         {
+diff --git a/dlls/mmdevapi/devenum.c b/dlls/mmdevapi/devenum.c
+--- a/dlls/mmdevapi/devenum.c
++++ b/dlls/mmdevapi/devenum.c
+@@ -980,7 +980,7 @@ static HRESULT MMDevCol_Create(IMMDeviceCollection **ppv, EDataFlow flow, DWORD
+     if (This->devices_count)
+     {
+         This->devices = malloc(This->devices_count * sizeof(IMMDevice *));
+-        if (!This->devices_count)
++        if (!This->devices)
+         {
+             LeaveCriticalSection(&g_devices_lock);
+             return E_OUTOFMEMORY;
+diff --git a/dlls/user32/controls.h b/dlls/user32/controls.h
+--- a/dlls/user32/controls.h
++++ b/dlls/user32/controls.h
+@@ -65,7 +65,7 @@ struct wow_handlers32
+     HWND    (*get_win_handle)(HWND);
+     WNDPROC (*alloc_winproc)(WNDPROC,BOOL);
+     struct tagDIALOGINFO *(*get_dialog_info)(HWND,BOOL);
+-    INT     (*dialog_box_loop)(HWND,HWND);
++    INT_PTR (*dialog_box_loop)(HWND,HWND);
+ };
+ 
+ extern struct wow_handlers16 wow_handlers;
+@@ -143,14 +143,14 @@ typedef struct tagDIALOGINFO
+     HMENU     hMenu;       /* Dialog menu */
+     UINT      xBaseUnit;   /* Dialog units (depends on the font) */
+     UINT      yBaseUnit;
+-    INT       idResult;    /* EndDialog() result / default pushbutton ID */
++    INT_PTR   idResult;    /* EndDialog() result / default pushbutton ID */
+     UINT      flags;       /* EndDialog() called for this dialog */
+ } DIALOGINFO;
+ 
+ #define DF_END  0x0001
+ 
+ extern DIALOGINFO *DIALOG_get_info( HWND hwnd, BOOL create );
+-extern INT DIALOG_DoDialogBox( HWND hwnd, HWND owner );
++extern INT_PTR DIALOG_DoDialogBox( HWND hwnd, HWND owner );
+ 
+ HRGN set_control_clipping( HDC hdc, const RECT *rect );
+ 
+diff --git a/dlls/user32/dialog.c b/dlls/user32/dialog.c
+--- a/dlls/user32/dialog.c
++++ b/dlls/user32/dialog.c
+@@ -776,11 +776,11 @@ HWND WINAPI CreateDialogIndirectParamW( HINSTANCE hInst, LPCDLGTEMPLATEW dlgTemp
+ /***********************************************************************
+  *           DIALOG_DoDialogBox
+  */
+-INT DIALOG_DoDialogBox( HWND hwnd, HWND owner )
++INT_PTR DIALOG_DoDialogBox( HWND hwnd, HWND owner )
+ {
+     DIALOGINFO * dlgInfo;
+     MSG msg;
+-    INT retval;
++    INT_PTR retval;
+     BOOL bFirstEmpty;
+ 
+     if (!(dlgInfo = DIALOG_get_info( hwnd, FALSE ))) return -1;
+diff --git a/dlls/winealsa.drv/alsa.c b/dlls/winealsa.drv/alsa.c
+--- a/dlls/winealsa.drv/alsa.c
++++ b/dlls/winealsa.drv/alsa.c
+@@ -1824,9 +1824,9 @@ static NTSTATUS alsa_get_capture_buffer(void *args)
+     if(params->devpos)
+       *params->devpos = stream->written_frames;
+     if(params->qpcpos){ /* fixme: qpc of recording time */
+-        LARGE_INTEGER stamp, freq;
+-        NtQueryPerformanceCounter(&stamp, &freq);
+-        *params->qpcpos = (stamp.QuadPart * (INT64)10000000) / freq.QuadPart;
++        LARGE_INTEGER stamp;
++        NtQueryPerformanceCounter(&stamp, NULL);
++        *params->qpcpos = stamp.QuadPart;
+     }
+ 
+     return alsa_unlock_result(stream, &params->result, *frames ? S_OK : AUDCLNT_S_BUFFER_EMPTY);
+@@ -2195,9 +2195,9 @@ static NTSTATUS alsa_get_position(void *args)
+         *params->pos = position;
+ 
+     if(params->qpctime){
+-        LARGE_INTEGER stamp, freq;
+-        NtQueryPerformanceCounter(&stamp, &freq);
+-        *params->qpctime = (stamp.QuadPart * (INT64)10000000) / freq.QuadPart;
++        LARGE_INTEGER stamp;
++        NtQueryPerformanceCounter(&stamp, NULL);
++        *params->qpctime = stamp.QuadPart;
+     }
+ 
+     return alsa_unlock_result(stream, &params->result, S_OK);
+diff --git a/dlls/winebus.sys/bus_sdl.c b/dlls/winebus.sys/bus_sdl.c
+--- a/dlls/winebus.sys/bus_sdl.c
++++ b/dlls/winebus.sys/bus_sdl.c
+@@ -1156,6 +1156,8 @@ NTSTATUS sdl_bus_init(void *args)
+     pSDL_SetHint(SDL_HINT_JOYSTICK_HIDAPI_PS5_RUMBLE, "1");
+ #endif
+ 
++    /* SDL_QUIT does not stop winedevice; keep the existing signal handlers. */
++    pSDL_SetHint(SDL_HINT_NO_SIGNAL_HANDLERS, "1");
+     if (pSDL_Init(SDL_INIT_GAMECONTROLLER | SDL_INIT_HAPTIC) < 0)
+     {
+         ERR("could not init SDL: %s\n", pSDL_GetError());
+diff --git a/dlls/winecoreaudio.drv/coreaudio.c b/dlls/winecoreaudio.drv/coreaudio.c
+--- a/dlls/winecoreaudio.drv/coreaudio.c
++++ b/dlls/winecoreaudio.drv/coreaudio.c
+@@ -1726,7 +1726,7 @@ static NTSTATUS unix_get_capture_buffer(void *args)
+     struct get_capture_buffer_params *params = args;
+     struct coreaudio_stream *stream = handle_get_stream(params->stream);
+     UINT32 chunk_bytes, chunk_frames;
+-    LARGE_INTEGER stamp, freq;
++    LARGE_INTEGER stamp;
+     SIZE_T size;
+ 
+     os_unfair_lock_lock(&stream->lock);
+@@ -1773,8 +1773,8 @@ static NTSTATUS unix_get_capture_buffer(void *args)
+     if(params->devpos)
+         *params->devpos = stream->written_frames;
+     if(params->qpcpos){ /* fixme: qpc of recording time */
+-        NtQueryPerformanceCounter(&stamp, &freq);
+-        *params->qpcpos = (stamp.QuadPart * (INT64)10000000) / freq.QuadPart;
++        NtQueryPerformanceCounter(&stamp, NULL);
++        *params->qpcpos = stamp.QuadPart;
+     }
+     params->result = S_OK;
+ 
+@@ -1842,7 +1842,7 @@ static NTSTATUS unix_get_position(void *args)
+ {
+     struct get_position_params *params = args;
+     struct coreaudio_stream *stream = handle_get_stream(params->stream);
+-    LARGE_INTEGER stamp, freq;
++    LARGE_INTEGER stamp;
+ 
+     if (params->device) {
+         FIXME("Device position reporting not implemented\n");
+@@ -1858,8 +1858,8 @@ static NTSTATUS unix_get_position(void *args)
+         *params->pos *= stream->fmt->nBlockAlign;
+ 
+     if(params->qpctime){
+-        NtQueryPerformanceCounter(&stamp, &freq);
+-        *params->qpctime = (stamp.QuadPart * (INT64)10000000) / freq.QuadPart;
++        NtQueryPerformanceCounter(&stamp, NULL);
++        *params->qpctime = stamp.QuadPart;
+     }
+ 
+     os_unfair_lock_unlock(&stream->lock);
+diff --git a/dlls/wineoss.drv/oss.c b/dlls/wineoss.drv/oss.c
+--- a/dlls/wineoss.drv/oss.c
++++ b/dlls/wineoss.drv/oss.c
+@@ -1073,9 +1073,9 @@ static NTSTATUS oss_get_capture_buffer(void *args)
+     if(devpos)
+        *devpos = stream->written_frames;
+     if(qpcpos){
+-        LARGE_INTEGER stamp, freq;
+-        NtQueryPerformanceCounter(&stamp, &freq);
+-        *qpcpos = (stamp.QuadPart * (INT64)10000000) / freq.QuadPart;
++        LARGE_INTEGER stamp;
++        NtQueryPerformanceCounter(&stamp, NULL);
++        *qpcpos = stamp.QuadPart;
+     }
+ 
+     return oss_unlock_result(stream, &params->result, *frames ? S_OK : AUDCLNT_S_BUFFER_EMPTY);
+@@ -1349,9 +1349,9 @@ static NTSTATUS oss_get_position(void *args)
+         *pos *= stream->fmt->nBlockAlign;
+ 
+     if(qpctime){
+-        LARGE_INTEGER stamp, freq;
+-        NtQueryPerformanceCounter(&stamp, &freq);
+-        *qpctime = (stamp.QuadPart * (INT64)10000000) / freq.QuadPart;
++        LARGE_INTEGER stamp;
++        NtQueryPerformanceCounter(&stamp, NULL);
++        *qpctime = stamp.QuadPart;
+     }
+ 
+     return oss_unlock_result(stream, &params->result, S_OK);
+diff --git a/dlls/winepulse.drv/pulse.c b/dlls/winepulse.drv/pulse.c
+--- a/dlls/winepulse.drv/pulse.c
++++ b/dlls/winepulse.drv/pulse.c
+@@ -1481,7 +1481,7 @@ static void pulse_read(struct pulse_stream *stream)
+ 
+         if (stream->started)
+         {
+-            LARGE_INTEGER stamp, freq;
++            LARGE_INTEGER stamp;
+             ACPacket *p, *next;
+ 
+             if (!(p = (ACPacket*)list_head(&stream->packet_free_head)))
+@@ -1498,8 +1498,8 @@ static void pulse_read(struct pulse_stream *stream)
+             {
+                 stream->held_bytes += stream->period_bytes;
+             }
+-            NtQueryPerformanceCounter(&stamp, &freq);
+-            p->qpcpos = (stamp.QuadPart * (INT64)10000000) / freq.QuadPart;
++            NtQueryPerformanceCounter(&stamp, NULL);
++            p->qpcpos = stamp.QuadPart;
+             p->discont = 0;
+             list_remove(&p->entry);
+             list_add_tail(&stream->packet_filled_head, &p->entry);
+@@ -2324,9 +2324,9 @@ static NTSTATUS pulse_get_position(void *args)
+ 
+     if (params->qpctime)
+     {
+-        LARGE_INTEGER stamp, freq;
+-        NtQueryPerformanceCounter(&stamp, &freq);
+-        *params->qpctime = (stamp.QuadPart * (INT64)10000000) / freq.QuadPart;
++        LARGE_INTEGER stamp;
++        NtQueryPerformanceCounter(&stamp, NULL);
++        *params->qpctime = stamp.QuadPart;
+     }
+ 
+     params->result = S_OK;
+diff --git a/dlls/wininet/http.c b/dlls/wininet/http.c
+--- a/dlls/wininet/http.c
++++ b/dlls/wininet/http.c
+@@ -2440,14 +2440,14 @@ static void create_cache_entry(http_request_t *req)
+     BOOL b = TRUE;
+ 
+     /* FIXME: We should free previous cache file earlier */
+-    if(req->req_file) {
+-        req_file_release(req->req_file);
+-        req->req_file = NULL;
+-    }
+     if(req->hCacheFile) {
+         CloseHandle(req->hCacheFile);
+         req->hCacheFile = NULL;
+     }
++    if(req->req_file) {
++        req_file_release(req->req_file);
++        req->req_file = NULL;
++    }
+ 
+     if(req->hdr.dwFlags & INTERNET_FLAG_NO_CACHE_WRITE)
+         b = FALSE;
+@@ -5576,7 +5576,7 @@ BOOL WINAPI HttpSendRequestExA(HINTERNET hRequest,
+ 
+     if (lpBuffersIn)
+     {
+-        BuffersInW.dwStructSize = sizeof(LPINTERNET_BUFFERSW);
++        BuffersInW.dwStructSize = sizeof(INTERNET_BUFFERSW);
+         if (lpBuffersIn->lpcszHeader)
+         {
+             if (lpBuffersIn->dwHeadersLength == 0 && *lpBuffersIn->lpcszHeader != '\0')
+diff --git a/dlls/wininet/internet.c b/dlls/wininet/internet.c
+--- a/dlls/wininet/internet.c
++++ b/dlls/wininet/internet.c
+@@ -4687,10 +4687,10 @@ void req_file_release(req_file_t *req_file)
+     if(InterlockedDecrement(&req_file->ref))
+         return;
+ 
+-    if(!req_file->is_committed)
+-        DeleteFileW(req_file->file_name);
+     if(req_file->file_handle && req_file->file_handle != INVALID_HANDLE_VALUE)
+         CloseHandle(req_file->file_handle);
++    if(!req_file->is_committed)
++        DeleteFileW(req_file->file_name);
+     free(req_file->file_name);
+     free(req_file->url);
+     free(req_file);
+diff --git a/dlls/wmp/oleobj.c b/dlls/wmp/oleobj.c
+--- a/dlls/wmp/oleobj.c
++++ b/dlls/wmp/oleobj.c
+@@ -350,7 +350,10 @@ static HRESULT WINAPI OleObject_GetClientSite(IOleObject *iface, IOleClientSite
+     TRACE("(%p)->(%p)\n", This, ppClientSite);
+ 
+     *ppClientSite = This->client_site;
+-    return This->client_site ? S_OK : E_FAIL;
++    if (!This->client_site)
++        return E_FAIL;
++    IOleClientSite_AddRef(This->client_site);
++    return S_OK;
+ }
+ 
+ static HRESULT WINAPI OleObject_SetHostNames(IOleObject *iface, LPCOLESTR szContainerApp, LPCOLESTR szContainerObj)
