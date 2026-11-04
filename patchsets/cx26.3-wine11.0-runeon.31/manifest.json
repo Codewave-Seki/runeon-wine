@@ -3663,6 +3663,22 @@
           "contains": "&MF_SA_D3D_AWARE, !is_macos()"
         }
       ]
+    },
+    {
+      "order": 192,
+      "path": "patches/runeon/0162-wined3d-clear-active-lights-on-stateblock-cleanup.patch",
+      "sha256": "7580c434d5cadef233eea1bdb4784fd6afb5cbc7aa2f0f287f3662e385a3ae9a",
+      "kind": "runeon-product",
+      "status": "active",
+      "risk": "low",
+      "summary": "Clear light_state->lights[] before wined3d_stateblock_state_cleanup() frees the lights, as state_cleanup() already does. wined3d_stateblock_reset(), which d3d8 and d3d9 call on device Reset(), keeps the same light state and only re-initialises the tree, so the array of enabled lights kept pointing at freed lights: applying the stateblock read them (\"Unhandled light type\" with garbage values after a D3D8 device reset) and enabling a light saw the stale slots as taken. The defect is also present in WineHQ master; the fix has an upstream-submittable shape. Individually approved by the maintainer (2026-11-04); always on, see MAINTENANCE.md.",
+      "testStrategy": "Code review against the base and WineHQ master, and the complete WoW64 build. No probe reproduces the reset; the d3d8 and d3d9 device tests (Reset with lights enabled) should be compared against the previous patch set on the built runtime. Not verified against the original application.",
+      "verification": [
+        {
+          "path": "dlls/wined3d/stateblock.c",
+          "contains": "wined3d_stateblock_reset() keeps the light state, so the active light"
+        }
+      ]
     }
   ],
   "targetedReview": {

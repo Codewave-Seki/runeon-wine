@@ -1,0 +1,36 @@
+From: Runeon Contributors <dev@runeon.com>
+Subject: [PATCH] wined3d: Clear the active lights when cleaning up a stateblock state.
+
+wined3d_stateblock_state_cleanup() frees every light in the light tree
+but leaves light_state->lights[], the array of enabled lights, pointing
+at them. state_cleanup() clears that array first; the stateblock path
+does not.
+
+For a stateblock that is destroyed this does not matter, but
+wined3d_stateblock_reset() keeps the light state: it clears
+stateblock_state, points it back at the same wined3d_light_state and
+only re-initialises the tree. The array keeps the freed pointers. d3d8
+and d3d9 reset their device state this way on IDirect3DDevice*::Reset(),
+after which wined3d_device_apply_stateblock() reads the freed lights
+when it updates the FFP light constants, and
+wined3d_light_state_enable_light() treats the stale slots as taken. A
+D3D8 application resetting its device then logged "Unhandled light type"
+with garbage values thousands of times.
+
+Clear the array before freeing the lights, as state_cleanup() does.
+
+diff --git a/dlls/wined3d/stateblock.c b/dlls/wined3d/stateblock.c
+--- a/dlls/wined3d/stateblock.c
++++ b/dlls/wined3d/stateblock.c
+@@ -646,6 +646,11 @@ static void wined3d_stateblock_state_cleanup(struct wined3d_stateblock_state *st
+         }
+     }
+ 
++    /* wined3d_stateblock_reset() keeps the light state, so the active light
++     * array must not keep pointing at the lights freed below. */
++    for (i = 0; i < WINED3D_MAX_ACTIVE_LIGHTS; ++i)
++        state->light_state->lights[i] = NULL;
++
+     RB_FOR_EACH_ENTRY_DESTRUCTOR(light, cursor, &state->light_state->lights_tree, struct wined3d_light_info, entry)
+     {
+         if (light->changed)
