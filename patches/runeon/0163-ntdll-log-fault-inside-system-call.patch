@@ -12,11 +12,14 @@ Log one ERR line at that point with the exception code, the faulting
 instruction pointer, and the Unix module (file name only) and nearest
 symbol from dladdr(), with the offset from the symbol, or from the
 module base when there is no symbol. The first access violation and the
-first other fault of each process are logged, so that a bad caller
-buffer cannot hide a crash in Unix code, and a fault repeated in a loop
-logs once. Breakpoints and single steps go through trap_handler(), which
-never calls this function. Faults a setjmp handler expects are not
-logged.
+first other fault of each process are logged, and a fault repeated in a
+loop logs once. The split only guarantees that a fault other than an
+access violation, such as an illegal instruction, is not hidden: the
+first access violation may be an expected one, for example a system
+call given an invalid buffer, and then a later access violation in Unix
+code is not logged. The rest are visible with +seh. Breakpoints and
+single steps go through trap_handler(), which never calls this
+function. Faults a setjmp handler expects are not logged.
 
 dladdr() is not async-signal-safe; it is called at most twice per
 process, and only on a path that already runs debug output and returns
@@ -42,9 +45,9 @@ diff --git a/dlls/ntdll/unix/signal_x86_64.c b/dlls/ntdll/unix/signal_x86_64.c
      else
      {
 +        /* The caller only sees the exception code as a failure status; record
-+         * where the fault happened. A bad caller buffer is reported apart from
-+         * other faults so that it cannot hide a crash in Unix code.
-+         * ponytail: first of each per process, later ones need +seh. */
++         * where the fault happened. Access violations, which may come from an
++         * invalid caller buffer, are counted apart from other faults.
++         * Only the first of each kind is logged; use +seh for the rest. */
 +        static LONG reported[2];
 +        Dl_info info;
 +

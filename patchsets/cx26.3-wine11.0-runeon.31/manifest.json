@@ -3683,11 +3683,11 @@
     {
       "order": 193,
       "path": "patches/runeon/0163-ntdll-log-fault-inside-system-call.patch",
-      "sha256": "c76f1a01084ddb4b1b7b6e7b1d247a6e55394520861d2ecaa3e22a7a69d21f1a",
+      "sha256": "35cac278920f103c77ca7896148852531a5afe8bbdafec8b01037100c69679be",
       "kind": "runeon-product",
       "status": "active",
       "risk": "low",
-      "summary": "When a fault inside a system call or Unix library call returns to the caller as a failure status (no setjmp handler expects it), log one ERR line with the exception code, the faulting instruction pointer, and the Unix module file name and nearest symbol from dladdr(). The first access violation and the first other fault of each process are logged, so a bad caller buffer cannot hide a crash in Unix code and a fault in a loop logs once. Logging only: the returned status and return path are unchanged, and no unix-call or server protocol changes. x86_64 Unix side only, which WoW64 uses; i386 Unix builds are unchanged. dladdr() runs in the signal handler at most twice per process and can block if the fault happened under the dynamic loader lock. Individually approved by the maintainer (2026-11-04); no opt-in, see MAINTENANCE.md.",
+      "summary": "When a fault inside a system call or Unix library call returns to the caller as a failure status (no setjmp handler expects it), log one ERR line with the exception code, the faulting instruction pointer, and the Unix module file name and nearest symbol from dladdr(). The first access violation and the first other fault of each process are logged, and a fault in a loop logs once. This only guarantees that a fault other than an access violation is not hidden: the first access violation may be an expected one, such as a system call given an invalid buffer, and then a later access violation in Unix code is not logged (+seh shows it). Logging only: the returned status and return path are unchanged, and no unix-call or server protocol changes. x86_64 Unix side only, which WoW64 uses; i386 Unix builds are unchanged. dladdr() runs in the signal handler at most twice per process and can block if the fault happened under the dynamic loader lock. Individually approved by the maintainer (2026-11-04); no opt-in, see MAINTENANCE.md.",
       "testStrategy": "A syntax-only clang compile of the patched signal_x86_64.c; the complete WoW64 build. Not run against a real Unix-side fault.",
       "verification": [
         {
