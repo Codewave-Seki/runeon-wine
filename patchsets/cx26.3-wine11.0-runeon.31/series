@@ -145,3 +145,4 @@ patches/runeon/0159-ntdll-rosetta-cpuid7-fidelity.patch
 patches/runeon/0160-vc14-builtin-version-vcruntime140-msvcp140-1.patch
 patches/runeon/0161-winegstreamer-macos-video-decoder-system-memory.patch
 patches/runeon/0162-wined3d-clear-active-lights-on-stateblock-cleanup.patch
+patches/runeon/0163-ntdll-log-fault-inside-system-call.patch

@@ -1,0 +1,71 @@
+From: Runeon Contributors <dev@runeon.com>
+Subject: [PATCH] ntdll: Log where a fault inside a system call happened.
+
+When a signal arrives while a thread runs Unix code for a system call or
+a Unix library call, and no setjmp handler expects it,
+handle_syscall_fault() returns the exception code to the caller as the
+call's status. It logs only at TRACE level, so in a default log a crash
+in a Unix library, for example an illegal instruction in an audio
+driver's format check, shows up at most as a failed call somewhere else.
+
+Log one ERR line at that point with the exception code, the faulting
+instruction pointer, and the Unix module (file name only) and nearest
+symbol from dladdr(), with the offset from the symbol, or from the
+module base when there is no symbol. The first access violation and the
+first other fault of each process are logged, so that a bad caller
+buffer cannot hide a crash in Unix code, and a fault repeated in a loop
+logs once. Breakpoints and single steps go through trap_handler(), which
+never calls this function. Faults a setjmp handler expects are not
+logged.
+
+dladdr() is not async-signal-safe; it is called at most twice per
+process, and only on a path that already runs debug output and returns
+an error from the call. If the fault happened while the dynamic loader
+held its lock, the call can block.
+
+Logging only: the returned status and the return path are unchanged.
+i386 Unix builds keep the old behaviour; WoW64 uses the x86_64 path.
+
+diff --git a/dlls/ntdll/unix/signal_x86_64.c b/dlls/ntdll/unix/signal_x86_64.c
+--- a/dlls/ntdll/unix/signal_x86_64.c
++++ b/dlls/ntdll/unix/signal_x86_64.c
+@@ -27,6 +27,7 @@
+ #include "config.h"
+ 
+ #include <assert.h>
++#include <dlfcn.h>
+ #include <pthread.h>
+ #include <signal.h>
+ #include <stdlib.h>
+@@ -2584,6 +2585,31 @@ static BOOL handle_syscall_fault( ucontext_t *sigcontext, EXCEPTION_RECORD *rec,
+     }
+     else
+     {
++        /* The caller only sees the exception code as a failure status; record
++         * where the fault happened. A bad caller buffer is reported apart from
++         * other faults so that it cannot hide a crash in Unix code.
++         * ponytail: first of each per process, later ones need +seh. */
++        static LONG reported[2];
++        Dl_info info;
++
++        if (!InterlockedExchange( &reported[rec->ExceptionCode != EXCEPTION_ACCESS_VIOLATION], 1 ))
++        {
++            const char *module = "?", *symbol = "?", *slash;
++            ULONG_PTR base = 0;
++
++            if (dladdr( (void *)context->Rip, &info ))
++            {
++                if (info.dli_fname) module = (slash = strrchr( info.dli_fname, '/' )) ? slash + 1 : info.dli_fname;
++                base = (ULONG_PTR)info.dli_fbase;
++                if (info.dli_sname)
++                {
++                    symbol = info.dli_sname;
++                    base = (ULONG_PTR)info.dli_saddr;
++                }
++            }
++            ERR_(seh)( "fault in system call: code=%x ip=%lx (%s %s+%lx)\n",
++                       rec->ExceptionCode, context->Rip, module, symbol, context->Rip - base );
++        }
+         TRACE_(seh)( "returning to user mode ip=%016lx ret=%08x\n", frame->rip, rec->ExceptionCode );
+         RAX_sig(sigcontext) = rec->ExceptionCode;
+         R13_sig(sigcontext) = (ULONG_PTR)NtCurrentTeb();
