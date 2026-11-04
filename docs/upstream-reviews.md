@@ -809,17 +809,17 @@ The complete product build, Wine's ntdll exception tests, the game with the poli
 
 ## Wine 11.21 user-mode fix sweep
 
-Candidate patch set `cx26.3-wine11.0-runeon.31` adds `patches/upstream/0164-wine-11.21-targeted-fixes.patch` after `0163`. It squashes 27 WineHQ commits first released in `wine-11.21`. The patch lists every commit with its author, and the manifest records the full commit IDs. Test-only hunks are omitted.
+Candidate patch set `cx26.3-wine11.0-runeon.31` adds `patches/upstream/0164-wine-11.21-targeted-fixes.patch` after `0163`. It squashes 30 WineHQ commits first released in `wine-11.21`. The patch lists every commit with its author, and the manifest records the full commit IDs. Test-only hunks are omitted.
 
 ### Selection
 
 All 261 commits of `wine-11.20..wine-11.21` were reviewed with the rules of the [previous sweep](#backports-11.20-sweep), against a tree made of the pinned CrossOver archive plus patches `0001`–`0163`:
 
 - 32 commits change only tests.
-- 77 commits change only `ntdll`, `server`, `win32u`, `winemac.drv`, `wow64`, `include`, the build tools, bundled libraries, translations or the X11 and Wayland drivers. Most are feature work: d3dkmt swapchains and sync objects, memory-reservation changes, ARM64EC/noentry build support and token creation. Each was read; none is carried (see "Needs a maintainer decision"). `06c0cb5c5e` (ntdll critical sections) is already carried in `0148`.
+- 77 commits change only `ntdll`, `server`, `win32u`, `winemac.drv`, `wow64`, `include`, the build tools, bundled libraries, translations or the X11 and Wayland drivers. Most are feature work: d3dkmt swapchains and sync objects, memory-reservation changes, ARM64EC/noentry build support and token creation. Each was read. Three small fixes are carried with the maintainer's individual approval (below); the rest are left out. `06c0cb5c5e` (ntdll critical sections) is already carried in `0148`.
 - Of the 152 user-mode commits, the sweep takes crash, memory-safety, leak, hang and error-path fixes in DLLs that Steam, launchers, installers or games load, and two d3d11 fixes under the graphics rule. It leaves out feature series (mfwmaaec, ncrypt keys and padding, bcrypt DES, wbemprox services, msxml3 DTD and notation nodes, dmusic compressed waves, the winecoreaudio SpatialMixer, wpnapps stubs, the advapi32 user name rework), stubs and clean-ups.
 
-Each taken commit applies to that tree in upstream order, which shows that the base still carries the unfixed code. No later master commit names a taken one (checked up to `7692c6213e`).
+For each taken commit the defect listed below was confirmed in the base source, not inferred from a clean apply; each applies to that tree in upstream order, except the adapted ones. No later master commit names a taken one (checked up to `7692c6213e`).
 
 ### Taken
 
@@ -841,6 +841,9 @@ Each taken commit applies to that tree in upstream order, which shows that the b
 | comsvcs | `c85f71ce3f` | `guid_from_string` validated only the first character of the second GUID group and indexed its conversion table with the unchecked rest. |
 | d2d1 | `6f981b85d7`, `9b1eb46383`, `9e375e9f93`, `535d68f02a` | A leaked readback texture on WIC target failure; the `Inputs` property pointer used after the property array may have been reallocated; `GetPropertyNameLength` returned an error code as a length; a failed effect creation released the context instead of the effect. |
 | dwrite | `7219e03eff` | A font set property lookup could return an uninitialised pointer. |
+| ntdll | `c37cb58e4c` | Idle threadpool workers exited after 5 seconds; Windows 10 keeps them for about 67. Upstream reports that a copy-protected game crashes when a worker exits while its code is still being decrypted. The base has 5000 ms. |
+| win32u | `45f00f925f` | `release_display_manager_ctx()` released the display device mutex before `cleanup_devices()`, so another process preparing devices could have its GPU registry keys deleted (Wine-Bug 55346). The base has the pre-fix order. |
+| winemac.drv | `98ebfcd75f` | Single-buffered pixel formats did not report `PFD_SUPPORT_GDI`, so a program that asks for it found no format. The base describes pixel formats as upstream did before the fix. |
 
 ### Left out after review
 
@@ -851,7 +854,7 @@ Each taken commit applies to that tree in upstream order, which shows that the b
 | `66caeb46ae` cmd | The HELP use-after-free is in the word-iterator code that the base does not have. |
 | `569e6b6a75` winhttp | Raises the reply line limit to 64 KB (Wine-Bug 60562). CrossOver's `read_reply` differs, so it needs a hand adaptation; no product failure is known. |
 | `cdc6f6c942` wininet | Depends on the `write_cache_file()` helper the base does not have. |
-| `a3e7d10b56` comsvcs | The base's holder predates upstream's rewrite and releases the driver only in `Close`; adding the reference is not a mechanical change there. |
+| `a3e7d10b56` comsvcs | The base's `holder_Close` also releases a driver reference it never took, but its holder predates upstream's rewrite, which moved where the reference is released, so the fix is not mechanical there; comsvcs is not on a common game path. |
 | `244a31a814` kernelbase | Lets `SHRegGetUSValueW` run with NULL data and size; with default data that then dereferences the NULL size in `SHRegQueryUSValueW`. A behaviour change, not a crash fix. |
 | `e3c3d34867` oleaut32, `8023acff4a` rpcrt4, `a0f1ef41f4` msvcrt, `c1f55d60f3` wininet, `70577c3e3c` dwrite, `93b006bfe4`, `3b8a6501a2`, `8bb2a57669`, `191766ac0a`, `9af1cb53eb`, `7832417985` gdiplus, `1e3979fd3c` comctl32, `3c3421b563` advapi32 | Correctness or rendering changes with no crash, leak, hang or error path; `3c3421b563` changes a debug string only. |
 | `6c11b196e2`, `a7ca6ed5cb`, `d45ac538c0` user32/comctl32 | Reorder control state flags around `SetCapture()`; a behaviour change. |
@@ -864,18 +867,17 @@ Each taken commit applies to that tree in upstream order, which shows that the b
 | `8891603b59` mmdevapi | Follows `da0b08472b` (11.16), which the base does not carry. |
 | `42809af4b3` wined3d | Vulkan renderer only. |
 
-### Needs a maintainer decision
+### ABI-sensitive commits
 
-These are in ABI-sensitive code and are not covered by the macOS or Windows-behaviour exceptions without a judgment call. None is carried.
+`c37cb58e4c` (ntdll), `45f00f925f` (win32u) and `98ebfcd75f` (winemac.drv) are in ABI-sensitive modules. The maintainer approved carrying them individually on 2026-11-04; the approval covers these three only and does not widen the rule. None changes a unix-call or server protocol or a shared structure. The thread pool timeout differs between Windows versions; 60 seconds is upstream's value.
 
-| Commit | Area | Notes |
+The rest stay out:
+
+| Commit | Area | Reason |
 |---|---|---|
-| `c37cb58e4c` | ntdll threadpool | Raises the idle worker timeout from 5 to 60 seconds; Windows 10 uses about 67. Upstream reports that it avoids a copy-protection crash when a worker exits while code is still being decrypted. The base has 5000 ms. Windows-behaviour, but the value differs between Windows versions, so it is reviewed one by one. |
-| `5fcf25652c` | ntdll virtual memory | Rechecks that an aligned address still fits the reserved area (Wine-Bug 60534). Address-space layout; related to `0076`. |
-| `96283c8170` | ntdll virtual memory | Skips freeing thread data at process exit (Wine-Bug 60545). |
-| `45f00f925f` | win32u | Runs `cleanup_devices()` before releasing the display device mutex, so another process cannot see GPU keys deleted (Wine-Bug 55346). A cross-process race, not a Windows-behaviour difference. |
-| `98ebfcd75f` | winemac.drv | Advertises `PFD_SUPPORT_GDI` for single-buffered pixel formats. No defect is stated; it is closer to a feature, and `opengl.c` carries CrossOver changes. |
-| `6725f8d94f` | winemac.drv | Switches the IME view back to `NSTextInput`; no defect is stated and it touches CrossOver window code. |
+| `5fcf25652c` | ntdll virtual memory | Fixes the alignment check in upstream's `map_reserved_area()` after its post-11.0 reservation rewrite. The base's `map_reserved_area()` goes through `find_reserved_free_area_outside_preloader()` and has no such check to fix (Wine-Bug 60534). |
+| `96283c8170` | ntdll virtual memory | Changes `virtual_free_thread_data()`, which the base does not have; it frees threads through `virtual_free_teb()` and has no `process_exiting` flag (Wine-Bug 60545). |
+| `6725f8d94f` | winemac.drv | Switches the IME view back to `NSTextInput`; no defect is stated and it touches CrossOver window code. Held until a CJK IME test. |
 | `9f4469dbfb`, `1698588a0c`, `ef95772aee`, `9bc785a86e`, `5273b891fe`, `5a29cf122a` | wow64, ntdll, server | Token creation and `NtTerminateProcess(NULL)`; change the server protocol or wow64 thunks. |
 
 ### Adaptations
@@ -886,6 +888,7 @@ These are in ABI-sensitive code and are not covered by the macOS or Windows-beha
 | `e90cb1c257` winebus.sys | The base already loads `SDL_SetHint` for CrossOver's rumble hints, so only the `SDL_HINT_NO_SIGNAL_HANDLERS` line is added, before `SDL_Init`. |
 | `4751826ecd` mmdevapi | The same one-line change; CrossOver's branch also leaves the device lock. |
 | `0568158eca`, `c56f0edd92`, `0738d528db` dmusic | The same lines in the base's `fmt ` case, which upstream reordered in `b8b7181ec9` (not taken). |
+| `45f00f925f` win32u | The same two lines move above the mutex release; the base frees its GPU lists differently below them, so the hunk context differs. |
 
 ### Known risk
 

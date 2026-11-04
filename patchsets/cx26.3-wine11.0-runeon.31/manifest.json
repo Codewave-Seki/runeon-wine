@@ -3699,7 +3699,7 @@
     {
       "order": 194,
       "path": "patches/upstream/0164-wine-11.21-targeted-fixes.patch",
-      "sha256": "8f3e85d08c1670f363039c4c2545a8fb4a63b7bb2c23ec0da3f3d96765b72d87",
+      "sha256": "9b83c8ac2b5be4a63ae7b64f29d28e50dacec3cdf9e74afcc4a2582035d65f79",
       "kind": "upstream-backport",
       "status": "active",
       "risk": "medium",
@@ -3717,6 +3717,7 @@
         "0568158ecabc9ec2cef0bdc21754728546d6f7c0",
         "c56f0edd92bd8992e5617ccce55c9d73171bdd59",
         "0738d528db522f52d9d75f2aec712688dd31d1d2",
+        "45f00f925f67e23989a7da1f75ec176e7a28edc3",
         "d52e0901b5fef8d9c5321482b2027eec0bfc2dbd",
         "55719ae5f1156c48efb321d630aeecd9c46811a3",
         "ca0bb83d633daadeb101b2623be1565847e3017d",
@@ -3727,14 +3728,16 @@
         "9e375e9f9350cb20b415e66ac510ca54127f13b2",
         "535d68f02a08fc160cd20d67b90c27aaebb70b54",
         "7219e03eff63e6b607a446f507a0cf2e755f85b3",
+        "c37cb58e4c05d31ad3cec0112dc57fba68c1893e",
         "dd586289a438763034f19be6c87802ed5579c517",
+        "98ebfcd75f591450afada2d9212edc4837a954a6",
         "7c7438bddbe171f29b0a4f15cc7bb351cd37f80a",
         "088fedbdbc881cbb9baa89d933b18e1bb7293d16",
         "8de6d2d2a5c2e1397041e3a1a1d5b5ae19039c1c",
         "5a66c3e86945710eba479f35374e317de3bb853a"
       ],
-      "summary": "Squashed user-mode fixes first released in wine-11.21 for DLLs used by Steam, launchers, installers and games: crash, memory-safety, leak, hang and error-path fixes in dplayx, crypt32 (valid signatures with non-canonically ordered authenticated attributes were rejected), user32 (64-bit dialog results), winebus (SDL no longer takes over signal handlers), wininet, comctl32, mmdevapi, dbghelp (minidump of the own process deadlocked when the caller had suspended other threads), gdiplus, dmusic, wmp, d2d1, dwrite, comsvcs, and the winecoreaudio.drv QPC overflow that broke audio clock positions after about 25.6 hours of uptime; plus two d3d11 fixes under the graphics rule. ABI-sensitive commits, feature series and behaviour changes are excluded; see docs/upstream-reviews.md#backports-11.21-sweep.",
-      "adaptation": "Six commits are placed mechanically: the a358d7ecf1 declaration after cng_prepare_signature() in crypt32_private.h; only the e90cb1c257 hint, after CrossOver's rumble hints, since the base already loads SDL_SetHint; 4751826ecd in CrossOver's locked branch of MMDevCol_Create(); 0568158eca, c56f0edd92 and 0738d528db in the base's fmt case, which upstream reordered in b8b7181ec9. Production code is otherwise identical.",
+      "summary": "Squashed fixes first released in wine-11.21 for DLLs used by Steam, launchers, installers and games: crash, memory-safety, leak, hang and error-path fixes in dplayx, crypt32 (valid signatures with non-canonically ordered authenticated attributes were rejected), user32 (64-bit dialog results), winebus (SDL no longer takes over signal handlers), wininet, comctl32, mmdevapi, dbghelp (minidump of the own process deadlocked when the caller had suspended other threads), gdiplus, dmusic, wmp, d2d1, dwrite, comsvcs, and the winecoreaudio.drv QPC overflow that broke audio clock positions after about 25.6 hours of uptime; plus two d3d11 fixes under the graphics rule. ABI-sensitive commits, feature series and behaviour changes are excluded; see docs/upstream-reviews.md#backports-11.21-sweep. Three ABI-sensitive commits are carried with the maintainer's individual approval (2026-11-04), which covers them only: c37cb58e4c (ntdll threadpool idle worker timeout 5 s to 60 s, closer to Windows), 45f00f925f (win32u cleans up display devices before releasing the display device mutex, Wine-Bug 55346) and 98ebfcd75f (winemac.drv advertises PFD_SUPPORT_GDI for single-buffered pixel formats). None changes a unix-call or server protocol.",
+      "adaptation": "Seven commits are placed mechanically: the a358d7ecf1 declaration after cng_prepare_signature() in crypt32_private.h; only the e90cb1c257 hint, after CrossOver's rumble hints, since the base already loads SDL_SetHint; 4751826ecd in CrossOver's locked branch of MMDevCol_Create(); 0568158eca, c56f0edd92 and 0738d528db in the base's fmt case, which upstream reordered in b8b7181ec9; 45f00f925f moves the same two lines above the mutex release in release_display_manager_ctx(), whose GPU list cleanup differs in the base. Production code is otherwise identical.",
       "testStrategy": "Every commit applies in upstream order without fuzz on top of patches 0001-0163, except those documented as adapted; full Wine build and product smoke validation are required before tagging. Upstream test hunks are omitted.",
       "verification": [
         {
@@ -3760,6 +3763,14 @@
         {
           "path": "dlls/dmusic/wave.c",
           "contains": "if (chunk.size < sizeof(PCMWAVEFORMAT)) return E_FAIL;"
+        },
+        {
+          "path": "dlls/ntdll/threadpool.c",
+          "contains": "#define THREADPOOL_WORKER_TIMEOUT 60000"
+        },
+        {
+          "path": "dlls/winemac.drv/opengl.c",
+          "contains": "if (!pf->double_buffer) descr->pfd.dwFlags |= PFD_SUPPORT_GDI;"
         }
       ]
     }

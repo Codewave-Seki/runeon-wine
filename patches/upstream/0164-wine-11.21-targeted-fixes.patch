@@ -1,16 +1,20 @@
 From: Wine upstream contributors (see commit list)
 Subject: [PATCH] Backport targeted Wine 11.21 fixes.
 
-Squashed backport of 27 WineHQ commits first released in wine-11.21,
+Squashed backport of 30 WineHQ commits first released in wine-11.21,
 applied in upstream order on top of cx26.3-wine11.0-runeon.31 patches
-0001-0163. Test-only hunks are omitted.
+0001-0163. Test-only hunks are omitted. c37cb58e4c (ntdll),
+45f00f925f (win32u) and 98ebfcd75f (winemac.drv) touch ABI-sensitive
+modules and are carried with the maintainer's individual approval.
 Adaptations, marked [adapted] below: the a358d7ecf1 declaration is placed
 after cng_prepare_signature() in crypt32_private.h, which lacks a later
 upstream declaration; e90cb1c257 adds only the hint, after CrossOver's
 rumble hints, because the base already loads SDL_SetHint; 4751826ecd is
 the same one-line change in CrossOver's locked branch of
 MMDevCol_Create(); 0568158eca, c56f0edd92 and 0738d528db are the same
-lines in the base's fmt case, which upstream reordered in b8b7181ec9.
+lines in the base's fmt case, which upstream reordered in b8b7181ec9;
+45f00f925f moves the same two lines above the mutex release in
+release_display_manager_ctx(), whose GPU list cleanup differs in the base.
 
   81db815a81 Alex Henrie: dplayx: Pass bAnsi=FALSE from IDirectPlay4Impl_GetSessionDesc.
   a358d7ecf1 Michael Nelson: crypt32: Preserve authenticated attribute order when verifying signatures. [adapted]
@@ -24,6 +28,7 @@ lines in the base's fmt case, which upstream reordered in b8b7181ec9.
   0568158eca Anton Baskanov: dmusic: Free the old format in parse_wave_chunk. [adapted]
   c56f0edd92 Anton Baskanov: dmusic: Allocate enough space for WAVEFORMATEX in parse_wave_chunk. [adapted]
   0738d528db Anton Baskanov: dmusic: Check the fmt chunk size in parse_wave_chunk. [adapted]
+  45f00f925f James Hawkins: win32u: Call cleanup_devices() before releasing display_device_init_mutex. [adapted]
   d52e0901b5 Alistair Leslie-Hughes: wmp: AddRef returned object in IOleObject::GetClientSite.
   55719ae5f1 Ali Milhim: d3d11: Return E_UNEXPECTED from FinishCommandList() with a NULL command list.
   ca0bb83d63 Alistair Leslie-Hughes: d3d11: Fake success in ID3D10Device1::SetExceptionMode.
@@ -34,7 +39,9 @@ lines in the base's fmt case, which upstream reordered in b8b7181ec9.
   9e375e9f93 Nikolay Sivov: d2d1/effect: Fix GetPropertyNameLength() for invalid property index.
   535d68f02a Nikolay Sivov: d2d1/effect: Fix inconsistent cleanup on failure path to create an effect instance.
   7219e03eff Nikolay Sivov: dwrite: Make sure property value pointer is always initialized.
+  c37cb58e4c Elizabeth Figura: ntdll: Increase the threadpool worker timeout to 60 seconds.
   dd586289a4 Alistair Leslie-Hughes: dplayx: Call correct interface in IDirectPlayLobby3::Connect.
+  98ebfcd75f Owen Rudge: winemac.drv: Advertise PFD_SUPPORT_GDI support.
   7c7438bddb Vitaly Lipatov: gdiplus: Don't loop forever on Bezier curves that can't be flattened.
   088fedbdbc Vitaly Lipatov: gdiplus: Reject a negative offset in GdipDrawCurve3() and GdipDrawCurve3I().
   8de6d2d2a5 Vitaly Lipatov: gdiplus: Close every open figure when converting a path to edges.
@@ -490,6 +497,18 @@ diff --git a/dlls/mmdevapi/devenum.c b/dlls/mmdevapi/devenum.c
          {
              LeaveCriticalSection(&g_devices_lock);
              return E_OUTOFMEMORY;
+diff --git a/dlls/ntdll/threadpool.c b/dlls/ntdll/threadpool.c
+--- a/dlls/ntdll/threadpool.c
++++ b/dlls/ntdll/threadpool.c
+@@ -96,7 +96,7 @@ struct timer_queue
+  * Object-oriented thread pooling API
+  */
+ 
+-#define THREADPOOL_WORKER_TIMEOUT 5000
++#define THREADPOOL_WORKER_TIMEOUT 60000
+ #define MAXIMUM_WAITQUEUE_OBJECTS (MAXIMUM_WAIT_OBJECTS - 1)
+ 
+ /* internal threadpool representation */
 diff --git a/dlls/user32/controls.h b/dlls/user32/controls.h
 --- a/dlls/user32/controls.h
 +++ b/dlls/user32/controls.h
@@ -536,6 +555,28 @@ diff --git a/dlls/user32/dialog.c b/dlls/user32/dialog.c
      BOOL bFirstEmpty;
  
      if (!(dlgInfo = DIALOG_get_info( hwnd, FALSE ))) return -1;
+diff --git a/dlls/win32u/sysparams.c b/dlls/win32u/sysparams.c
+--- a/dlls/win32u/sysparams.c
++++ b/dlls/win32u/sysparams.c
+@@ -2226,15 +2226,15 @@ static const struct gdi_device_manager device_manager =
+ 
+ static void release_display_manager_ctx( struct device_manager_ctx *ctx )
+ {
++    if (!list_empty( &sources )) last_query_display_time = 0;
++    if (ctx->gpu_count) cleanup_devices();
++
+     if (ctx->mutex)
+     {
+         release_display_device_init_mutex( ctx->mutex );
+         ctx->mutex = 0;
+     }
+ 
+-    if (!list_empty( &sources )) last_query_display_time = 0;
+-    if (ctx->gpu_count) cleanup_devices();
+-
+     while (!list_empty( &ctx->vulkan_gpus ))
+     {
+         struct vulkan_gpu *gpu = LIST_ENTRY( list_head( &ctx->vulkan_gpus ), struct vulkan_gpu, entry );
 diff --git a/dlls/winealsa.drv/alsa.c b/dlls/winealsa.drv/alsa.c
 --- a/dlls/winealsa.drv/alsa.c
 +++ b/dlls/winealsa.drv/alsa.c
@@ -620,6 +661,17 @@ diff --git a/dlls/winecoreaudio.drv/coreaudio.c b/dlls/winecoreaudio.drv/coreaud
      }
  
      os_unfair_lock_unlock(&stream->lock);
+diff --git a/dlls/winemac.drv/opengl.c b/dlls/winemac.drv/opengl.c
+--- a/dlls/winemac.drv/opengl.c
++++ b/dlls/winemac.drv/opengl.c
+@@ -2965,6 +2965,7 @@ static BOOL macdrv_describe_pixel_format(int format, struct wgl_pixel_format *de
+     if (pf->double_buffer)  descr->pfd.dwFlags |= PFD_DOUBLEBUFFER;
+     if (pf->stereo)         descr->pfd.dwFlags |= PFD_STEREO;
+     if (pf->backing_store)  descr->pfd.dwFlags |= PFD_SWAP_COPY;
++    if (!pf->double_buffer) descr->pfd.dwFlags |= PFD_SUPPORT_GDI;
+ 
+     descr->pfd.iPixelType   = PFD_TYPE_RGBA;
+ 
 diff --git a/dlls/wineoss.drv/oss.c b/dlls/wineoss.drv/oss.c
 --- a/dlls/wineoss.drv/oss.c
 +++ b/dlls/wineoss.drv/oss.c
