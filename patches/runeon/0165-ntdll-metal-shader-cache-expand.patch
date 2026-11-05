@@ -1,0 +1,184 @@
+From: Runeon Contributors <dev@runeon.com>
+Subject: [PATCH] ntdll: Raise Metal's shader cache size limit, opt-in.
+
+Metal keeps the GPU binaries it compiles in a per-process disk cache.
+Its constructor clamps the cache size to 1 GiB: MTL_SHADER_CACHE_SIZE
+and FS_CACHE_SIZE can only lower it. Once the cache is full, new
+binaries are not kept, so a program with more pipelines than fit
+compiles the same remainder again on every start.
+
+This adds an opt-in policy, read once at process start under Rosetta:
+HKCU\Software\Wine\AppDefaults\<app.exe>\Runeon, DWORD
+MetalShaderCacheExpand = 1. Any other value or a failed lookup leaves
+it off, and without it nothing changes. It is never keyed on a program
+in Wine; a launcher sets the value for a program it has decided needs
+it. The AppDefaults reader added in 0157 now takes the value name.
+
+With the policy on, a dyld add-image callback waits for Metal. In
+Metal's __TEXT,__text it looks for the 45-byte sequence that reads the
+two environment variables and clamps the result, with call and lea
+displacements left out of the match. Only if it occurs exactly once
+are the default, the comparison and the clamp in this process's copy
+of the code changed to 3 GiB; the page protection is restored after.
+The file on disk is not touched. One marker per process is logged:
+RUNEON_METAL_SHADER_CACHE active, signature_not_found or
+protect_failed.
+
+This depends on undocumented Metal code, checked on macOS 27.0.1. On
+another layout the sequence does not match and nothing is changed.
+Without the patch, Metal trims a larger cache back to 1 GiB on its next
+start. A standalone x86_64 test program that applies the same change
+in-process under Rosetta, with 7,600 distinct compute pipelines, took
+4.8 s on its second run instead of about 116 s, with a 1.53 GB cache.
+The change has not yet been checked through Wine.
+---
+diff --git a/dlls/ntdll/unix/signal_x86_64.c b/dlls/ntdll/unix/signal_x86_64.c
+index a5e3a97..f718d4b 100644
+--- a/dlls/ntdll/unix/signal_x86_64.c
++++ b/dlls/ntdll/unix/signal_x86_64.c
+@@ -88,6 +88,8 @@ static BOOL is_rosetta2;
+ 
+ #include <mach/mach.h>
+ #include <mach/mach_vm.h>
++#include <mach-o/dyld.h>
++#include <mach-o/getsect.h>
+ /* CPUID leaf 7 bits added to Rosetta's answer in this process (Rosetta CPU fidelity) */
+ static unsigned int rosetta_cpuid7_ebx, rosetta_cpuid7_ecx;
+ 
+@@ -1115,7 +1117,7 @@ void *get_wow_context( CONTEXT *context )
+ 
+ 
+ #ifdef __APPLE__
+-static BOOL rosetta_cpu_fidelity;  /* see rosetta_cpu_fidelity_requested() */
++static BOOL rosetta_cpu_fidelity;  /* see runeon_app_policy() */
+ 
+ /* Rosetta has no x86 debug registers, so a hardware breakpoint a program sets
+  * never fires; setting them is faked as a success below. A program that relies
+@@ -1133,14 +1135,15 @@ static void report_unsupported_debug_registers(void)
+     ERR_(seh)( "RUNEON_ROSETTA_DEBUG_REGISTERS_UNSUPPORTED: hardware breakpoints cannot be set\n" );
+ }
+ 
+-/* Rosetta CPU fidelity. Rosetta's x86 differs from a real CPU in ways a program
+- * can observe: it has no debug registers, for one. Copy protection that checks
+- * the CPU this way faults endlessly. Opt-in per program only, read once at
+- * process start: HKCU\Software\Wine\AppDefaults\<app.exe>\Runeon, DWORD
+- * RosettaCpuFidelity = 1. Any other value, or a failed lookup, leaves it off. */
+-static BOOL rosetta_cpu_fidelity_requested(void)
++/* Opt-in per-program policies, read at process start:
++ * HKCU\Software\Wine\AppDefaults\<app.exe>\Runeon, DWORD <value> = 1. Any other
++ * value, or a failed lookup, leaves the policy off.
++ *
++ * Rosetta CPU fidelity (RosettaCpuFidelity): Rosetta's x86 differs from a real
++ * CPU in ways a program can observe: it has no debug registers, for one. Copy
++ * protection that checks the CPU this way faults endlessly. */
++static BOOL runeon_app_policy( const WCHAR *valueW )
+ {
+-    static const WCHAR valueW[] = {'R','o','s','e','t','t','a','C','p','u','F','i','d','e','l','i','t','y',0};
+     static const WCHAR runeonW[] = {'\\','R','u','n','e','o','n',0};
+     UNICODE_STRING nameW, valuenameW;
+     HANDLE root, key = 0;
+@@ -1171,7 +1174,7 @@ static BOOL rosetta_cpu_fidelity_requested(void)
+     }
+     if (key)
+     {
+-        valuenameW.Length = sizeof(valueW) - sizeof(WCHAR);
++        valuenameW.Length = wcslen( valueW ) * sizeof(WCHAR);
+         valuenameW.Buffer = (WCHAR *)valueW;
+         if (!NtQueryValueKey( key, &valuenameW, KeyValuePartialInformation, tmp, sizeof(tmp) - 1, &count ) &&
+             info->Type == REG_DWORD && info->DataLength == sizeof(DWORD) && *(DWORD *)info->Data == 1)
+@@ -1181,6 +1184,79 @@ static BOOL rosetta_cpu_fidelity_requested(void)
+     return enable;
+ }
+ 
++static const WCHAR rosetta_cpu_fidelityW[] = {'R','o','s','e','t','t','a','C','p','u','F','i','d','e','l','i','t','y',0};
++static const WCHAR metal_shader_cache_expandW[] =
++    {'M','e','t','a','l','S','h','a','d','e','r','C','a','c','h','e','E','x','p','a','n','d',0};
++
++/* Metal shader cache expansion (MetalShaderCacheExpand): Metal keeps the GPU
++ * binaries it compiles in a per-process disk cache whose size it clamps to
++ * 1 GiB; MTL_SHADER_CACHE_SIZE can only lower it. Once the cache is full, new
++ * binaries are not kept, so a program with more pipelines than that compiles
++ * the rest again on every start. When Metal is loaded, raise the clamp in this
++ * process's copy of Metal's code; the file on disk is not touched. This relies
++ * on undocumented code in MTLCompilerFSCache's constructor: unless the whole
++ * sequence below occurs exactly once, nothing is changed. Without the patch,
++ * Metal trims a larger cache back to 1 GiB on its next start. */
++static void metal_shader_cache_expand( const struct mach_header *mh, intptr_t slide )
++{
++    /* movl $0x40000000,%esi; call MTLGetEnvDefault ("MTL_SHADER_CACHE_SIZE")
++     * movl %eax,0x14(%rbx); movl %eax,%esi
++     * leaq "FS_CACHE_SIZE"(%rip),%rdi; call MTLGetEnvDefault
++     * movl %eax,0x14(%rbx); cmpl $0x40000001,%eax; jb 1f
++     * movl $0x40000000,0x14(%rbx); jmp ...
++     * Bytes marked '?' are call and lea displacements. */
++    static const BYTE code[] =
++    {
++        0xbe, 0x00, 0x00, 0x00, 0x40, 0xe8, 0, 0, 0, 0,
++        0x89, 0x43, 0x14, 0x89, 0xc6, 0x48, 0x8d, 0x3d, 0, 0, 0, 0, 0xe8, 0, 0, 0, 0,
++        0x89, 0x43, 0x14, 0x3d, 0x01, 0x00, 0x00, 0x40, 0x72, 0x09,
++        0xc7, 0x43, 0x14, 0x00, 0x00, 0x00, 0x40, 0xeb
++    };
++    static const char mask[] = "xxxxxx????xxxxxxxx????x????xxxxxxxxxxxxxxxxxx";
++    static const UINT32 cap = 0xc0000000, cmp = 0xc0000001;  /* 3 GiB; the field is 32 bits */
++    unsigned long size, i, j;
++    BYTE *text, *hit = NULL;
++    vm_address_t start;
++    unsigned int hits = 0;
++    Dl_info info;
++
++    C_ASSERT( sizeof(code) == sizeof(mask) - 1 );
++
++    /* dyld calls this once per image; Metal lives in the shared cache and is never reloaded */
++    if (!dladdr( mh, &info ) || !info.dli_fname ||
++        strcmp( info.dli_fname, "/System/Library/Frameworks/Metal.framework/Versions/A/Metal" ))
++        return;
++
++    if (!(text = getsectiondata( (const struct mach_header_64 *)mh, "__TEXT", "__text", &size ))) size = 0;
++    for (i = 0; i + sizeof(code) <= size; i++)
++    {
++        for (j = 0; j < sizeof(code); j++)
++            if (mask[j] == 'x' && text[i + j] != code[j]) break;
++        if (j == sizeof(code) && !hits++) hit = text + i;
++    }
++    if (hits != 1)
++    {
++        ERR_(seh)( "RUNEON_METAL_SHADER_CACHE signature_not_found matches=%u\n", hits );
++        return;
++    }
++
++    start = (vm_address_t)hit & ~(vm_address_t)(page_size - 1);
++    if (vm_protect( mach_task_self(), start, hit + sizeof(code) - (BYTE *)start, FALSE,
++                    VM_PROT_READ | VM_PROT_WRITE | VM_PROT_COPY ))
++    {
++        ERR_(seh)( "RUNEON_METAL_SHADER_CACHE protect_failed\n" );
++        return;
++    }
++    memcpy( hit + 1, &cap, sizeof(cap) );
++    memcpy( hit + 31, &cmp, sizeof(cmp) );
++    memcpy( hit + 40, &cap, sizeof(cap) );
++    if (vm_protect( mach_task_self(), start, hit + sizeof(code) - (BYTE *)start, FALSE,
++                    VM_PROT_READ | VM_PROT_EXECUTE ))
++        ERR_(seh)( "RUNEON_METAL_SHADER_CACHE protect_failed restore\n" );
++    else
++        ERR_(seh)( "RUNEON_METAL_SHADER_CACHE active cap=%#x\n", cap );
++}
++
+ /* With Rosetta CPU fidelity, execution breakpoints a thread sets on itself are
+  * emulated by single-stepping it and comparing each next instruction with
+  * DR0-DR3. Index of an enabled execution breakpoint (R/W 00) at rip, or -1. */
+@@ -3522,12 +3598,14 @@ void signal_init_process(void)
+         sequoia_or_later = TRUE;
+ 
+     /* before any application code runs */
+-    if (is_rosetta2 && rosetta_cpu_fidelity_requested())
++    if (is_rosetta2 && runeon_app_policy( rosetta_cpu_fidelityW ))
+     {
+         FIXME_(seh)( "Rosetta CPU fidelity enabled\n" );
+         rosetta_cpu_fidelity = TRUE;
+         init_rosetta_cpuid7();
+     }
++    if (is_rosetta2 && runeon_app_policy( metal_shader_cache_expandW ))
++        _dyld_register_func_for_add_image( metal_shader_cache_expand );
+ #endif
+ 
+     sig_act.sa_mask = server_block_set;

@@ -905,3 +905,33 @@ The rest stay out:
 `scripts/static-check.sh` and `scripts/integration-check.sh` pass for `.31`. Every taken commit applies in order without fuzz, except the adapted ones. Not done yet: a complete i386/x86_64 build, Wine's tests for the affected modules against `.30`, and product acceptance.
 
 `upstreamAuditThrough` stays at `wine-11.15`. The base manifest records `upstreamSweepThrough: wine-11.21`.
+
+<a id="metal-shader-cache-expand"></a>
+
+## Metal shader cache expansion
+
+Candidate patch set `cx26.3-wine11.0-runeon.32` adds `patches/runeon/0165` after `0164`. It is a downstream change, not a WineHQ commit; WineHQ and CodeWeavers have no equivalent on this base.
+
+Metal keeps the GPU binaries it compiles in a per-process disk cache. Its `MTLCompilerFSCache` constructor reads `MTL_SHADER_CACHE_SIZE` and `FS_CACHE_SIZE` with a 1 GiB default and clamps any larger value back to 1 GiB, so the variables can only lower the size. Once the cache is full, new binaries are not kept. A program whose pipelines compile to more than 1 GiB therefore compiles the remainder again on every start, even though its own caches and the translation layer's caches are intact.
+
+`0165` changes `ntdll`, which is ABI-sensitive. The maintainer approved it individually on 2026-11-05; the approval covers this patch only and is no precedent. It takes effect only under Rosetta and only when `HKCU\Software\Wine\AppDefaults\<app.exe>\Runeon` has DWORD `MetalShaderCacheExpand` = 1, which a launcher sets per program. It is never keyed on a program in Wine. It does not touch any file on disk, the program's own code or data, unix-call tables or the wineserver protocol.
+
+### Taken
+
+| Patch | Change | Evidence |
+|---|---|---|
+| `0165` | Opt-in policy; the `0157` AppDefaults reader takes the value name. A dyld add-image callback finds the 45-byte clamp sequence in Metal's `__TEXT,__text` and, only if it occurs exactly once, raises the default, the comparison and the clamp to 3 GiB in this process's copy; one marker per process. | Disassembly of x86_64 and arm64 Metal on macOS 27.0.1 shows the same clamp. A standalone test program with 7,600 distinct compute pipelines: at the default limit the cache stayed at 1.14 GB and the second run took about 116 s; with the clamp raised in-process under Rosetta the cache reached 1.53 GB and the second run took 4.8 s. Running without the change afterwards, Metal trimmed the cache back to 1 GiB, with no failed pipeline. |
+
+The size field is 32 bits, so 3 GiB leaves room below the 4 GiB maximum. A first start with the policy still compiles everything once.
+
+### Left out
+
+| Change | Reason |
+|---|---|
+| Setting `MTL_SHADER_CACHE_SIZE` above 1 GiB | Clamped by Metal; tried, the cache did not grow. |
+| Patching the size field of each cache object instead of the code | Needs a hook on a private constructor; the code change has the same effect with one match check. |
+| Enabling it for every program | Not needed for programs whose binaries fit in 1 GiB; kept opt-in until more programs are checked. |
+
+### Validation
+
+Not done yet at the time of writing: a complete i386/x86_64 build of `.32` and a program run through Wine with the policy on.
