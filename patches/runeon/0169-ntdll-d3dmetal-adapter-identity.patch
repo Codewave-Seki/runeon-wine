@@ -1,0 +1,87 @@
+From: Runeon Contributors <dev@runeon.com>
+Subject: [PATCH] ntdll: Report a fixed NVIDIA adapter to D3DMetal, opt-in.
+
+D3DMetal fills in the DXGI adapter description with a vendor of its own
+choosing unless D3DM_VENDOR_ID, D3DM_DEVICE_ID and
+D3DM_DEVICE_DESCRIPTION are set. They are read from the process
+environment on the Unix side, which has not yet been confirmed end to
+end. SetEnvironmentVariable() only changes the Windows environment and
+does not reach them. Some programs take a vendor-specific path on
+D3DMetal's default and fail there.
+
+This adds an opt-in policy, read once at process start with the 0157
+reader: HKCU\Software\Wine\AppDefaults\<app.exe>\Runeon, DWORD
+D3DMetalReportNVIDIA = 1. With it, signal_init_process() sets
+D3DM_VENDOR_ID=0x10de, D3DM_DEVICE_ID=0x2786 and
+D3DM_DEVICE_DESCRIPTION="NVIDIA GeForce RTX 4070" before any Windows
+code runs and logs one RUNEON_D3DMETAL_ADAPTER line. If the caller has
+set any of the three, the policy sets none, so an identity is never
+mixed. The values are fixed in Wine; a launcher can only turn the policy
+on for a program. A missing value, another type or value, or a failed
+lookup leaves the environment unchanged. It is never keyed on a program
+in Wine.
+
+A child process inherits the Unix environment. So that one program's
+policy does not reach its children, RUNEON_D3DM_SET records that the
+policy set the variables, and every process drops them at start.
+Reporting NVIDIA can open NVIDIA-only paths in a program, such as DLSS
+or Reflex, that may then fail differently.
+---
+diff --git a/dlls/ntdll/unix/signal_x86_64.c b/dlls/ntdll/unix/signal_x86_64.c
+index f718d4b..cc3ce1c 100644
+--- a/dlls/ntdll/unix/signal_x86_64.c
++++ b/dlls/ntdll/unix/signal_x86_64.c
+@@ -1187,6 +1187,44 @@ static BOOL runeon_app_policy( const WCHAR *valueW )
+ static const WCHAR rosetta_cpu_fidelityW[] = {'R','o','s','e','t','t','a','C','p','u','F','i','d','e','l','i','t','y',0};
+ static const WCHAR metal_shader_cache_expandW[] =
+     {'M','e','t','a','l','S','h','a','d','e','r','C','a','c','h','e','E','x','p','a','n','d',0};
++static const WCHAR d3dmetal_report_nvidiaW[] =
++    {'D','3','D','M','e','t','a','l','R','e','p','o','r','t','N','V','I','D','I','A',0};
++
++/* D3DMetal adapter identity (D3DMetalReportNVIDIA): D3DMetal takes
++ * D3DM_VENDOR_ID, D3DM_DEVICE_ID and D3DM_DEVICE_DESCRIPTION from the process
++ * environment on the Unix side, and otherwise reports a vendor of its own
++ * choosing; a program may then take a vendor-specific path that fails on
++ * D3DMetal. Report a fixed NVIDIA adapter instead, unless the caller has set any
++ * of the three, so an identity is never mixed. Child processes inherit the Unix
++ * environment, so RUNEON_D3DM_SET records that the policy set them, and each
++ * process drops them first: the policy of one program does not reach its
++ * children. */
++static void d3dmetal_adapter_policy(void)
++{
++    static const char * const vars[][2] =
++    {
++        { "D3DM_VENDOR_ID", "0x10de" },
++        { "D3DM_DEVICE_ID", "0x2786" },
++        { "D3DM_DEVICE_DESCRIPTION", "NVIDIA GeForce RTX 4070" },
++    };
++    unsigned int i;
++
++    if (getenv( "RUNEON_D3DM_SET" ))
++    {
++        for (i = 0; i < ARRAY_SIZE(vars); i++) unsetenv( vars[i][0] );
++        unsetenv( "RUNEON_D3DM_SET" );
++    }
++    if (!runeon_app_policy( d3dmetal_report_nvidiaW )) return;
++
++    for (i = 0; i < ARRAY_SIZE(vars); i++) if (getenv( vars[i][0] )) break;
++    if (i == ARRAY_SIZE(vars))
++    {
++        for (i = 0; i < ARRAY_SIZE(vars); i++) setenv( vars[i][0], vars[i][1], 1 );
++        setenv( "RUNEON_D3DM_SET", "1", 1 );
++    }
++    FIXME_(seh)( "RUNEON_D3DMETAL_ADAPTER vendor=%s device=%s\n",
++                 debugstr_a( getenv( "D3DM_VENDOR_ID" )), debugstr_a( getenv( "D3DM_DEVICE_ID" )) );
++}
+ 
+ /* Metal shader cache expansion (MetalShaderCacheExpand): Metal keeps the GPU
+  * binaries it compiles in a per-process disk cache whose size it clamps to
+@@ -3606,6 +3644,8 @@ void signal_init_process(void)
+     }
+     if (is_rosetta2 && runeon_app_policy( metal_shader_cache_expandW ))
+         _dyld_register_func_for_add_image( metal_shader_cache_expand );
++    /* before D3DMetal is loaded; it reads the variables when an adapter is created */
++    d3dmetal_adapter_policy();
+ #endif
+ 
+     sig_act.sa_mask = server_block_set;

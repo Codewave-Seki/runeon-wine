@@ -935,3 +935,85 @@ The size field is 32 bits, so 3 GiB leaves room below the 4 GiB maximum. A first
 ### Validation
 
 Not done yet at the time of writing: a complete i386/x86_64 build of `.32` and a program run through Wine with the policy on.
+
+<a id="concurrent-vector-spatial-mixer-batch"></a>
+
+## Concurrent vector, SpatialMixer and D3DMetal diagnostics batch
+
+Candidate patch set `cx26.3-wine11.0-runeon.33` adds `patches/upstream/0166`–`0168` and `patches/runeon/0169`–`0170` after `0165`. The maintainer approved `0169` and `0170` as named items of this batch on 2026-11-06; both change `ntdll`, which is ABI-sensitive. The approval covers these patches only and is no precedent.
+
+The batch follows public reports of a game that runs on D3DMetal and crashes or loses audio there. The reports name the defects; each one below was checked against the base source, not inferred from the reports. Nothing in Wine is keyed on a program.
+
+### Taken
+
+| Patch | Source | Change | Defect in the base |
+|---|---|---|---|
+| `0166` | WineHQ `d5c7ea9089`, `de43f5434f` (wine-11.8) | `concurrent_vector` in msvcp90 (exported by msvcp100, msvcp110 and msvcp120) and concrt140: `_Internal_capacity()` no longer counts a segment that another thread is still allocating; concrt140 no longer multiplies segment sizes by the element size twice or does element arithmetic on `BYTE **`. `de43f5434f` also restores the NULL callback check in msvcp90's `threadpool_callback()`. | Both files test only `!this->segment[i]`, so `_Internal_reserve()` returns early while the marker (`SEGMENT_ALLOC_MARKER`, 1) is in place and `_Internal_push_back()` returns the marker plus an offset as an element address. concrt140 places segments 1 to `first_block - 1` eight times too far into segment 0. |
+| `0167` | WineHQ `199ae1d33c`, `d20f6c71e7`, `3e29c3639e`, `8cf640803b`, `0c61795bfd` (wine-11.21) | A shared-mode render stream with more than two channels and a channel mask that differs from the device's goes through a SpatialMixer audio unit (equal-power panning) in front of HALOutput. | HALOutput maps channels but does not downmix, so a 7.1.4 or 5.1 bed on a 2-channel output loses its centre, surround and height channels; the base has no mixer. Public report: [highball#313](https://github.com/gauthierpiarrette/highball/pull/313) (dialogue and most engine audio missing on 2-channel outputs). |
+| `0168` | WineHQ `19d5fbd382` (wine-11.19) | `WSAIoctl(SIO_UDP_NETRESET)` succeeds as a stub, like `SIO_UDP_CONNRESET`. | The base's `WSAIoctl()` reaches its default case and fails with `WSAEOPNOTSUPP` (10045). |
+| `0169` | Downstream | Opt-in policy `D3DMetalReportNVIDIA` (below). | D3DMetal reports a vendor of its own choosing; see below. |
+| `0170` | highball-engine patch `0028` (Andrii Rozhanskyi, LGPL-2.1, commit `0e9cb560a4`) | With `WINE_CRASH_ON_FOREIGN_FAULTS=1`, a fault on a thread without a TEB restores the signal's default action so the process ends with it. | `segv_handler`, `trap_handler` and `fpe_handler` read the TEB first (`save_context()`, the `0107` step check), which a thread Wine did not create does not have. |
+
+`0167` reverses the [11.21 sweep](#backports-11.21-sweep), which left the SpatialMixer out as a feature series: the missing downmix loses dialogue and engine audio on 2-channel outputs, so the maintainer now treats it as a defect fix. It does not meet the macOS exception in §3 of `CLAUDE.md`, whose fourth condition leaves out upstream refactors and any fix that only works with one: `199ae1d33c` moves code, the other helper commits extract code, and two hunks had to be placed by hand. It is carried on the maintainer's approval of this batch, which names these prerequisites, and that approval widens no rule. The other conditions hold: CrossOver changes only the capture authorisation in that file, which the batch does not touch, and no unix-call or structure shared with mmdevapi changes. Like upstream, it has no opt-in, so every stream it selects changes path.
+
+### Upstream follow-ups
+
+Searched up to `c42c1532a8` for later commits that name a taken commit or touch the same code:
+
+| Commit | Decision |
+|---|---|
+| `7c1d8456e1`, `1ea7620d9d` | A change to `_Internal_reserve()` and its revert; together they change nothing and are not carried. |
+| `8845229a35` (wine-11.4) | Already carried as `0016`; it removed the callback check that `de43f5434f` restores, and upstream master has the check in both DLLs. |
+| `07c7fcc86f`, `8e09602ca6`, `da0b08472b` (wine-11.16) | Period frame size and sample-rate helpers that only provide context for two hunks of `0167`; not needed by the fix, and `0129` already covers the period problem. Not carried. |
+| `5a66c3e869` | Already carried in `0164`. |
+| `8891603b59` | Fixes `da0b08472b` in `mmdevapi/spatialaudio.c`; not applicable, since `da0b08472b` is not carried. |
+
+No later commit names `0c61795bfd` or its prerequisites, `19d5fbd382`, `d5c7ea9089` or `de43f5434f`.
+
+### Adaptations
+
+| Commit | Adaptation |
+|---|---|
+| `199ae1d33c` | Removes the old copy of `dev_id_from_device()`. The function is identical in the base, but upstream context shows `get_device_period_frame_range()` after it (`07c7fcc86f`, not carried), so the removal is placed by hand. |
+| `8cf640803b` | Replaces the channel probing in `unix_get_mix_format()` with `get_device_channel_mask()`. Upstream's context reads the sample rate through `get_device_sample_rate()` (`8e09602ca6`, not carried); the base's inline read is kept, and the property scope and element it relied on are now set right before it. |
+| `0c61795bfd` | `use_mixer()` also requires each channel mask to have one bit per channel, for the stream and the device; otherwise the previous path is kept. Upstream sends such a stream to the mixer, whose empty channel bitmap (`get_channel_mask()` above 8 channels) fails with -10851, so `IsFormatSupported()` and stream creation return `E_FAIL` for every input on an output with more than 8 channels, and for streams of 9 or more channels with mask 0, where HALOutput only warned. In offline runs 8, 16 and 32-channel and 2-channel mask-0 outputs failed at the output layout for all inputs; non-zero masks succeeded. |
+| `0c61795bfd` | Zeroes the `AudioComponentDescription` with `memset(&comp_desc, ...)`. Upstream writes `memset(&desc, 0, sizeof(comp_desc))`, which leaves `componentFlags` and `componentFlagsMask` uninitialised and can make the SpatialMixer lookup fail, failing stream creation with `AUDCLNT_E_DEVICE_INVALIDATED`. Upstream master still has the line. |
+
+Every other commit applies in upstream order without fuzz. `0168` omits its test hunk.
+
+### Behaviour of the `0167` fold-down
+
+- A HALOutput loopback of a 7.1.4 stream on a 2-channel output measured centre 0.250/0.250, rear left 0.250/0 and top front left 0.250/0, but top back left and right 0/0 and LFE 0/0. Centre, surrounds and front heights are retained; back heights and LFE remain lost.
+- The fold-down has no limiter. The per-channel gain sum reaches 2.41 for 5.1, 3.12 for 7.1 and 3.83 for 7.1.4, so loud mixes may clip; this has not been verified by ear.
+- A mono format without `WAVEFORMATEXTENSIBLE` now asks HALOutput for layout bitmap `0x4` (accepted) instead of `0x3` (rejected, with a warning), with the same output.
+
+### D3DMetal adapter identity (`0169`)
+
+D3DMetal fills in the DXGI adapter description itself. `D3DM_VENDOR_ID`, `D3DM_DEVICE_ID` and `D3DM_DEVICE_DESCRIPTION` are read from the process environment on the Unix side; this is not yet confirmed end to end on D3DMetal 4.0 beta 3. `SetEnvironmentVariable()` changes only the Windows environment. Public reports show programs that take a vendor-specific path on D3DMetal's default and crash there.
+
+With `HKCU\Software\Wine\AppDefaults\<app.exe>\Runeon`, DWORD `D3DMetalReportNVIDIA` = 1, read with the `0157` reader, `signal_init_process()` sets vendor `0x10de`, device `0x2786` and the description `NVIDIA GeForce RTX 4070` and logs one `RUNEON_D3DMETAL_ADAPTER` line. If the caller has set any of the three, it sets none, so an identity is never mixed. This runs before any Windows code and before D3DMetal is loaded. The values are fixed in Wine; a launcher can only turn the policy on for a program. A child process inherits the Unix environment, so `RUNEON_D3DM_SET` records that the policy set the variables and every process drops them at start; a program's policy does not reach its children. Reporting NVIDIA can open NVIDIA-only paths such as DLSS or Reflex in a program; that is why it stays per program.
+
+### Foreign-thread faults (`0170`)
+
+Apple's libdispatch workers run Metal and D3DMetal code inside a Wine process on threads Wine did not create. Highball's report: when one of them faults, Wine's handler faults again reading the missing TEB while the signal is blocked, and the thread spins while the rest of the program keeps running, so the program looks hung and no log shows the fault. `0170` is opt-in through `WINE_CRASH_ON_FOREIGN_FAULTS=1` because it turns that hang into a process exit; it is a diagnostic, not a fix of the fault itself. Code is unchanged from the original except for the opt-in and the trap handler check, which goes before the `0107` step check because that check also reads the TEB.
+
+### Validation
+
+`scripts/static-check.sh` and `scripts/integration-check.sh` pass for `.33`, and the series reproduces the reviewed tree exactly. A complete i386/x86_64 WoW64 build succeeds with the configuration in `BUILDING.md`, with GStreamer, SDL2, FreeType, GnuTLS and MoltenVK present. It does not define the managed launch validation and has no signing, so it runs directly and is not the product build. On that build, in a fresh prefix, on macOS 27 under Rosetta:
+
+| Patch | Result |
+|---|---|
+| `0166` | `tests/concurrent-vector-probe.c` (x86_64) passes 4 of 4 runs for concrt140 and msvcp120. With the two commits reverted and the DLLs rebuilt, it fails 3 of 3 runs for both: `push_back()` returns addresses such as `0x1`, `0x9` and `0x11`, and concrt140 asks the allocator for 64 elements instead of 16 and places segments 1 to 3 eight times too far. |
+| `0167` | A shared-mode 12-channel 7.1.4 float stream on the 2-channel default output: `IsFormatSupported()` and `Initialize()` return `S_OK`, the trace shows a 12-channel mixer input in front of a 2-channel HALOutput format, and a second of silence drains. A 2-channel stream (`tests/coreaudio-io-buffer-probe.c`) creates no mixer. |
+| `0168` | `WSAIoctl(SIO_UDP_NETRESET)` returns 0 on a UDP socket, for x86_64 and i386. |
+| `0169` | A dylib injected into the processes calls `getenv()` from a native image. With the DWORD set to 1 the program reads the three fixed values and logs the marker, and a child without the policy reads none. With any one variable set by the caller the policy sets none, and that value stays in both. A child with its own policy gets the values again. With the key absent, the DWORD set to 2 or a `REG_SZ` value, nothing is set. |
+| `0170` | A pthread injected into a Wine process with a dylib reads address `0x14` after three seconds; its `%gs:0x30` reads NULL. Without the variable, and with it set to 2, the process used about 100% CPU at eight seconds while the program carried on, which reproduces the defect; with `WINE_CRASH_ON_FOREIGN_FAULTS=1` it ended with `SIGSEGV`. |
+
+### Not verified yet
+
+- The product build and signing, Wine's own tests for the affected modules against `.32`, and product acceptance.
+- `0166` on i386 and in msvcp100 and msvcp110; the restored chore callback check.
+- `0167` against `.32` with the same stream, by ear or by measuring the output, on multichannel outputs, with 5.1 or integer sources, and across device changes.
+- `0168` with an online program.
+- `0169` end to end: no adapter description was read back through D3DMetal. The effect on the program it is meant for is unknown.
+- `0170` for `SIGTRAP` and `SIGFPE` on such threads, and with a real Metal or D3DMetal fault.

@@ -38,6 +38,7 @@ Release status lives in the [README](README.md) table, the GitHub Releases and `
 | [ROSETTA-CPU-FIDELITY](docs/upstream-reviews.md#rosetta-cpu-fidelity) | Opt-in Rosetta CPU fidelity in ntdll (`0157`–`0159`) and VC14 version resources (`0160`) | `.30` |
 | [BACKPORTS-11.21-SWEEP](docs/upstream-reviews.md#backports-11.21-sweep) | Filtered user-mode sweep, wine-11.21 | `.31` |
 | [METAL-SHADER-CACHE-EXPAND](docs/upstream-reviews.md#metal-shader-cache-expand) | Opt-in raise of Metal's 1 GiB shader cache clamp in ntdll (`0165`) | `.32` |
+| [CONCURRENT-VECTOR-SPATIAL-MIXER-BATCH](docs/upstream-reviews.md#concurrent-vector-spatial-mixer-batch) | concurrent_vector (wine-11.8), SpatialMixer downmix (wine-11.21) and SIO_UDP_NETRESET (wine-11.19) backports; opt-in D3DMetal adapter identity (`0169`, AppDefaults DWORD `D3DMetalReportNVIDIA`, values fixed in Wine) and opt-in crash on foreign-thread faults (`0170`, `WINE_CRASH_ON_FOREIGN_FAULTS=1`) in ntdll | `.33` |
 
 The complete audit boundary is `wine-11.15`; later releases were reviewed with the filtered sweep rules. An audit is a point-in-time decision record, not a permanent allowlist: a deferred commit may enter a later patch set once its dependency chain, tests, probe and Runeon impact are established, and inclusion in an audit does not authorize publishing a runtime.
 

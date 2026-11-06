@@ -1,0 +1,113 @@
+From: Andrii Rozhanskyi <146123087+cyber-prinzesse@users.noreply.github.com>
+Subject: [PATCH] ntdll: Crash on faults in threads without a TEB, opt-in.
+
+Ported from highball-engine patch 0028
+(gauthierpiarrette/highball-engine commit 0e9cb560a4, LGPL-2.1), code
+unchanged except for the opt-in and for the trap handler hunk, which is
+placed before the self-modifying-code step check of 0107 because that
+check reads the TEB too.
+
+Apple's libdispatch workers run Metal and D3DMetal code inside a Wine
+process on threads Wine did not create, which have no TEB. When such a
+thread faults, segv_handler (also used for SIGILL and SIGBUS),
+trap_handler and fpe_handler run on it and read the TEB through
+save_context() or the thread data right away. That read faults again
+while the signal is blocked, and the faulting thread spins while the
+rest of the process keeps running, so the program looks hung and no log
+shows the first fault. Reproduced on this base: a pthread injected into
+a Wine process, with NtCurrentTeb() reading NULL, read address 0x14; the
+process then used one core at about 100% while its main thread carried
+on.
+
+With WINE_CRASH_ON_FOREIGN_FAULTS=1 in the environment, read once at
+process start, each handler first checks NtCurrentTeb(). Without a TEB
+it puts the signal back to its default action and returns: the faulting
+instruction runs again and the process ends with that signal (a trap,
+which is not retried, is raised again), so the crash report names the
+real fault. Threads with a TEB take the same path as before. Without
+the variable, or with any other value, nothing changes. macOS only.
+---
+diff --git a/dlls/ntdll/unix/signal_x86_64.c b/dlls/ntdll/unix/signal_x86_64.c
+index cc3ce1c..eb3b2b5 100644
+--- a/dlls/ntdll/unix/signal_x86_64.c
++++ b/dlls/ntdll/unix/signal_x86_64.c
+@@ -2878,6 +2878,35 @@ static inline BOOL check_invalid_gsbase( ucontext_t *ucontext )
+ }
+ 
+ 
++#ifdef __APPLE__
++static BOOL crash_on_foreign_faults;  /* WINE_CRASH_ON_FOREIGN_FAULTS=1 */
++
++/**********************************************************************
++ *		foreign_thread_fault
++ *
++ * A fault on a thread Wine didn't create, which has no TEB: Apple's libdispatch workers running
++ * Metal and D3DMetal code are such threads. The handlers below read the TEB right away, fault
++ * again and re-enter themselves forever, so the program hangs at 100% CPU instead of crashing.
++ * Put the signal back to its default action instead: a fault happens again when the faulting
++ * instruction is retried (a trap, which isn't retried, is raised again), and the process crashes
++ * with a crash report that names the real fault.
++ * Opt-in only, as a diagnostic; without it such a thread still hangs as before.
++ */
++static BOOL foreign_thread_fault( int sig, BOOL retried )
++{
++    struct sigaction sa;
++
++    if (!crash_on_foreign_faults || NtCurrentTeb()) return FALSE;
++    memset( &sa, 0, sizeof(sa) );
++    sa.sa_handler = SIG_DFL;
++    sigemptyset( &sa.sa_mask );
++    sigaction( sig, &sa, NULL );
++    if (!retried) raise( sig );  /* blocked while this handler runs: delivered when it returns */
++    return TRUE;
++}
++#endif
++
++
+ /**********************************************************************
+  *		segv_handler
+  *
+@@ -2889,6 +2918,10 @@ static void segv_handler( int signal, siginfo_t *siginfo, void *sigcontext )
+     EXCEPTION_RECORD rec = { 0 };
+     struct xcontext context;
+ 
++#ifdef __APPLE__
++    if (foreign_thread_fault( signal, TRUE )) return;
++#endif
++
+     rec.ExceptionAddress = (void *)RIP_sig(ucontext);
+     save_context( &context, ucontext );
+ 
+@@ -3043,6 +3076,10 @@ static void trap_handler( int signal, siginfo_t *siginfo, void *sigcontext )
+     struct xcontext context;
+     struct ntdll_thread_data *thread_data = ntdll_get_thread_data();
+ 
++#ifdef __APPLE__
++    if (foreign_thread_fault( signal, FALSE )) return;
++#endif
++
+     if (thread_data->smc_step_armed && TRAP_sig(ucontext) == TRAP_x86_TRCTRAP)
+     {
+         BOOL app_tf = thread_data->smc_step_app_tf;
+@@ -3123,6 +3160,10 @@ static void fpe_handler( int signal, siginfo_t *siginfo, void *sigcontext )
+     EXCEPTION_RECORD rec = { .ExceptionAddress = (void *)RIP_sig(ucontext) };
+     struct xcontext context;
+ 
++#ifdef __APPLE__
++    if (foreign_thread_fault( signal, TRUE )) return;
++#endif
++
+     save_context( &context, sigcontext );
+ 
+     switch (siginfo->si_code)
+@@ -3646,6 +3687,10 @@ void signal_init_process(void)
+         _dyld_register_func_for_add_image( metal_shader_cache_expand );
+     /* before D3DMetal is loaded; it reads the variables when an adapter is created */
+     d3dmetal_adapter_policy();
++    {
++        const char *env = getenv( "WINE_CRASH_ON_FOREIGN_FAULTS" );
++        crash_on_foreign_faults = env && !strcmp( env, "1" );
++    }
+ #endif
+ 
+     sig_act.sa_mask = server_block_set;
