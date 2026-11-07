@@ -154,3 +154,4 @@ patches/upstream/0168-wine-11.19-ws2_32-udp-netreset.patch
 patches/runeon/0169-ntdll-d3dmetal-adapter-identity.patch
 patches/runeon/0170-ntdll-crash-on-faults-in-foreign-threads.patch
 patches/runeon/0171-ntdll-keep-trailing-dots-in-unix-paths.patch
+patches/runeon/0172-setupapi-retry-literal-device-inf-name.patch

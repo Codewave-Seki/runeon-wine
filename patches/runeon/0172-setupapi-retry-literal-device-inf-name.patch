@@ -1,0 +1,47 @@
+From: Runeon Contributors <dev@runeon.com>
+Subject: [PATCH] setupapi: Retry a \\?\ inf name as given when the normalized one fails.
+
+SetupOpenInfFileW() runs every name with a path separator through
+GetFullPathNameW() before opening it. GetFullPathNameW() normalizes
+\\?\ names too and, as on Windows, drops a trailing dot from a
+directory name, while CreateFileW() would have used the \\?\ name
+literally. wineboot opens wine.inf through such a name built from
+WINEDATADIR, so with the runtime under a directory such as /Users/name./
+the inf is not found, the prefix gets no system files and the next
+process fails with c0000135.
+
+Reproduced on this base with 0171 applied: the runtime-under-a-dotted-
+directory case still exits 53, and the trace shows RtlGetFullPathName_U()
+on the \\?\ name followed by CreateFileW() on the name without the dot.
+
+The normalized name is still tried first, so every name that opens today
+opens the same file in the same way. Only when that fails, the name
+starts with \\?\ and normalizing changed it, the name is opened as
+given, and that name is kept as the file name.
+
+--- a/dlls/setupapi/parser.c
++++ b/dlls/setupapi/parser.c
+@@ -1106,6 +1106,23 @@
+         }
+         GetFullPathNameW( name, len, path, NULL );
+         handle = CreateFileW( path, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, 0 );
++        /* A \\?\ name is literal, but GetFullPathNameW() drops a trailing dot
++         * from a directory name, as on Windows. Retry the name as given. */
++        if (handle == INVALID_HANDLE_VALUE && !wcsncmp( name, L"\\\\?\\", 4 ) && wcscmp( name, path ))
++        {
++            WCHAR *literal = wcsdup( name );
++
++            if (literal)
++            {
++                handle = CreateFileW( literal, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, 0 );
++                if (handle != INVALID_HANDLE_VALUE)
++                {
++                    free( path );
++                    path = literal;
++                }
++                else free( literal );
++            }
++        }
+     }
+     else  /* try Windows directory */
+     {

@@ -3957,6 +3957,22 @@
           "contains": "*nt_name = collapse_path( buffer, TRUE );"
         }
       ]
+    },
+    {
+      "order": 202,
+      "path": "patches/runeon/0172-setupapi-retry-literal-device-inf-name.patch",
+      "sha256": "ef2fd5a6b81c520eb77c8a3b54aadda42ed9b2efb9e615bee3cb68922c3520d1",
+      "kind": "runeon-product",
+      "status": "active",
+      "risk": "low",
+      "summary": "SetupOpenInfFileW() still opens the GetFullPathNameW()-normalized name first; only when that fails, the name starts with \\\\?\\ and normalizing changed it, it retries the name as given and keeps it as the file name. GetFullPathNameW() drops a trailing dot from a directory name, as on Windows, so wineboot could not open wine.inf with the runtime under a directory such as /Users/name./. Names that open today behave exactly as before. Not opt-in: individually approved, see MAINTENANCE.md.",
+      "testStrategy": "Covered by the dotted-runtime prefix initialization reproduction on a full build; no function-level check (the change is a retry around CreateFileW).",
+      "verification": [
+        {
+          "path": "dlls/setupapi/parser.c",
+          "contains": "Retry the name as given."
+        }
+      ]
     }
   ],
   "targetedReview": {
