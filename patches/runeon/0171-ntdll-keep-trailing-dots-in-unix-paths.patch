@@ -1,0 +1,113 @@
+From: Runeon Contributors <dev@runeon.com>
+Subject: [PATCH] ntdll: Keep trailing dots when converting Unix paths.
+
+collapse_path() applies the Windows rule that drops the dots ending a
+name, and also the spaces ending a path. find_drive_nt_root() and
+unix_to_nt_file_name() run it on paths that come from Unix, where those
+characters are part of the name. WINEDLLDIR<n>, WINECONFIGDIR,
+WINEDATADIR and WINEHOMEDIR are built this way, so a directory such as
+/Users/name./ becomes Z:\Users\name\, which does not exist or, worse, is
+a different directory.
+
+Reproduced on this base by changing only the directory name, in a clean
+prefix. With the runtime under such a directory, the builtin lookup
+fails with STATUS_OBJECT_PATH_NOT_FOUND and the first process exits with
+"could not load kernel32.dll, status c0000135". With the prefix under
+one, wineboot cannot write .update-timestamp, skips update_wineprefix()
+and leaves system32 empty, and the next process fails the same way.
+
+This adds a keep_dots argument. find_drive_nt_root() and
+unix_to_nt_file_name() pass TRUE, as does get_full_path() for an absolute
+Unix name with no DOS drive, which becomes \??\unix\. Its relative and
+DOS names and get_nt_path() follow the Windows rule and pass FALSE. A path with no
+name ending in a dot or space converts exactly as before.
+
+The \??\ and \\?\ forms keep the name when opened, but a program that
+passes Z:\...\name.\ to a Win32 path API still loses the dot, as on
+Windows. wine-mono and Gecko, located through DOS paths under
+WINEDATADIR, are such cases, as is a current directory under such a
+name.
+
+--- a/dlls/ntdll/unix/file.c
++++ b/dlls/ntdll/unix/file.c
+@@ -3913,8 +3913,11 @@
+  *		collapse_path
+  *
+  * Get rid of . and .. components in the path.
++ *
++ * Windows drops the dots and spaces that end a name, but a Unix name keeps
++ * them. A converted Unix path must keep_dots or it names another directory.
+  */
+-static WCHAR *collapse_path( WCHAR *path )
++static WCHAR *collapse_path( WCHAR *path, BOOL keep_dots )
+ {
+     WCHAR *p, *start, *next;
+ 
+@@ -3976,13 +3979,13 @@
+         if (*p == '\\')
+         {
+             /* remove last dot in previous dir name */
+-            if (p > start && p[-1] == '.') memmove( p-1, p, (wcslen(p) + 1) * sizeof(WCHAR) );
++            if (!keep_dots && p > start && p[-1] == '.') memmove( p-1, p, (wcslen(p) + 1) * sizeof(WCHAR) );
+             else p++;
+         }
+     }
+ 
+     /* remove trailing spaces and dots (yes, Windows really does that, don't ask) */
+-    while (p > start && (p[-1] == ' ' || p[-1] == '.')) p--;
++    if (!keep_dots) while (p > start && (p[-1] == ' ' || p[-1] == '.')) p--;
+     *p = 0;
+     return path;
+ }
+@@ -4285,7 +4288,7 @@
+             lenW = ARRAY_SIZE(dos_prefixW);
+             lenW += ntdll_umbstowcs( unix_name + pos, len, buffer + lenW, len );
+             buffer[lenW] = 0;
+-            *nt_name = collapse_path( buffer );
++            *nt_name = collapse_path( buffer, TRUE );
+             return status;
+         }
+         if (pos <= 1) break;
+@@ -4315,7 +4318,7 @@
+         if (!(buffer = malloc( sizeof(unix_prefixW) + len * sizeof(WCHAR) ))) return STATUS_NO_MEMORY;
+         memcpy( buffer, unix_prefixW, sizeof(unix_prefixW) );
+         ntdll_umbstowcs( unix_name, len, buffer + ARRAY_SIZE(unix_prefixW), len );
+-        collapse_path( buffer );
++        collapse_path( buffer, TRUE );
+     }
+ 
+     *nt = buffer;
+@@ -4436,6 +4439,7 @@
+ {
+     WCHAR *ret;
+     ULONG prefix_len, len = max( ARRAY_SIZE(unix_prefixW), wcslen(curdir) ) + strlen(name) + 1;
++    BOOL keep_dots = FALSE;
+ 
+     /* special case for Unix file name */
+     if (name[0] == '/' && !find_drive_nt_root( name, strlen(name), &ret, FILE_OPEN ) && ret) goto done;
+@@ -4466,6 +4470,7 @@
+         /* if we got here, there is no DOS drive */
+         memcpy( ret, unix_prefixW, sizeof(unix_prefixW) );
+         prefix_len = ARRAY_SIZE(unix_prefixW);
++        keep_dots = TRUE;
+     }
+     else if (name[0] == '\\')  /* absolute path */
+     {
+@@ -4487,7 +4492,7 @@
+     }
+ 
+     ntdll_umbstowcs( name, strlen(name) + 1, ret + prefix_len, len - prefix_len );
+-    collapse_path( ret );
++    collapse_path( ret, keep_dots );
+  done:
+     init_unicode_string( nt_name, ret );
+     return STATUS_SUCCESS;
+@@ -4528,7 +4533,7 @@
+         p += ARRAY_SIZE( nt_prefixW );
+     }
+     wcscpy( p, name );
+-    collapse_path( ret );
++    collapse_path( ret, FALSE );
+     init_unicode_string( nt_name, ret );
+     return STATUS_SUCCESS;
+ }

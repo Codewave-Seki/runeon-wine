@@ -87,6 +87,12 @@ if grep -Fqx 'patches/runeon/0128-mmdevapi-spatial-static-object-order.patch' "$
     || die "spatial audio static object map check failed"
 fi
 
+# Unix path conversion is checked from the patched collapse_path().
+if grep -Fqx 'patches/runeon/0171-ntdll-keep-trailing-dots-in-unix-paths.patch' "$series_file"; then
+  python3 "$script_dir/../tests/unix-path-trailing-dot-check.py" "$candidate_root" >/dev/null \
+    || die "Unix path trailing dot check failed"
+fi
+
 if "$script_dir/apply-series.sh" "$candidate_root" >"$temp_root/reapply.stdout" 2>"$temp_root/reapply.stderr"; then
   die "a second patch application unexpectedly succeeded"
 fi
