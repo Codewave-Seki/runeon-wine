@@ -59,6 +59,7 @@ Each Release carries the patch-set bundle, the complete corresponding source and
 
 | Patch set | State | Seed | Status |
 |---|---|---|---|
+| [`.34`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.34) | pre-release | `2026.11.08` | Dev candidate for App `>=1.16 (31)`; not yet in Production |
 | [`.33`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.33) | stable, latest | `2026.11.07` | Current; delivered to App `>=1.16 (30)` |
 | [`.32`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.32) | stable | `2026.11.05` | Delivered to App `1.14 (16)`–`1.16 (28)` |
 | [`.31`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.31) | stable | `2026.11.04` | Superseded, retained |
