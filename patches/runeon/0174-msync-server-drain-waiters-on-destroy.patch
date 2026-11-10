@@ -1,0 +1,44 @@
+From: Runeon Contributors <dev@runeon.com>
+Subject: [PATCH] server: wake and free the msync waiters left on an index
+ when its last reference goes
+
+A downstream msync fix, not a WineHQ backport: WineHQ has no msync.
+Runs only when WINEMSYNC is set.
+
+A thread killed while it waits (by TerminateThread() or when its
+process exits) never sends the unregister message, so its node stays
+on every object it waited on. A thread's alert object is referenced
+only by the server's thread object, not by a client, so once that
+thread object goes the index drops to refcount 0 and is reused by the
+next object created, with the dead thread's node still on its list.
+The node then leaked, or woke whichever thread had reused that thread
+id when the new object was signalled.
+
+When destroy_all takes an index to refcount 0, run signal_all_internal()
+on it: every node left is woken and returned to the pool. A live waiter
+cannot be on that list, since it holds a reference for the duration of
+its wait, but waking keeps it from hanging if one ever is; a woken
+thread rechecks its objects, as after any wake. Nodes on objects that
+a dead process still references are not covered: their refcount never
+reaches 0.
+
+--- a/server/msync.c
++++ b/server/msync.c
+@@ -391,7 +391,16 @@
+ 
+     refcount = __atomic_sub_fetch( &obj->refcount, 1, __ATOMIC_SEQ_CST );
+ 
+-    if (!refcount) last_destroyed_idx = shm_idx;
++    if (!refcount)
++    {
++        /* A thread killed while waiting never unregisters, and a thread's alert
++         * object holds no client reference, so the list can still hold nodes
++         * when the last reference goes. Drain it now: waits on the next object
++         * at this index are registered on this thread after this message.
++         * Waking instead of only freeing keeps a live waiter from hanging. */
++        signal_all_internal( shm_idx );
++        last_destroyed_idx = shm_idx;
++    }
+ }
+ 
+ /*

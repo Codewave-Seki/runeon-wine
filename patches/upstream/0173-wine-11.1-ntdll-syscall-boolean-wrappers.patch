@@ -1,0 +1,151 @@
+From: Alexandre Julliard <julliard@winehq.org>
+Subject: [PATCH] ntdll: Add syscall wrappers to work around ABI breakages.
+
+Backport of WineHQ commit f43402cde3 (wine-11.1), x86_64 part only.
+Upstream adds the wrappers to dlls/ntdll/unix/syscall.c, which
+d1415ab24e created by moving the syscall table out of loader.c; that
+move is not carried, so the same block goes right before the table in
+loader.c, with the wine/asm.h include upstream adds. The ARM64 branch
+is left out because this base is built for x86_64 only. The wrapper
+code is otherwise unchanged; its test hunk (565091afa4) is omitted.
+
+The x64 calling convention leaves the bits above a BOOLEAN argument
+undefined, as Windows does, and Windows reads only the low byte. clang
+compiles the Unix side assuming the caller extended it to 32 bits, so a
+system call made by a Windows program that sets only the low byte could
+read FALSE as TRUE. For example, NtQueryDirectoryObject() then restarted
+on every call, and a loop over a directory never ended. Each system
+call with a BOOLEAN argument now goes through a stub that zero-extends
+that argument before jumping to the real function. The stubs are built
+only with clang on x86_64; the 32-bit (WoW64) path converts arguments
+in C and is unchanged.
+
+--- a/dlls/ntdll/unix/loader.c
++++ b/dlls/ntdll/unix/loader.c
+@@ -93,6 +93,7 @@
+ #include "msync.h"
+ #include "wine/list.h"
+ #include "ntsyscalls.h"
++#include "wine/asm.h"
+ #include "wine/debug.h"
+ 
+ WINE_DEFAULT_DEBUG_CHANNEL(module);
+@@ -141,6 +142,118 @@
+ #define SYSCALL_STUB(name) static void name(void) { stub_syscall( #name ); }
+ ALL_SYSCALL_STUBS
+ 
++/* Clang on x86-64, and on macOS ARM64, assumes that function parameters are extended by the caller,
++ * contrary to the ABI standards */
++#if defined(__x86_64__) && defined(__clang__)
++
++#define WRAP_FUNC(name,code) \
++    extern NTSTATUS wrap_##name(void); \
++    __ASM_GLOBAL_FUNC( wrap_##name, code "jmp " __ASM_NAME(#name) )
++#define ARG1 "movzbl %dil,%edi\n\t"
++#define ARG2 "movzbl %sil,%esi\n\t"
++#define ARG3 "movzbl %dl,%edx\n\t"
++#define ARG4 "movzbl %cl,%ecx\n\t"
++#define ARG5 "movzbl %r8b,%r8d\n\t"
++#define ARG6 "movzbl %r9b,%r9d\n\t"
++#define ARG7 ARGn(7)
++#define ARG8 ARGn(8)
++#define ARGn(n) "andq $0xff,(" #n "-6)*8(%rsp)\n\t"
++
++WRAP_FUNC( NtAccessCheckByTypeAndAuditAlarm, ARGn(13) )
++WRAP_FUNC( NtLockFile, ARGn(9) ARGn(10) )
++WRAP_FUNC( NtNotifyChangeDirectoryFile, ARGn(9) )
++WRAP_FUNC( NtNotifyChangeKey, ARG7 ARGn(10) )
++WRAP_FUNC( NtNotifyChangeMultipleKeys, ARGn(9) ARGn(12) )
++WRAP_FUNC( NtQueryDirectoryFile, ARGn(9) ARGn(11) )
++WRAP_FUNC( NtQueryEaFile, ARG5 ARGn(9) )
++
++#define NtAccessCheckByTypeAndAuditAlarm wrap_NtAccessCheckByTypeAndAuditAlarm
++#define NtLockFile wrap_NtLockFile
++#define NtNotifyChangeDirectoryFile wrap_NtNotifyChangeDirectoryFile
++#define NtNotifyChangeKey wrap_NtNotifyChangeKey
++#define NtNotifyChangeMultipleKeys wrap_NtNotifyChangeMultipleKeys
++#define NtQueryDirectoryFile wrap_NtQueryDirectoryFile
++#define NtQueryEaFile wrap_NtQueryEaFile
++
++WRAP_FUNC( NtAcceptConnectPort, ARG4 )
++WRAP_FUNC( NtAccessCheckAndAuditAlarm, ARG8 )
++WRAP_FUNC( NtAdjustGroupsToken, ARG2 )
++WRAP_FUNC( NtAdjustPrivilegesToken, ARG2 )
++WRAP_FUNC( NtCloseObjectAuditAlarm, ARG3 )
++WRAP_FUNC( NtCommitTransaction, ARG2 )
++WRAP_FUNC( NtContinue, ARG2 )
++WRAP_FUNC( NtCreateEvent, ARG5 )
++WRAP_FUNC( NtCreateMutant, ARG4 )
++/* WRAP_FUNC( NtCreateProcess, ARG5 ) */
++WRAP_FUNC( NtCreateThread, ARG8 )
++WRAP_FUNC( NtDelayExecution, ARG1 )
++WRAP_FUNC( NtDuplicateToken, ARG4 )
++WRAP_FUNC( NtInitiatePowerAction, ARG4 )
++WRAP_FUNC( NtOpenThreadToken, ARG3 )
++WRAP_FUNC( NtOpenThreadTokenEx, ARG3 )
++/* WRAP_FUNC( NtPrivilegeObjectAuditAlarm, ARG6 ) */
++/* WRAP_FUNC( NtPrivilegedServiceAuditAlarm, ARG5 ) */
++WRAP_FUNC( NtQueryDefaultLocale, ARG1 )
++WRAP_FUNC( NtQueryDirectoryObject, ARG4 ARG5 )
++WRAP_FUNC( NtReleaseKeyedEvent, ARG3 )
++WRAP_FUNC( NtRemoveIoCompletionEx, ARG6 )
++WRAP_FUNC( NtRollbackTransaction, ARG2 )
++WRAP_FUNC( NtSetDebugFilterState, ARG3 )
++WRAP_FUNC( NtSetDefaultLocale, ARG1 )
++WRAP_FUNC( NtSetTimer, ARG5 )
++WRAP_FUNC( NtSetTimerResolution, ARG2 )
++WRAP_FUNC( NtSignalAndWaitForSingleObject, ARG3 )
++WRAP_FUNC( NtWaitForDebugEvent, ARG2 )
++WRAP_FUNC( NtWaitForKeyedEvent, ARG3 )
++WRAP_FUNC( NtWaitForMultipleObjects, ARG4 )
++WRAP_FUNC( NtWaitForSingleObject, ARG2 )
++
++#define NtAcceptConnectPort wrap_NtAcceptConnectPort
++#define NtAccessCheckAndAuditAlarm wrap_NtAccessCheckAndAuditAlarm
++#define NtAdjustGroupsToken wrap_NtAdjustGroupsToken
++#define NtAdjustPrivilegesToken wrap_NtAdjustPrivilegesToken
++#define NtCloseObjectAuditAlarm wrap_NtCloseObjectAuditAlarm
++#define NtCommitTransaction wrap_NtCommitTransaction
++#define NtContinue wrap_NtContinue
++#define NtCreateEvent wrap_NtCreateEvent
++#define NtCreateMutant wrap_NtCreateMutant
++#define NtCreateProcess wrap_NtCreateProcess
++#define NtCreateThread wrap_NtCreateThread
++#define NtDelayExecution wrap_NtDelayExecution
++#define NtDuplicateToken wrap_NtDuplicateToken
++#define NtInitiatePowerAction wrap_NtInitiatePowerAction
++#define NtOpenThreadToken wrap_NtOpenThreadToken
++#define NtOpenThreadTokenEx wrap_NtOpenThreadTokenEx
++#define NtPrivilegeObjectAuditAlarm wrap_NtPrivilegeObjectAuditAlarm
++#define NtPrivilegedServiceAuditAlarm wrap_NtPrivilegedServiceAuditAlarm
++#define NtQueryDefaultLocale wrap_NtQueryDefaultLocale
++#define NtQueryDirectoryObject wrap_NtQueryDirectoryObject
++#define NtReleaseKeyedEvent wrap_NtReleaseKeyedEvent
++#define NtRemoveIoCompletionEx wrap_NtRemoveIoCompletionEx
++#define NtRollbackTransaction wrap_NtRollbackTransaction
++#define NtSetDebugFilterState wrap_NtSetDebugFilterState
++#define NtSetDefaultLocale wrap_NtSetDefaultLocale
++#define NtSetTimer wrap_NtSetTimer
++#define NtSetTimerResolution wrap_NtSetTimerResolution
++#define NtSignalAndWaitForSingleObject wrap_NtSignalAndWaitForSingleObject
++#define NtWaitForDebugEvent wrap_NtWaitForDebugEvent
++#define NtWaitForKeyedEvent wrap_NtWaitForKeyedEvent
++#define NtWaitForMultipleObjects wrap_NtWaitForMultipleObjects
++#define NtWaitForSingleObject wrap_NtWaitForSingleObject
++
++#undef ARG1
++#undef ARG2
++#undef ARG3
++#undef ARG4
++#undef ARG5
++#undef ARG6
++#undef ARG7
++#undef ARG8
++#undef ARGn
++#undef WRAP_FUNC
++
++#endif  /* __x86_64__ && __clang__ */
++
+ static void * const syscalls[] =
+ {
+ #define SYSCALL_ENTRY(id,name,args) name,

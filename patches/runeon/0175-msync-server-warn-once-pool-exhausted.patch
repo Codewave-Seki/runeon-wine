@@ -1,0 +1,32 @@
+From: Runeon Contributors <dev@runeon.com>
+Subject: [PATCH] server: warn once when the msync node pool runs out
+
+A downstream msync fix, not a WineHQ backport: WineHQ has no msync.
+Runs only when WINEMSYNC is set.
+
+Once the 0x80000-node pool is empty, every wait registration allocates
+a node with malloc() and wrote the same warning to stderr, which is
+unbuffered: one write per registration on the thread that serves all
+msync waits. 120 processes exiting with 100 threads each in an alertable
+wait for 63 events wrote 243757 such lines in one session. Write the
+warning once per wineserver; the fallback allocation is unchanged.
+
+--- a/server/msync.c
++++ b/server/msync.c
+@@ -177,7 +177,15 @@
+ {
+     if (pool->count == 0)
+     {
+-        fprintf( stderr, "msync: warn: node memory pool exhausted\n" );
++        static int warned;
++
++        /* stderr is unbuffered: a line for every allocation past the pool
++         * stalls the message pump once it runs out, so warn only once */
++        if (!warned)
++        {
++            fprintf( stderr, "msync: warn: node memory pool exhausted\n" );
++            warned = 1;
++        }
+         return malloc( sizeof(struct tid_node) );
+     }
+     return pool->free_nodes[--pool->count];

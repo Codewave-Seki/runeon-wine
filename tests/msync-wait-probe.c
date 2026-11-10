@@ -1,4 +1,4 @@
-/* LGPL-2.1-or-later. msync wait probe for 0137-0143: leak and throughput.
+/* LGPL-2.1-or-later. msync wait probe for 0137-0143, 0174 and 0175: leak and throughput.
  * leak <seconds>: four threads wait for any of a never-signalled event and a
  * semaphore two threads keep releasing. A wait that gives up during
  * registration (0138) or whose second object is already signalled (0137)
@@ -9,13 +9,19 @@
  * ring <handoffs>: eight threads pass an auto-reset event around.
  * multi <wakeups>: eight threads wait for any of two events, woken one by one.
  * ring and multi print elapsed milliseconds for comparison between runtimes.
+ * exit <rounds>: each round starts a child whose 100 threads make an alertable
+ * wait for any of 63 events and which then exits, killing them in the wait.
+ * Those threads never unregister, so 120 rounds exhaust the pool. Before 0175
+ * wineserver printed the warning for every later registration (243757 lines
+ * in one run); with it, once. Nodes a dead process leaves stay leaked; 0174
+ * only drains indexes whose last reference goes, which this does not show.
  * Run every mode under one wineserver with WINEMSYNC=1 from its first command.
  *   x86_64-w64-mingw32-gcc -O2 -Wall -Werror -o msync-wait-probe64.exe msync-wait-probe.c
  *   i686-w64-mingw32-gcc -O2 -Wall -Werror -o msync-wait-probe32.exe msync-wait-probe.c
  * A lost wake-up shows only as a hang: run it under an external timeout.
  * It does not separate the effect of each patch, and does not cover
  * single-object waits on semaphores or manual events, ReleaseMutex, mutex
- * abandonment, wait-all or alertable waits. */
+ * abandonment or wait-all. */
 #include <windows.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -136,18 +142,60 @@ static int run_multi(int wakeups)
     return 0;
 }
 
+#define EXIT_OBJS 63
+#define EXIT_THREADS 100
+
+static HANDLE exit_events[EXIT_OBJS];
+
+static DWORD WINAPI exit_waiter(void *arg)
+{
+    (void)arg;
+    WaitForMultipleObjectsEx(EXIT_OBJS, exit_events, FALSE, INFINITE, TRUE);
+    return 0;
+}
+
+static int run_exit_child(void)
+{
+    int i;
+    for (i = 0; i < EXIT_OBJS; i++) exit_events[i] = CreateEventW(NULL, TRUE, FALSE, NULL);
+    for (i = 0; i < EXIT_THREADS; i++) CloseHandle(CreateThread(NULL, 0, exit_waiter, NULL, 0, NULL));
+    Sleep(300);
+    ExitProcess(0);
+}
+
+static int run_exit(int rounds)
+{
+    char self[MAX_PATH], cmd[MAX_PATH + 32];
+    int i;
+    GetModuleFileNameA(NULL, self, sizeof(self));
+    snprintf(cmd, sizeof(cmd), "\"%s\" exit-child 1", self);
+    for (i = 0; i < rounds; i++)
+    {
+        STARTUPINFOA si = { sizeof(si) };
+        PROCESS_INFORMATION pi;
+        if (!CreateProcessA(NULL, cmd, NULL, NULL, FALSE, 0, NULL, NULL, &si, &pi)) return 2;
+        WaitForSingleObject(pi.hProcess, 30000);
+        CloseHandle(pi.hThread);
+        CloseHandle(pi.hProcess);
+    }
+    printf("exit rounds=%d\n", rounds);
+    return 0;
+}
+
 int main(int argc, char **argv)
 {
     int n;
     setvbuf(stdout, NULL, _IONBF, 0);
     if (argc != 3 || (n = atoi(argv[2])) <= 0)
     {
-        fprintf(stderr, "usage: msync-probe leak|ring|multi <count>\n");
+        fprintf(stderr, "usage: msync-probe leak|ring|multi|exit <count>\n");
         return 2;
     }
     if (!strcmp(argv[1], "leak")) return run_leak(n);
     if (!strcmp(argv[1], "ring")) return run_ring(n);
     if (!strcmp(argv[1], "multi")) return run_multi(n);
+    if (!strcmp(argv[1], "exit")) return run_exit(n);
+    if (!strcmp(argv[1], "exit-child")) return run_exit_child();
     fprintf(stderr, "unknown mode %s\n", argv[1]);
     return 2;
 }

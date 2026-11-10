@@ -1017,3 +1017,51 @@ Apple's libdispatch workers run Metal and D3DMetal code inside a Wine process on
 - `0168` with an online program.
 - `0169` end to end: no adapter description was read back through D3DMetal. The effect on the program it is meant for is unknown.
 - `0170` for `SIGTRAP` and `SIGFPE` on such threads, and with a real Metal or D3DMetal fault.
+
+<a id="boolean-syscall-args-msync-cleanup"></a>
+
+## BOOLEAN system call arguments and msync node cleanup
+
+Candidate patch set `cx26.3-wine11.0-runeon.35` adds `patches/upstream/0173` and `patches/runeon/0174`–`0175` after `0172`. All three change ABI-sensitive code (`ntdll`, `server`). On 2026-11-10 the maintainer approved fixing them on the condition that code review confirms a defect; this review confirmed each one (reproduced on `.34` for `0173` and `0175`, by code reading for `0174`). The approval covers these patches only and is no precedent. Nothing is keyed on a program.
+
+Four candidates were checked against the base source; online reports were leads only.
+
+### Taken
+
+| Patch | Source | Change | Defect in the base |
+|---|---|---|---|
+| `0173` | WineHQ `f43402cde3` (wine-11.1, Alexandre Julliard), x86_64 part | The 36 system calls with a `BOOLEAN` argument go through a stub that zero-extends it before jumping to the real function. Built only with clang on x86_64. | clang assumes the caller extended a `BOOLEAN` argument to 32 bits, which neither the x64 convention nor Windows requires; Windows reads only the low byte. In the `.34` `ntdll.so`, `NtQueryDirectoryObject()` tests `restart` with `testl %r8d`, and `NtDelayExecution()`, `NtContinue()`, `NtDuplicateToken()`, `NtQueryDefaultLocale()` and `NtSetDefaultLocale()` also test 32 bits. |
+| `0174` | Downstream | When an msync index drops to refcount 0, the pump runs `signal_all_internal()` on it, waking and freeing the nodes left on its list. | See below. |
+| `0175` | Downstream | The node pool exhaustion warning is written once per wineserver. | `pool_alloc()` wrote it to unbuffered stderr on every registration after the pool ran out, on the thread that serves all msync waits. |
+
+`0173` fixes the cases clang currently compiles with a 32-bit test, and also the others, because the code generation can change with any rebuild. A fix for only the functions that read 32 bits today would not hold. The stubs touch only the syscall table entries, so calls between Wine's own Unix modules are unchanged. The WoW64 path converts arguments in C and is not affected.
+
+### Adaptation
+
+`f43402cde3` adds the wrappers to `dlls/ntdll/unix/syscall.c`, which `d1415ab24e` (same day, wine-11.1) created by moving the syscall table out of `loader.c`. That move is not carried: the block goes right before the table in `loader.c`, with the `wine/asm.h` include. The ARM64 branch is left out. No later function in `loader.c` uses a redirected name; the file compiles to an object with clang (x86_64) against the patched headers. CrossOver's `GPT_ABI_WRAPPER` symbols, such as `NtCreateEvent`, check the return address; the stub jumps without a call, so that address is unchanged.
+
+### Upstream follow-ups
+
+Searched up to `78e52205d9` (wine-11.21-164): no commit names `f43402cde3`. `2a61baa185` adds win32u wrappers for ARM64 only and is not carried. `9e03f3324c` changes only includes in `syscall.c`. The test hunk `565091afa4` is replaced by `tests/syscall-boolean-args-probe.c`.
+
+### msync cleanup (`0174`, `0175`)
+
+msync is CrossOver-only, so WineHQ has nothing to backport. No branch of dappermint/winecx changes `destroy_all_internal()` or `pool_alloc()`, and CodeWeavers has published no source archive after 26.3.0 (26.3.1, 26.4.0 and 27.0.0 are absent).
+
+A thread killed while it waits, by `TerminateThread()` or when its process exits, never sends the unregister message, so its node stays on every object it waited on. Client references are not released for a dead process either, so most of these objects never reach refcount 0, and `0174` does not reclaim their nodes. A thread's alert object, used in every alertable wait, is different: only the server's thread object references it, and the client gets its index without a reference. When that thread object goes, the index reaches refcount 0 and `msync_alloc_shm()` reuses it first, with the dead thread's node still on its list. The node leaked, or woke whichever thread then had that id when the new object was signalled. `0174` drains the list when the refcount reaches 0. Waits on the next object at that index are registered on the same pump thread after this message. A live waiter holds a reference for the length of its wait, so it cannot be on the list. Waking instead of only freeing keeps it from hanging if one ever is; a woken thread rechecks its objects, as after any wake.
+
+`tests/msync-wait-probe.c` gains an `exit` mode. With 120 rounds, a child whose 100 threads wait alertably for 63 events and then exits, the `.34` runtime with `WINEMSYNC=1` in a fresh prefix ran out of nodes and wrote the warning 243757 times. The probe shows the general leak through killed waiters and the warning flood; it cannot show the alert-object share that `0174` reclaims.
+
+### Left out
+
+| Candidate | Decision |
+|---|---|
+| win32u `FT_FixedFromFIXED()` | The expression yields an `unsigned int`, so a negative MAT2 component becomes a large positive `FT_Fixed` on the 64-bit Unix side. WineHQ master still has it. Not reachable in this runtime: its only use is `FT_Matrix_Multiply()`, and the bundled FreeType reads matrix elements as 32-bit (`movslq`), which restores the sign. `GetGlyphOutlineW()` with eM22 = ±0.3125 and eM11 = -1 gave the same 34×13 box and 468-byte buffer on the `.34` runtime, x86_64 and i686. Revisit if the FreeType build changes. |
+| ntdll `get_full_path()` with a Unix path outside every drive | Already fixed by WineHQ `e8781e7c8d` (wine-11.14), carried in `0148`. |
+
+### Not verified yet
+
+- No build: `0173`–`0175` are checked by patch application and, for `0173`, an object compile of `loader.c`. A complete i386/x86_64 WoW64 build is required.
+- `tests/syscall-boolean-args-probe.c` on a build with `0173`; Wine's `ntdll` tests against `.34`.
+- `0174` has no probe; it is code review only.
+- `0175` on a build: the `exit` mode must write the warning once.
