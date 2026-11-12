@@ -1,0 +1,77 @@
+From: Runeon Contributors <dev@runeon.com>
+Subject: [PATCH] ntdll: Report host mappings outside the reserved areas as allocated on macOS x86_64.
+
+Windows only reports a range as MEM_FREE when it can be allocated.
+On macOS x86_64 the loader is linked at 0x200000000, just above the
+reserved low 8 GB, and Rosetta and the host allocator place their own
+mappings next to it. Wine has no view for them, and the reserved area
+check get_memory_region_size() does for i386 is not built for x86_64,
+so VirtualQuery() reported one free range from just above a view up to
+the next view, across the loader: 0x150000000 was free for about
+112 TB, yet reserving 3.4 GB there failed with ERROR_INVALID_ADDRESS
+while the same size at 0x300000000 succeeded. A program that picks a
+large block from VirtualQuery() results keeps choosing the occupied
+range.
+
+Outside the reserved areas, ask the host for the mapping at or above
+the address: a host mapping is reported as reserved and inaccessible,
+as i386 reports everything outside the reserved areas, and a free
+range ends at the next host mapping or reserved area. Queries inside a
+reserved area, the free part of the reserved low 8 GB, and allocation
+itself are unchanged.
+
+diff --git a/dlls/ntdll/unix/virtual.c b/dlls/ntdll/unix/virtual.c
+index fbfb7c4..aa4bbe1 100644
+--- a/dlls/ntdll/unix/virtual.c
++++ b/dlls/ntdll/unix/virtual.c
+@@ -5933,6 +5933,50 @@ static struct file_view *get_memory_region_size( char *base, char **region_start
+         }
+         *fake_reserved = TRUE;
+     }
++#elif defined(__APPLE__) && defined(__x86_64__)
++    {
++        struct reserved_area *area;
++        mach_vm_address_t address = (mach_vm_address_t)base;
++        mach_vm_size_t size;
++        vm_region_basic_info_data_64_t info;
++        mach_msg_type_number_t count = VM_REGION_BASIC_INFO_COUNT_64;
++        mach_port_t dummy_object_name = MACH_PORT_NULL;
++
++        /* Outside the reserved areas the host maps the loader, Rosetta and its
++         * own allocations, which have no view. Windows only reports free what
++         * can be allocated, so report a host mapping as allocated, as i386
++         * does for everything outside the reserved areas. */
++        LIST_FOR_EACH_ENTRY( area, &reserved_areas, struct reserved_area, entry )
++        {
++            char *area_start = area->base;
++            char *area_end = area_start + area->size;
++
++            if (area_end <= base)
++            {
++                if (*region_start < area_end) *region_start = area_end;
++                continue;
++            }
++            if (area_start <= base)
++            {
++                if (area_end < *region_end) *region_end = area_end;
++                return NULL;
++            }
++            if (area_start < *region_end) *region_end = area_start;
++            break;
++        }
++
++        if (mach_vm_region( mach_task_self(), &address, &size, VM_REGION_BASIC_INFO_64,
++                            (vm_region_info_t)&info, &count, &dummy_object_name ) != KERN_SUCCESS)
++            return NULL;
++        if ((char *)address > base)
++        {
++            if ((char *)address < *region_end) *region_end = (char *)address;
++            return NULL;
++        }
++        if ((char *)address > *region_start) *region_start = (char *)address;
++        if ((char *)address + size < *region_end) *region_end = (char *)address + size;
++        *fake_reserved = TRUE;
++    }
+ #endif
+     return NULL;
+ }

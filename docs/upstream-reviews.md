@@ -1065,3 +1065,22 @@ A thread killed while it waits, by `TerminateThread()` or when its process exits
 - `tests/syscall-boolean-args-probe.c` on a build with `0173`; Wine's `ntdll` tests against `.34`.
 - `0174` has no probe; it is code review only.
 - `0175` on a build: the `exit` mode must write the warning once.
+
+
+<a id="host-mapping-query"></a>
+
+## Host mappings in macOS x86_64 memory queries
+
+Candidate patch set `cx26.3-wine11.0-runeon.36` adds `patches/runeon/0176` after `0175`. It changes `ntdll`, which is ABI-sensitive; the maintainer approved it individually on 2026-11-12. It is a downstream fix; no WineHQ commit addresses it, and its shape is meant to be submittable upstream.
+
+### Defect in the base
+
+`get_memory_region_size()` in `dlls/ntdll/unix/virtual.c` sizes a free range only from Wine's views. The check that treats space outside the reserved areas as allocated is built for i386 only. On macOS x86_64 the loader is linked at `0x200000000`, directly above the reserved low 8 GB, and Rosetta and the host allocator map next to it, all without a view. An independent probe on `.35` saw `VirtualQuery(0x150000000)` report one free range of about 112 TB, `0x200000000` reported free, and `VirtualAlloc(0x150000000, 0xd5c00000, MEM_RESERVE)` fail with `ERROR_INVALID_ADDRESS` while the same size at `0x300000000` succeeded. A program that picks a large block from the query results keeps choosing the occupied range.
+
+### Change
+
+Outside the reserved areas, the query asks the host for the mapping at or above the address with `mach_vm_region()`, as `reserve_area()` already does. A host mapping is reported `MEM_RESERVE`/`PAGE_NOACCESS` through the existing `fake_reserved` path; a free range ends at the next host mapping or reserved area. Inside a reserved area the free range ends at the area's end. Allocation, the free part of the reserved low 8 GB and the unix-call and server protocols are unchanged; no process is matched.
+
+### Not verified yet
+
+`tests/host-mapping-query-probe.c` fails on `.35` (loader reported free, a 4 GB reserve at the reported free start fails) and must pass on a complete WoW64 build of `.36`. Whether programs that scan for large blocks then run is checked separately.
