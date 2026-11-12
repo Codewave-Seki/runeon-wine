@@ -5,7 +5,8 @@
  * that every free range accepts a reservation of its full size (capped) and
  * that the loader address is not reported free; at least one free range must
  * take a full RESERVE_CAP reservation. A MemoryRegionInformation query at the
- * loader with a buffer that ends before CommitSize must not write past it.
+ * loader with a buffer that ends before CommitSize must succeed and not write
+ * past it.
  * It does not cover WoW64 32-bit processes.
  *
  * Build: x86_64-w64-mingw32-gcc -O1 -o host-mapping-query-probe.exe host-mapping-query-probe.c -lntdll
@@ -109,6 +110,12 @@ int main( void )
     status = NtQueryVirtualMemory( GetCurrentProcess(), (void *)LOADER, MEMORY_REGION_INFORMATION_CLASS,
                                    region, COMMIT_SIZE_OFFSET, &returned );
     printf( "region info len %u status %#lx\n", COMMIT_SIZE_OFFSET, (unsigned long)status );
+    /* only a successful query proves the reserved branch ran */
+    if (status)
+    {
+        printf( "FAIL region info at the loader failed\n" );
+        failures++;
+    }
     for (i = COMMIT_SIZE_OFFSET; i < sizeof(region); i++)
         if (region[i] != 0xa5)
         {

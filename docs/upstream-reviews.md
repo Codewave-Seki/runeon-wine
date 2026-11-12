@@ -1083,7 +1083,7 @@ Outside the reserved areas, the query asks the host for the mapping at or above 
 
 ### Verification
 
-`tests/host-mapping-query-probe.c` fails on `.35` (the loader at `0x200000000` is reported free, and a 4 GB reserve at `0x150000000` fails) and passes on a complete WoW64 build of `.36`: `0x150000000` is free up to `0x200000000`, the host mappings above it are reserved, and a 4 GB reserve succeeds from the first 64K boundary past them. The probe only walks `0x150000000`–`0x400000000`, and WoW64 32-bit processes are not covered. After a later review it also fails on a failed query during the walk, requires one full 4 GB reservation, and checks that a 24-byte `MemoryRegionInformation` query at the loader writes nothing past the buffer; that version has not been run on a `.36` build yet.
+`tests/host-mapping-query-probe.c` fails on `.35` (the loader at `0x200000000` is reported free, and a 4 GB reserve at `0x150000000` fails) and passes on a complete WoW64 build of `.36`: `0x150000000` is free up to `0x200000000`, the host mappings above it are reserved, and a 4 GB reserve succeeds from the first 64K boundary past them. The probe only walks `0x150000000`–`0x400000000`, and WoW64 32-bit processes are not covered. After a later review it also fails on a failed query during the walk, requires one full 4 GB reservation, and checks that a 24-byte `MemoryRegionInformation` query at the loader succeeds and writes nothing past the buffer; that version has not been run on a `.36` build yet.
 
 ### Not verified yet
 
