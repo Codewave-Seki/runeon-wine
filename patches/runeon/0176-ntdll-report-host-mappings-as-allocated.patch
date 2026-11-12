@@ -21,8 +21,13 @@ area only the end of a free range changes: it stops at the area's end
 instead of running on to the next view. State and protection inside
 the reserved areas, and allocation itself, are unchanged.
 
+A host mapping now reaches the reserved branch of the
+MemoryRegionInformation query, which wrote CommitSize even when the
+caller's buffer ends before it; write it only when the buffer holds
+it, as the view branch already does.
+
 diff --git a/dlls/ntdll/unix/virtual.c b/dlls/ntdll/unix/virtual.c
-index fbfb7c4..aa4bbe1 100644
+index fbfb7c4..214ab39 100644
 --- a/dlls/ntdll/unix/virtual.c
 +++ b/dlls/ntdll/unix/virtual.c
 @@ -5933,6 +5933,50 @@ static struct file_view *get_memory_region_size( char *base, char **region_start
@@ -76,3 +81,13 @@ index fbfb7c4..aa4bbe1 100644
  #endif
      return NULL;
  }
+@@ -6097,7 +6141,8 @@ static unsigned int get_memory_region_info( HANDLE process, LPCVOID addr, MEMORY
+         info->AllocationProtect = PAGE_NOACCESS;
+         info->RegionType = 0; /* FIXME */
+         info->RegionSize = region_end - region_start;
+-        info->CommitSize = 0;
++        if (len >= FIELD_OFFSET(MEMORY_REGION_INFORMATION, PartitionId))
++            info->CommitSize = 0;
+     }
+ 
+     server_leave_uninterrupted_section( &virtual_mutex, &sigset );

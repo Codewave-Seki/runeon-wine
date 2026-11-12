@@ -4030,12 +4030,12 @@
     {
       "order": 206,
       "path": "patches/runeon/0176-ntdll-report-host-mappings-as-allocated.patch",
-      "sha256": "7a1803adf8df06d34d1f90b7bef1d768c93074023a92a6abfbc2e3ebc4194085",
+      "sha256": "a15144a3246e8368c1e800c6d2003bf096f6371a824daf7a79720d53dca5ba2b",
       "kind": "runeon-product",
       "status": "active",
       "risk": "medium",
-      "summary": "On macOS x86_64, NtQueryVirtualMemory() reports a host mapping outside the reserved areas (the loader at 0x200000000, Rosetta and host allocations) as reserved and inaccessible, and ends a free range at the next host mapping or reserved area, as Windows only reports free what can be allocated and as i386 already does for everything outside the reserved areas. Previously 0x150000000 was reported free for about 112 TB although a 3.4 GB reservation there failed. Inside a reserved area only the end of a free range changes (it stops at the area's end); state and protection there, and allocation, are unchanged. Not opt-in: it corrects documented VirtualQuery semantics for every process, without matching any process. ntdll is ABI-sensitive; the maintainer approved this change individually on 2026-11-12.",
-      "testStrategy": "tests/host-mapping-query-probe.c on the built runtime: 0x200000000 must not report MEM_FREE, and every range reported MEM_FREE on the walk from 0x150000000 must accept a MEM_RESERVE from its first 64K boundary, capped at 4 GB. Fails on .35, passes on a complete WoW64 build of .36.",
+      "summary": "On macOS x86_64, NtQueryVirtualMemory() reports a host mapping outside the reserved areas (the loader at 0x200000000, Rosetta and host allocations) as reserved and inaccessible, and ends a free range at the next host mapping or reserved area, as Windows only reports free what can be allocated and as i386 already does for everything outside the reserved areas. Previously 0x150000000 was reported free for about 112 TB although a 3.4 GB reservation there failed. Inside a reserved area only the end of a free range changes (it stops at the area's end); state and protection there, and allocation, are unchanged. A host mapping now reaches the reserved branch of the MemoryRegionInformation query, which wrote CommitSize past a caller buffer that ends before it; it is written only when the buffer holds it, as the view branch does. Not opt-in: it corrects documented VirtualQuery semantics for every process, without matching any process. ntdll is ABI-sensitive; the maintainer approved this change individually on 2026-11-12.",
+      "testStrategy": "tests/host-mapping-query-probe.c on the built runtime: 0x200000000 must not report MEM_FREE, a failed query during the walk from 0x150000000 fails, every range reported MEM_FREE must accept a MEM_RESERVE from its first 64K boundary capped at 4 GB, at least one must take the full 4 GB, and a 24-byte MemoryRegionInformation query at 0x200000000 must not write past its buffer. The walk and reserve checks fail on .35; the short-buffer check is not yet run on a .36 build.",
       "verification": [
         {
           "path": "dlls/ntdll/unix/virtual.c",
