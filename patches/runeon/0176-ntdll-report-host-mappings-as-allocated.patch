@@ -16,9 +16,10 @@ range.
 Outside the reserved areas, ask the host for the mapping at or above
 the address: a host mapping is reported as reserved and inaccessible,
 as i386 reports everything outside the reserved areas, and a free
-range ends at the next host mapping or reserved area. Queries inside a
-reserved area, the free part of the reserved low 8 GB, and allocation
-itself are unchanged.
+range ends at the next host mapping or reserved area. Inside a reserved
+area only the end of a free range changes: it stops at the area's end
+instead of running on to the next view. State and protection inside
+the reserved areas, and allocation itself, are unchanged.
 
 diff --git a/dlls/ntdll/unix/virtual.c b/dlls/ntdll/unix/virtual.c
 index fbfb7c4..aa4bbe1 100644

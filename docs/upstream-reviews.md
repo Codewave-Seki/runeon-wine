@@ -1079,8 +1079,12 @@ Candidate patch set `cx26.3-wine11.0-runeon.36` adds `patches/runeon/0176` after
 
 ### Change
 
-Outside the reserved areas, the query asks the host for the mapping at or above the address with `mach_vm_region()`, as `reserve_area()` already does. A host mapping is reported `MEM_RESERVE`/`PAGE_NOACCESS` through the existing `fake_reserved` path; a free range ends at the next host mapping or reserved area. Inside a reserved area the free range ends at the area's end. Allocation, the free part of the reserved low 8 GB and the unix-call and server protocols are unchanged; no process is matched.
+Outside the reserved areas, the query asks the host for the mapping at or above the address with `mach_vm_region()`, as `reserve_area()` already does. A host mapping is reported `MEM_RESERVE`/`PAGE_NOACCESS` through the existing `fake_reserved` path; a free range ends at the next host mapping or reserved area. Inside a reserved area only the end of a free range changes: it stops at the area's end instead of running on to the next view; state and protection there stay as before. Allocation and the unix-call and server protocols are unchanged; no process is matched. A query at address 0 now reports the host's page-zero mapping as reserved where Windows reports it free; a walk from 0 still advances.
+
+### Verification
+
+`tests/host-mapping-query-probe.c` fails on `.35` (the loader at `0x200000000` is reported free, and a 4 GB reserve at `0x150000000` fails) and passes on a complete WoW64 build of `.36`: `0x150000000` is free up to `0x200000000`, the host mappings above it are reserved, and a 4 GB reserve succeeds from the first 64K boundary past them. The probe only walks `0x150000000`–`0x400000000`; WoW64 32-bit processes and the `MemoryRegionInformation` path are not covered.
 
 ### Not verified yet
 
-`tests/host-mapping-query-probe.c` fails on `.35` (loader reported free, a 4 GB reserve at the reported free start fails) and must pass on a complete WoW64 build of `.36`. Whether programs that scan for large blocks then run is checked separately.
+Whether programs that scan for a large block then run.

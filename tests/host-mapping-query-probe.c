@@ -3,7 +3,8 @@
  * On macOS x86_64 the loader sits at 0x200000000 with Rosetta and host
  * allocations above it; this walks the regions from 0x150000000 and checks
  * that every free range accepts a reservation of its full size (capped) and
- * that the loader address is not reported free.
+ * that the loader address is not reported free. It does not cover WoW64
+ * 32-bit processes or the MemoryRegionInformation query.
  *
  * Build: x86_64-w64-mingw32-gcc -O1 -o host-mapping-query-probe.exe host-mapping-query-probe.c
  * Exit code: 0 pass, 1 fail.

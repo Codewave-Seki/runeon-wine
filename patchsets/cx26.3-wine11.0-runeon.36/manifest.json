@@ -4030,12 +4030,12 @@
     {
       "order": 206,
       "path": "patches/runeon/0176-ntdll-report-host-mappings-as-allocated.patch",
-      "sha256": "98bd850192bb4f2312d4dce03fbf0096bdc4830e9bee4f271f02273cafb1617c",
+      "sha256": "7a1803adf8df06d34d1f90b7bef1d768c93074023a92a6abfbc2e3ebc4194085",
       "kind": "runeon-product",
       "status": "active",
       "risk": "medium",
-      "summary": "On macOS x86_64, NtQueryVirtualMemory() reports a host mapping outside the reserved areas (the loader at 0x200000000, Rosetta and host allocations) as reserved and inaccessible, and ends a free range at the next host mapping or reserved area, as Windows only reports free what can be allocated and as i386 already does for everything outside the reserved areas. Previously 0x150000000 was reported free for about 112 TB although a 3.4 GB reservation there failed. Queries inside a reserved area and allocation are unchanged. Not opt-in: it corrects documented VirtualQuery semantics for every process, without matching any process. ntdll is ABI-sensitive; the maintainer approved this change individually on 2026-11-12.",
-      "testStrategy": "tests/host-mapping-query-probe.c on the built runtime: the region reported free at 0x150000000 must end at or below 0x200000000, 0x200000000 must report MEM_RESERVE, and every range reported MEM_FREE on the walk must accept a MEM_RESERVE of its full size. A complete WoW64 build is required before tagging.",
+      "summary": "On macOS x86_64, NtQueryVirtualMemory() reports a host mapping outside the reserved areas (the loader at 0x200000000, Rosetta and host allocations) as reserved and inaccessible, and ends a free range at the next host mapping or reserved area, as Windows only reports free what can be allocated and as i386 already does for everything outside the reserved areas. Previously 0x150000000 was reported free for about 112 TB although a 3.4 GB reservation there failed. Inside a reserved area only the end of a free range changes (it stops at the area's end); state and protection there, and allocation, are unchanged. Not opt-in: it corrects documented VirtualQuery semantics for every process, without matching any process. ntdll is ABI-sensitive; the maintainer approved this change individually on 2026-11-12.",
+      "testStrategy": "tests/host-mapping-query-probe.c on the built runtime: 0x200000000 must not report MEM_FREE, and every range reported MEM_FREE on the walk from 0x150000000 must accept a MEM_RESERVE from its first 64K boundary, capped at 4 GB. Fails on .35, passes on a complete WoW64 build of .36.",
       "verification": [
         {
           "path": "dlls/ntdll/unix/virtual.c",
