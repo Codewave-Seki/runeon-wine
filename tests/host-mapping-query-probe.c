@@ -55,19 +55,28 @@ int main( void )
                 (unsigned long long)((ULONG_PTR)mbi.BaseAddress + mbi.RegionSize), state_name( mbi.State ) );
         if (mbi.State == MEM_FREE)
         {
+            /* a reservation starts on a 64K boundary, so test from the first one in the range */
+            ULONG_PTR start = ((ULONG_PTR)mbi.BaseAddress + 0xffff) & ~(ULONG_PTR)0xffff;
+            ULONG_PTR end = (ULONG_PTR)mbi.BaseAddress + mbi.RegionSize;
+
             free_ranges++;
-            size = mbi.RegionSize < RESERVE_CAP ? mbi.RegionSize : RESERVE_CAP;
+            size = end > start ? end - start : 0;
+            if (size > RESERVE_CAP) size = RESERVE_CAP;
             size &= ~(SIZE_T)0xffff;
-            if (size && ((ULONG_PTR)mbi.BaseAddress & 0xffff) == 0)
+            if (size)
             {
-                p = VirtualAlloc( mbi.BaseAddress, size, MEM_RESERVE, PAGE_NOACCESS );
+                p = VirtualAlloc( (void *)start, size, MEM_RESERVE, PAGE_NOACCESS );
                 if (!p)
                 {
                     printf( "FAIL reserve %#llx size %#llx err %lu\n",
-                            (unsigned long long)(ULONG_PTR)mbi.BaseAddress, (unsigned long long)size, GetLastError() );
+                            (unsigned long long)start, (unsigned long long)size, GetLastError() );
                     failures++;
                 }
-                else VirtualFree( p, 0, MEM_RELEASE );
+                else
+                {
+                    printf( "  reserved %#llx size %#llx\n", (unsigned long long)start, (unsigned long long)size );
+                    VirtualFree( p, 0, MEM_RELEASE );
+                }
             }
         }
         addr = (ULONG_PTR)mbi.BaseAddress + mbi.RegionSize;
