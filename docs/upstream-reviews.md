@@ -1096,6 +1096,6 @@ Whether programs that scan for a large block then run.
 
 Patch set `cx26.3-wine11.0-runeon.36` also adds `patches/runeon/0177` after `0176`. It changes the loader, which is ABI-sensitive; the maintainer approved it individually on 2026-11-12. It is product branding, not a Wine fix, and is not meant for upstream.
 
-CrossOver embeds `CFBundleName` "CrossOver-Hosted Application" in the loader's `__info_plist` section (Hack 10913), and `apple_override_bundle_name()` (Hack 13438) rewrites it from `WINEPRELOADERAPPNAME` or from `argv[1]`. Programs started from Steam kept the CrossOver name. The embedded name becomes Runeon, the `argv[1]` branch is removed, and an explicit `WINEPRELOADERAPPNAME` still applies. `CFBundleIdentifier` stays `com.codeweavers.CrossOver.wineloader`: Metal keys its shader cache directory on it.
+CrossOver embeds `CFBundleName` "CrossOver-Hosted Application" in the loader's `__info_plist` section (Hack 10913), and `apple_override_bundle_name()` (Hack 13438) rewrites it in place from `WINEPRELOADERAPPNAME`, which ntdll's `replace_wineloader_path_with_link()` sets from the exe name with the preloader or when `WINEDLLPATH` is set, or from `argv[1]`. The embedded name becomes Runeon and the rewrite, its call and its includes are removed, so every program shows Runeon. `CFBundleIdentifier` stays `com.codeweavers.CrossOver.wineloader`: Metal keys its shader cache directory on it.
 
-The loader builds without warnings and its `__info_plist` section carries the new name.
+The loader builds without warnings and its `__info_plist` section carries the new name. Not checked at run time yet; why programs started from Steam kept the CrossOver name before, rather than their exe name, was not established.
