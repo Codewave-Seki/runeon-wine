@@ -159,3 +159,4 @@ patches/upstream/0173-wine-11.1-ntdll-syscall-boolean-wrappers.patch
 patches/runeon/0174-msync-server-drain-waiters-on-destroy.patch
 patches/runeon/0175-msync-server-warn-once-pool-exhausted.patch
 patches/runeon/0176-ntdll-report-host-mappings-as-allocated.patch
+patches/runeon/0177-loader-name-the-application-menu-runeon.patch

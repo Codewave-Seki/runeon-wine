@@ -4042,6 +4042,26 @@
           "contains": "own allocations, which have no view. Windows only reports free what"
         }
       ]
+    },
+    {
+      "order": 207,
+      "path": "patches/runeon/0177-loader-name-the-application-menu-runeon.patch",
+      "sha256": "d18713b478dbef27fc136d493cfd24a6733c791ad6ae2b83a048964a3c7cae5f",
+      "kind": "runeon-product",
+      "status": "active",
+      "risk": "low",
+      "summary": "Product branding: the bundle name embedded in the macOS loader's Info.plist becomes Runeon instead of CrossOver-Hosted Application, and the loader no longer renames the application menu after argv[1]; only an explicit WINEPRELOADERAPPNAME still renames it. Programs started from Steam showed the CrossOver name in the menu bar. CFBundleIdentifier is unchanged because Metal names its shader cache directory after it. Not opt-in: it is the product's name for every program. The loader is ABI-sensitive; the maintainer approved this change individually on 2026-11-12.",
+      "testStrategy": "The built loader's __TEXT,__info_plist section carries CFBundleName Runeon and the CrossOver bundle identifier; a game and Steam started through the product show Runeon in the menu bar.",
+      "verification": [
+        {
+          "path": "loader/wine_info.plist.in",
+          "contains": "<string>Runeon</string><!-- CrossOver Hack 10913 -->"
+        },
+        {
+          "path": "loader/main.c",
+          "contains": "Every program keeps the product name in the application menu unless"
+        }
+      ]
     }
   ],
   "targetedReview": {

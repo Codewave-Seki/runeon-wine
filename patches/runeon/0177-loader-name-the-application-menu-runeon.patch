@@ -1,0 +1,66 @@
+From: Runeon Contributors <dev@runeon.com>
+Subject: [PATCH] loader: Name the application menu Runeon on macOS.
+
+A product branding change, not a Wine fix. CrossOver names the macOS
+application menu "CrossOver-Hosted Application" through the bundle
+name in the Info.plist embedded in the loader, and renames it after
+the program from argv[1] when it can. Programs started from Steam kept
+the CrossOver name, so the menu bar named a product the user is not
+running.
+
+Name the embedded bundle Runeon, and keep it for every program unless
+the caller sets WINEPRELOADERAPPNAME explicitly. The bundle identifier
+is unchanged: Metal names its shader cache directory after it, and a
+new identifier would discard every user's compiled shaders.
+
+diff --git a/loader/main.c b/loader/main.c
+index 827e070..d7aa13a 100644
+--- a/loader/main.c
++++ b/loader/main.c
+@@ -243,7 +243,9 @@ static void apple_override_bundle_name( int argc, char *argv[] )
+ 
+     unsetenv("WINEPRELOADERAPPNAME");
+ 
+-    if (!new_bundle_name && argc < 2)
++    /* Every program keeps the product name in the application menu unless
++     * the caller names one explicitly. */
++    if (!new_bundle_name)
+         return;
+ 
+     info_plist = (char *)getsectiondata(_NSGetMachExecuteHeader(), "__TEXT", "__info_plist", &remaining);
+@@ -268,21 +270,7 @@ static void apple_override_bundle_name( int argc, char *argv[] )
+         !memcmp(bundle_name + bundle_name_len + suffix_len, padding, padding_len))
+         max_bundle_name_len += padding_len;
+ 
+-    if (!new_bundle_name)
+-    {
+-        new_bundle_name = argv[1];
+-        if ((p = strrchr(new_bundle_name, '\\'))) new_bundle_name = p + 1;
+-        if ((p = strrchr(new_bundle_name, '/'))) new_bundle_name = p + 1;
+-        if (strspn(new_bundle_name, "0123456789abcdefABCDEF") == 32 &&
+-            new_bundle_name[32] == '.')
+-            new_bundle_name += 33;
+-        if ((p = strrchr(new_bundle_name, '.')) && p != new_bundle_name)
+-            new_bundle_name_len = p - new_bundle_name;
+-        else
+-            new_bundle_name_len = strlen(new_bundle_name);
+-    }
+-    else
+-        new_bundle_name_len = strlen(new_bundle_name);
++    new_bundle_name_len = strlen(new_bundle_name);
+ 
+     if (!new_bundle_name_len)
+         return;
+diff --git a/loader/wine_info.plist.in b/loader/wine_info.plist.in
+index beb1c33..6a8d8ca 100644
+--- a/loader/wine_info.plist.in
++++ b/loader/wine_info.plist.in
+@@ -13,7 +13,7 @@
+     <key>CFBundleInfoDictionaryVersion</key>
+     <string>6.0</string>
+     <key>CFBundleName</key>
+-    <string>CrossOver-Hosted Application</string><!-- CrossOver Hack 10913 -->
++    <string>Runeon</string><!-- CrossOver Hack 10913 -->
+     <key>CFBundlePackageType</key>
+     <string>APPL</string>
+     <key>CFBundleShortVersionString</key>
