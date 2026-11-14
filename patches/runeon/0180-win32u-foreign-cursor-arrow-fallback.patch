@@ -1,0 +1,93 @@
+From: Runeon Contributors <dev@runeon.com>
+Subject: [PATCH] win32u: Show the arrow for cursors owned by another process.
+
+Opt-in through RUNEON_FOREIGN_WINDOW_SURFACE=1, the switch of the
+foreign window DC surface; without it, nothing changes.
+
+A window hosted in a window of another process (a WebView2 browser
+window inside an application window) shares the host thread's input,
+so the cursor it sets is shown by the host process, which owns the
+top-level window under the pointer. The cursor object belongs to the
+hosted process: the driver cannot read it, logs "GetIconInfoExW
+failed" and keeps the previous cursor, which may be none. Windows shows
+the hosted window's cursor.
+
+With the opt-in, process_wine_setcursor() shows the arrow for a cursor
+handle owned by another process, through a local stand-in carrying the
+user32 arrow's module and resource id, which winemac.drv maps to its
+system arrow. Only foreign handles are affected; a local cursor the
+driver fails to read behaves as unpatched. The next patch shows the
+cursor's own image and keeps this arrow as its fallback.
+
+diff --git a/dlls/win32u/cursoricon.c b/dlls/win32u/cursoricon.c
+--- a/dlls/win32u/cursoricon.c
++++ b/dlls/win32u/cursoricon.c
+@@ -74,9 +74,68 @@ static struct cursoricon_object *get_icon_ptr( HICON handle )
+     return obj;
+ }
+ 
++static BOOL free_icon_handle( HICON handle );
++
++/* Runeon, opt-in through RUNEON_FOREIGN_WINDOW_SURFACE=1 (foreign_window_surface_enabled()).
++ *
++ * The cursor of a window hosted in a window of another process (e.g. a WebView2 browser
++ * window inside an application window) is set by the hosted process, but the server asks
++ * this process, which owns the top-level window under the pointer, to show it. The cursor
++ * object lives in the other process, so the driver cannot read it and keeps whatever cursor
++ * was shown before, which may be none; Windows shows the hosted window's cursor. With the
++ * opt-in, such a cursor is shown as the arrow when no copy of it can be had. Cursors of this
++ * process are unchanged. */
++static BOOL is_foreign_cursor( HCURSOR handle )
++{
++    struct cursoricon_object *obj = get_user_handle_ptr( handle, NTUSER_OBJ_ICON );
++
++    if (obj == OBJ_OTHER_PROCESS) return TRUE;
++    if (obj) release_user_handle_ptr( obj );
++    return FALSE;
++}
++
++/* A local stand-in that the driver maps to its system arrow through the module and resource
++ * of the user32 arrow (winemac.drv: user32.dll, OCR_NORMAL); its 1x1 image is never shown
++ * there. Created once and kept for the life of the process. */
++static HCURSOR get_foreign_arrow(void)
++{
++    static const WCHAR user32W[] = {'u','s','e','r','3','2','.','d','l','l'};
++    static HCURSOR arrow;
++    struct cursoricon_frame frame = { .width = 1, .height = 1 };
++    struct cursoricon_desc desc = { .frames = &frame };
++    UNICODE_STRING module = { sizeof(user32W), sizeof(user32W), (WCHAR *)user32W };
++    UNICODE_STRING res_name = { 0, 0, MAKEINTRESOURCEW( 32512 ) /* OCR_NORMAL */ };
++    HCURSOR handle;
++
++    if (arrow) return arrow;
++    if (!(frame.mask = NtGdiCreateBitmap( 1, 2, 1, 1, NULL ))) return 0;
++    if (!(handle = alloc_cursoricon_handle( FALSE )))
++    {
++        NtGdiDeleteObjectApp( frame.mask );
++        return 0;
++    }
++    if (!NtUserSetCursorIconData( handle, &module, &res_name, &desc ))
++    {
++        NtGdiDeleteObjectApp( frame.mask );
++        free_icon_handle( handle );
++        return 0;
++    }
++    /* another thread may have won the race; keep one */
++    if (InterlockedCompareExchangePointer( (void **)&arrow, handle, NULL )) free_icon_handle( handle );
++    return arrow;
++}
++
+ BOOL process_wine_setcursor( HWND hwnd, HWND window, HCURSOR handle )
+ {
++    HCURSOR arrow;
++
+     TRACE( "hwnd %p, window %p, hcursor %p\n", hwnd, window, handle );
++
++    if (handle && foreign_window_surface_enabled() && is_foreign_cursor( handle ) && (arrow = get_foreign_arrow()))
++    {
++        TRACE( "foreign cursor %p: showing the arrow %p\n", handle, arrow );
++        handle = arrow;
++    }
+     user_driver->pSetCursor( window, handle );
+     return TRUE;
+ }

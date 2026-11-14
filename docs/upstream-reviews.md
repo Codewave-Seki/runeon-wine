@@ -1099,3 +1099,59 @@ Patch set `cx26.3-wine11.0-runeon.36` also adds `patches/runeon/0177` after `017
 CrossOver embeds `CFBundleName` "CrossOver-Hosted Application" in the loader's `__info_plist` section (Hack 10913), and `apple_override_bundle_name()` (Hack 13438) rewrites it in place from `WINEPRELOADERAPPNAME`, which ntdll's `replace_wineloader_path_with_link()` sets from the exe name with the preloader or when `WINEDLLPATH` is set, or from `argv[1]`. The embedded name becomes Runeon and the rewrite, its call and its includes are removed, so every program shows Runeon. `CFBundleIdentifier` stays `com.codeweavers.CrossOver.wineloader`: Metal keys its shader cache directory on it.
 
 The loader builds without warnings and its `__info_plist` section carries the new name. Not checked at run time yet; why programs started from Steam kept the CrossOver name before, rather than their exe name, was not established.
+
+
+<a id="shm-surface-flush-under-lock"></a>
+
+## Shared-memory surface flush under the USER lock
+
+Candidate patch set `cx26.3-wine11.0-runeon.37` adds `patches/runeon/0178` after `0177`. It changes `win32u`, which is ABI-sensitive, and CrossOver's own Hack 23950; the maintainer approved it individually on 2026-11-14. The approval covers this patch alone and is not a precedent. It is a downstream fix, not a WineHQ backport: upstream Wine has no shared-memory surface.
+
+### Defect in the base
+
+Hack 23950 gives a window whose parent belongs to another process a shared-memory surface. `shm_surface_flush()` in `dlls/win32u/dce.c` delivers it by sending `WM_WINE_FLUSHSHMSURFACE` to the parent. `apply_window_pos()` in `dlls/win32u/window.c` holds the window pointer, and with it the USER lock, while it calls `update_surface_region()`, which reaches `window_surface_set_shape()` and then `window_surface_flush()`. Sending from there hits `user_check_not_lock()` and the process aborts. A windowed WebView2 browser process takes this path when it reparents a window into the one it hosts in the application's window.
+
+### Change
+
+`shm_surface_flush()` returns failure when the calling thread holds the USER lock, with a TRACE. `window_surface_flush()` only resets the dirty bounds after a successful flush, so they are kept. Reading the source, the surface is registered in the flush list after `apply_window_pos()` releases the lock, and the message loop's wait and idle paths call `flush_window_surfaces()` without the lock. A small `user_lock_held()` helper reads the existing lock-owner record; locking itself is unchanged.
+
+### Verification
+
+`tests/shm-surface-lock-probe.c` reproduces the abort on `.36`: the child process exits with `EXCEPTION_WINE_ASSERTION` right after the reparent, while the earlier unlocked flush still delivers its content. On a complete local i386/x86_64 WoW64 build of `.37` it exits 0: the blue drawn before the reparent reaches the parent without further drawing.
+
+### Not verified yet
+
+A windowed WebView2 game presenting and updating was checked only together with `0179`–`0181` (see the next section). If the thread that owns the window stops pumping messages, nothing is flushed until it does, as before.
+
+
+<a id="foreign-window-surface"></a>
+
+## Foreign window DC surface and cursors
+
+Candidate patch set `cx26.3-wine11.0-runeon.37` adds `patches/runeon/0179`, `0180` and `0181` after `0178`. They change `win32u`, which is ABI-sensitive, and `0179` builds on CrossOver's own Hack 23950. The maintainer approved each of the three patches individually on 2026-11-14; the approvals cover these patches alone, are not a precedent, and were not derived from the approval of `0178`. They are downstream changes, not WineHQ backports: upstream Wine has no shared-memory surface. All three are opt-in through `RUNEON_FOREIGN_WINDOW_SURFACE=1`, which the caller sets for every process of a session; without it behaviour is that of the base, and the receiving side of each new request does not answer.
+
+### Defects in the base
+
+- `update_visible_region()` in `dlls/win32u/dce.c` takes a surface only from a top window of the current process. A DC another process obtains for a window hosted inside a third process's window gets an empty device rect, and its output is lost; on Windows it draws into the window. A Chromium GPU process in software compositing draws a WebView2 browser window this way, with `GetDC()`, `BitBlt()` and `ReleaseDC()`.
+- A cursor set by a window hosted in another process's window is shown by the host process. `macdrv_SetCursor()` cannot read a cursor object of another process, logs `GetIconInfoExW failed` and keeps the previous cursor, which may be none; Windows shows the hosted window's cursor.
+
+### Change
+
+- `0179`: such a cache DC of a client area gets a per-DC Hack 23950 shared-memory surface. The top window's process first copies the window's current pixels into it (`WM_WINE_FLUSHSHMSURFACE` with a non-zero `wparam`), and `ReleaseDC()` flushes it to that process after dropping the USER lock.
+- `0180`: a cursor handle of another process is shown as the arrow, through a local stand-in that winemac.drv maps to its system arrow.
+- `0181`: the host process asks the thread that created the cursor for a static snapshot with the internal `WM_WINE_CURSORSNAPSHOT` message, validates it against the bytes received and shows a local copy; `0180` stays the fallback.
+
+### Limits
+
+- `0179` creates and seeds a new section for every `GetDC()` and flushes it on every `ReleaseDC()`, each round trip waiting up to 500 ms; nothing is cached, because no cost has been measured that would justify it.
+- `0179` writes back 8-pixel aligned dirty bounds from the seeded copy, so pixels another process changes between the seed and the flush can be reverted.
+- `0179` seeds only the top-down 32 bpp layout its sender creates; any other header from the other process is refused.
+- `0181` covers static cursors up to 256x256, in 32 bpp or monochrome, and waits up to 200 ms for the owner; animated cursors, other formats and owners that do not answer get the arrow. The last four handles that gave no snapshot are not pulled again. The hotspot is not DPI-scaled.
+
+### Verification
+
+On a complete local i386/x86_64 WoW64 build of `.37`, `tests/foreign-dc-probe.c` exits 0 in `fill`, `preserve` and `crossframe` modes with the opt-in and 1 in all three without it, and 1 in `painteronly` mode, where only the drawing process has the opt-in; `bench` measured 3.2 ms on average per 1280x720 `GetDC()`/`BitBlt()`/`ReleaseDC()` round trip in the drawing process. With `+cursor`, `tests/foreign-cursor-probe.c` gives the trace counts its header lists in all eight phases: copies for the static cursors, the arrow for a 300x300 cursor, and no second pull of it; without the opt-in, `GetIconInfoExW failed` as unpatched. `tests/shm-surface-lock-probe.c` exits 0 either way. Earlier builds of the same changes rendered a windowed WebView2 application and showed its own cursor in local tests.
+
+### Not verified yet
+
+Owner drawing between a seed and its flush, window resizing or destruction while a DC is held, `0179` under DPI scaling and in Retina coordinates, a busy owner's worst-case cursor wait, and Retina hotspots. A windowed WebView2 game started from Steam on a local build of `.37` presented, took input, played sound, showed its own cursor and survived resizing and minimising; the Steam overlay did not open in it, and why was not established.

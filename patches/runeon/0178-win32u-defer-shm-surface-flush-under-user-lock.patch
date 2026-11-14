@@ -1,0 +1,61 @@
+From: Runeon Contributors <dev@runeon.com>
+Subject: [PATCH] win32u: Defer a shared-memory surface flush while the USER lock is held.
+
+CrossOver Hack 23950 gives a window whose parent belongs to another
+process a shared-memory surface, flushed by sending
+WM_WINE_FLUSHSHMSURFACE to the parent. apply_window_pos() updates the
+surface region with the window pointer held, which is the USER lock,
+and a region change flushes the surface. Sending a message with that
+lock held reaches user_check_not_lock(), which logs "BUG: holding USER
+lock" and asserts, so the process dies. A WebView2 browser process
+hosting its window inside a parent window of the application process
+takes this path from NtUserSetParent() and aborts.
+
+When the calling thread holds the USER lock, shm_surface_flush() now
+returns FALSE without sending. window_surface_flush() keeps the dirty
+bounds when the flush callback fails, and flush_window_surfaces(),
+which the message loop calls without the lock, sends the update later.
+Unlocked flushes and every other surface type are unchanged.
+
+--- a/dlls/win32u/dce.c
++++ b/dlls/win32u/dce.c
+@@ -761,6 +761,15 @@
+ 
+     TRACE("%p\n", surface);
+ 
++    /* Runeon: sending to the parent's process with the USER lock held aborts the process, and
++     * set_window_pos() can flush while updating the surface region. Keep the dirty bounds;
++     * the message loop flushes the surface again without the lock. */
++    if (user_lock_held())
++    {
++        TRACE( "%p: USER lock held, deferring flush\n", surface );
++        return FALSE;
++    }
++
+     params.section = HandleToLong( surface->section );
+     params.hwnd = HandleToLong( surface->header.hwnd );
+     params.info = surface->info;
+--- a/dlls/win32u/sysparams.c
++++ b/dlls/win32u/sysparams.c
+@@ -326,6 +326,11 @@
+     }
+ }
+ 
++BOOL user_lock_held(void)
++{
++    return user_lock_thread == GetCurrentThreadId();
++}
++
+ static HANDLE get_display_device_init_mutex( void )
+ {
+     WCHAR bufferW[256];
+--- a/dlls/win32u/win32u_private.h
++++ b/dlls/win32u/win32u_private.h
+@@ -193,6 +193,7 @@
+ extern void user_lock(void);
+ extern void user_unlock(void);
+ extern void user_check_not_lock(void);
++extern BOOL user_lock_held(void);
+ 
+ /* d3dkmtc. */
+ 

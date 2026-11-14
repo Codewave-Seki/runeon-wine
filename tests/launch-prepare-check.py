@@ -4,8 +4,13 @@
 Covers the route preparation opt-in next to the NW.js and D3D12on7 gates:
 parent/grant/context validation, x64 and i386 images, layout precedence, the
 NW.js hand-off taking priority, command and length preservation, failure
-fallback, and that a helper only runs while the directory lock is held. It
-does not run Wine, the helper or the creation of the original child.
+fallback, and that a helper only runs while the directory lock is held. With
+the cancel opt-in, a route helper that exits on its own with ERROR_CANCELLED
+fails the preparation with ERROR_CANCELLED, and the caller returns before the
+original child is created (checked in the source); without the opt-in, with
+another exit code, for the D3D12on7 helper or for a helper Wine had to end,
+the result is unchanged. It does not run Wine, the helper or the creation of
+the original child.
 """
 from pathlib import Path
 import subprocess
@@ -49,7 +54,7 @@ typedef struct { int Machine, ImageCharacteristics; } SECTION_IMAGE_INFORMATION;
 static RTL_USER_PROCESS_PARAMETERS parent;
 static PEB peb = { &parent }; static TEB teb = { &peb };
 static TEB *NtCurrentTeb(void) { return &teb; }
-static int nwjs, guard, launch, layout, fail, grant_ok = 1, app_ok = 1, machine = IMAGE_FILE_MACHINE_AMD64;
+static int nwjs, guard, launch, cancel, layout, fail, grant_ok = 1, app_ok = 1, machine = IMAGE_FILE_MACHINE_AMD64;
 static int wcsnicmp(const WCHAR *a, const WCHAR *b, size_t n) {
     while (n--) { int x = towlower(*a++), y = towlower(*b++); if (x != y) return x-y; if (!x) return 0; }
     return 0;
@@ -63,6 +68,7 @@ static int RtlQueryEnvironmentVariable_U(void *e, UNICODE_STRING *key, UNICODE_S
     if (!wcscmp(key->Buffer,L"RUNEON_NWJS_AUTO_V1")) value = nwjs ? L"1" : L"0";
     else if (!wcscmp(key->Buffer,L"RUNEON_D3D12ON7_GUARD_V1")) value = guard ? L"1" : L"0";
     else if (!wcscmp(key->Buffer,L"RUNEON_LAUNCH_PREPARE_V1")) value = launch ? L"1" : L"0";
+    else if (!wcscmp(key->Buffer,L"RUNEON_LAUNCH_PREPARE_CANCEL_V1")) value = cancel==1 ? L"1" : cancel==2 ? L"11" : L"0";
     else if (!wcscmp(key->Buffer,L"SteamAppId")) value = app_ok ? L"123" : L"0";
     else { for (int i=0;i<64;i++) text[i]=grant_ok ? L'a' : L'!'; text[64]=0; }
     size_t bytes=(wcslen(value)+1)*sizeof(WCHAR); if(bytes>out->MaximumLength) return 1;
@@ -163,7 +169,16 @@ typedef struct { unsigned cb; } STARTUPINFOW;
 #define WAIT_OBJECT_0 0
 #define WAIT_ABANDONED 128
 #define INFINITE (~0u)
-static int prepared, resumed, waited, lock_held, prepare_failure;
+#define ERROR_CANCELLED 1223
+#define ProcessBasicInformation 0
+typedef struct { NTSTATUS ExitStatus; } PROCESS_BASIC_INFORMATION;
+static int prepared, resumed, waited, lock_held, prepare_failure, query_failure;
+static NTSTATUS helper_exit;
+static NTSTATUS NtQueryInformationProcess(HANDLE h,int class,PROCESS_BASIC_INFORMATION *info,size_t n,void *ret) {
+    assert(h==(HANDLE)4 && class==ProcessBasicInformation && n==sizeof(*info) && !ret);
+    if(query_failure) return -5;
+    info->ExitStatus=helper_exit; return 0;
+}
 static WCHAR lock_name[80];
 static const WCHAR *expected_cwd = L"C:\\Games\\Example";
 static WCHAR RtlDowncaseUnicodeChar(WCHAR c) { return towlower(c); }
@@ -205,7 +220,7 @@ static void check_preparation(void) {
         prepared=resumed=waited=lock_held=0;
         HANDLE mutex;
         runeon_prepare_lock(&p,&mutex);
-        NTSTATUS status=runeon_run_prepare_helper(&p,command,mutex);
+        NTSTATUS status=runeon_run_prepare_helper(&p,command,mutex,FALSE);
         assert((status!=0)==(prepare_failure==5 || prepare_failure==7 || prepare_failure==8));
         assert(!memcmp(&p,&before,sizeof(p)));
         assert((mutex!=NULL)==(prepare_failure!=1));
@@ -228,9 +243,26 @@ static void check_preparation(void) {
     /* Route preparation runs through the same helper path; without the lock nothing runs. */
     expected_mode=L"launch-prepare"; prepared=resumed=waited=0;
     WCHAR route[]=L"helper --runtime launch-prepare -- original";
-    assert(!runeon_run_prepare_helper(&p,route,mutex) && prepared==1 && waited==1);
+    assert(!runeon_run_prepare_helper(&p,route,mutex,TRUE) && prepared==1 && waited==1);
+    /* Cancellation: only a route helper that exited on its own with ERROR_CANCELLED,
+     * and only with the opt-in set to exactly "1". */
+    const NTSTATUS cancelled=(NTSTATUS)(0xc0070000 | ERROR_CANCELLED);
+    helper_exit=ERROR_CANCELLED; cancel=1; waited=0;
+    assert(runeon_run_prepare_helper(&p,route,mutex,TRUE)==cancelled);
+    assert((cancelled & 0xffff)==ERROR_CANCELLED && ((unsigned)cancelled>>16)==0xc007);
+    waited=0; assert(!runeon_run_prepare_helper(&p,route,mutex,FALSE));
+    for(cancel=0;cancel<=2;cancel+=2) { waited=0; assert(!runeon_run_prepare_helper(&p,route,mutex,TRUE)); }
+    cancel=1;
+    helper_exit=0; waited=0; assert(!runeon_run_prepare_helper(&p,route,mutex,TRUE));
+    helper_exit=120; waited=0; assert(!runeon_run_prepare_helper(&p,route,mutex,TRUE));
+    helper_exit=ERROR_CANCELLED;
+    query_failure=1; waited=0; assert(!runeon_run_prepare_helper(&p,route,mutex,TRUE)); query_failure=0;
+    /* A helper Wine ended after the 120 s bound cannot cancel; one it could not end fails as before. */
+    prepare_failure=6; waited=0; assert(!runeon_run_prepare_helper(&p,route,mutex,TRUE));
+    prepare_failure=7; waited=0; assert(runeon_run_prepare_helper(&p,route,mutex,TRUE)==-3);
+    prepare_failure=0; cancel=0; helper_exit=0;
     lock_held=0; prepared=0;
-    assert(!runeon_run_prepare_helper(&p,route,NULL) && !prepared);
+    assert(!runeon_run_prepare_helper(&p,route,NULL,TRUE) && !prepared);
 }
 '''
 
@@ -252,4 +284,10 @@ def main():
         c.write_text(PRELUDE+function+PREPARE_PRELUDE+preparation+PREPARE_TEST+test)
         subprocess.run(['cc','-std=c11','-Wall','-Wextra','-Werror','-Wno-unused-parameter',str(c),'-o',str(binary)],check=True)
         subprocess.run([str(binary)],check=True)
+    # A cancelled preparation must leave CreateProcessInternalW() before the
+    # original child is created, and only the route helper may cancel.
+    create=source.index('BOOL WINAPI DECLSPEC_HOTPATCH CreateProcessInternalW(')
+    route_call=source.index('runeon_run_prepare_helper( params, launch_cmdline, guard_mutex, TRUE )))\n                goto done;',create)
+    source.index('runeon_run_prepare_helper( params, nwjs_cmdline, guard_mutex, FALSE ))) goto done;',create)
+    assert route_call < source.index('create_nt_process( token, debug',create)
 if __name__ == '__main__': main()

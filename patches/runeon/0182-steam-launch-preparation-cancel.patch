@@ -1,0 +1,82 @@
+From: Runeon Contributors <dev@runeon.com>
+Subject: [PATCH] kernelbase: Let the launch preparation cancel a Steam launch.
+
+Opt-in through RUNEON_LAUNCH_PREPARE_CANCEL_V1=1, on top of the route
+preparation that RUNEON_LAUNCH_PREPARE_V1 enables; without it, nothing
+changes.
+
+Some launches cannot be prepared within the helper's 75 s deadline,
+such as a game whose runtime component the caller still has to
+download and install. Starting the game anyway shows the user a broken
+game, and the creating thread cannot be held for minutes. With the
+opt-in, the route preparation helper may exit with ERROR_CANCELLED:
+the original child is then not created and CreateProcess() fails with
+ERROR_CANCELLED, the error ShellExecuteEx() returns when the user
+declines an elevation prompt: a launch that did not happen, not a
+process that started and failed. No process is created and no handle
+is returned. How Steam reports the error has not been observed yet.
+
+Only the route preparation helper can cancel, and only when it exited
+on its own; a helper ended by Wine's 120 s bound, any other exit code,
+the D3D12on7 helper and a missing or different opt-in value keep the
+unpatched behaviour. Wine still reads no game identity; the caller
+decides which launch to cancel.
+
+diff --git a/dlls/kernelbase/process.c b/dlls/kernelbase/process.c
+--- a/dlls/kernelbase/process.c
++++ b/dlls/kernelbase/process.c
+@@ -902,9 +902,29 @@ static void runeon_prepare_lock( RTL_USER_PROCESS_PARAMETERS *original, HANDLE *
+     *lock = mutex;
+ }
+ 
++/* With RUNEON_LAUNCH_PREPARE_CANCEL_V1=1 the caller may cancel a launch it has
++ * to finish preparing later, such as one that needs a component installed
++ * first: the route helper exits with ERROR_CANCELLED and the creation fails
++ * with that error, which ShellExecuteEx() gives for a declined elevation. */
++static BOOL runeon_launch_cancelled( RTL_USER_PROCESS_PARAMETERS *original, HANDLE helper )
++{
++    PROCESS_BASIC_INFORMATION info;
++    UNICODE_STRING key, value;
++    WCHAR enabled[2];
++
++    if (NtQueryInformationProcess( helper, ProcessBasicInformation, &info, sizeof(info), NULL )
++        || info.ExitStatus != ERROR_CANCELLED) return FALSE;
++    RtlInitUnicodeString( &key, L"RUNEON_LAUNCH_PREPARE_CANCEL_V1" );
++    value.Buffer = enabled;
++    value.MaximumLength = sizeof(enabled);
++    return !RtlQueryEnvironmentVariable_U( original->Environment, &key, &value )
++           && value.Length == sizeof(WCHAR) && enabled[0] == '1';
++}
++
+ /* Run one preparation helper to completion. Without the lock nothing runs, so
+  * a preparation can never race the child it prepares for. */
+-static NTSTATUS runeon_run_prepare_helper( RTL_USER_PROCESS_PARAMETERS *original, WCHAR *command, HANDLE lock )
++static NTSTATUS runeon_run_prepare_helper( RTL_USER_PROCESS_PARAMETERS *original, WCHAR *command, HANDLE lock,
++                                           BOOL cancellable )
+ {
+     RTL_USER_PROCESS_PARAMETERS *params;
+     RTL_USER_PROCESS_INFORMATION info = {0};
+@@ -933,6 +953,10 @@ static NTSTATUS runeon_run_prepare_helper( RTL_USER_PROCESS_PARAMETERS *original
+     status = NtWaitForSingleObject( info.Process, FALSE, &timeout );
+     if (status && !NtTerminateProcess( info.Process, status ))
+         status = NtWaitForSingleObject( info.Process, FALSE, NULL );
++    /* Only a helper that exited on its own can cancel; FACILITY_NTWIN32 carries
++     * the Win32 error through set_ntstatus(). */
++    else if (!status && cancellable && runeon_launch_cancelled( original, info.Process ))
++        status = (NTSTATUS)(0xc0070000 | ERROR_CANCELLED);
+  done:
+     NtClose( info.Thread );
+     NtClose( info.Process );
+@@ -1077,10 +1101,10 @@ BOOL WINAPI DECLSPEC_HOTPATCH CreateProcessInternalW( HANDLE token, const WCHAR
+         {
+             runeon_prepare_lock( params, &guard_mutex );
+             /* Routes first: the D3D12on7 helper then sees the same layout either way. */
+-            if (launch_cmdline && (status = runeon_run_prepare_helper( params, launch_cmdline, guard_mutex )))
++            if (launch_cmdline && (status = runeon_run_prepare_helper( params, launch_cmdline, guard_mutex, TRUE )))
+                 goto done;
+             if (nwjs_cmdline && prepare_only
+-                && (status = runeon_run_prepare_helper( params, nwjs_cmdline, guard_mutex ))) goto done;
++                && (status = runeon_run_prepare_helper( params, nwjs_cmdline, guard_mutex, FALSE ))) goto done;
+         }
+         else if (nwjs_cmdline)
+         {

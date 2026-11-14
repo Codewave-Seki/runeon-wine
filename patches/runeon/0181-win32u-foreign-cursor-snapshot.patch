@@ -1,0 +1,458 @@
+From: Runeon Contributors <dev@runeon.com>
+Subject: [PATCH] win32u: Show a snapshot of cursors owned by another process.
+
+Opt-in through RUNEON_FOREIGN_WINDOW_SURFACE=1, like the arrow fallback
+for foreign cursors it builds on; without it, nothing changes.
+
+When the server asks this process to show a cursor owned by another
+process, ask the thread that created it (from the user handle table)
+for a static snapshot with the internal WM_WINE_CURSORSNAPSHOT message,
+waiting up to 200 ms. The reply carries size, hotspot, the 32 bpp
+colour and alpha bits or the monochrome bits, the 1 bpp mask, and the
+module and integer resource id of system cursors, through the existing
+cross-process reply packing. The receiver validates every field
+against the bytes that arrived and builds a local cursor with
+NtUserSetCursorIconData(), which the driver then shows like any local
+cursor, including its mapping of system cursors to native ones.
+
+Only the cursor last notified is kept: its copy is destroyed when
+another cursor, a local one or none replaces it, and a re-notification
+of the same handle reuses it. A snapshot that arrives after a newer
+cursor was notified is dropped, so it can neither replace that cursor
+nor show a hidden one again. The owner answers only with the opt-in.
+
+Limits: static cursors only, no animated cursors. Images larger than
+256x256, colour depths other than 32 bpp or monochrome, and owners that
+do not answer within 200 ms (no message loop on the creating thread,
+hung or exited) fall back to the arrow; the last four handles that gave
+no snapshot are not pulled again, so an owner that does not answer
+costs one wait per cursor, not one per change between cursors. The
+hotspot is copied without DPI scaling. Not every cursor is reproduced
+exactly.
+
+diff --git a/dlls/win32u/cursoricon.c b/dlls/win32u/cursoricon.c
+--- a/dlls/win32u/cursoricon.c
++++ b/dlls/win32u/cursoricon.c
+@@ -125,18 +125,279 @@ static HCURSOR get_foreign_arrow(void)
+     return arrow;
+ }
+ 
++/* Runeon, same opt-in: show a foreign cursor's own image instead of the arrow.
++ *
++ * This process asks the thread that created the cursor (from the server's user handle table)
++ * for a static snapshot with an internal message, waiting up to 200 ms, and shows a local copy
++ * built with NtUserSetCursorIconData(), so that the driver handles it like any local cursor.
++ * Only the cursor last notified is kept: the copy is destroyed when another cursor, a local
++ * one or none replaces it. A re-notification of the same handle, e.g. when the pointer enters
++ * another window, reuses the copy without a round trip; handles carry a generation, so a
++ * destroyed and recreated cursor has a new handle and is pulled again.
++ *
++ * Deliberate limits (ponytail: no animated cursor support until a program needs it):
++ * - static cursors only; animated cursors and owners that do not answer (no message loop on
++ *   the creating thread, hung or exited) fall back to the arrow, and the last four handles that
++ *   gave no snapshot are not pulled again, even if their owner would answer later;
++ * - images up to 256x256 with a 32 bpp colour bitmap, or monochrome; other depths fall back;
++ * - the hotspot is copied as is, without DPI scaling;
++ * - the wait processes sent messages, and threads of this process may call the driver in any
++ *   order once the USER lock is dropped, as unpatched; the state below only guarantees that a
++ *   snapshot never replaces a cursor notified after it was requested;
++ * - a cursor destroyed by its owner while it is current keeps its copy until replaced, and the
++ *   16-bit handle generation can wrap. */
++
++/* protected by the USER lock: the foreign cursor last notified, and its copy (0 while the arrow
++ * stands in or the snapshot is being pulled) */
++static HCURSOR foreign_cursor, foreign_cursor_copy;
++/* protected by the USER lock: the last foreign cursors that gave no snapshot, so that an owner
++ * that does not answer costs one wait per cursor rather than one per change between them
++ * (ponytail: four entries cover an arrow, I-beam and hand rotation) */
++static HCURSOR failed_cursors[4];
++static unsigned int failed_cursor_next;
++
++static BOOL is_failed_cursor( HCURSOR handle )
++{
++    unsigned int i;
++
++    for (i = 0; i < ARRAY_SIZE(failed_cursors); i++)
++        if (failed_cursors[i] == handle) return TRUE;
++    return FALSE;
++}
++
++/* the creating thread's bitmap in NtGdiGetBitmapBits() format, if it has the expected layout */
++static BOOL get_snapshot_bits( HBITMAP bitmap, UINT width, UINT height, UINT bpp, BYTE *bits )
++{
++    LONG size = (width * bpp + 15) / 16 * 2 * height;
++    BITMAP bm;
++
++    if (!NtGdiExtGetObjectW( bitmap, sizeof(bm), &bm )) return FALSE;
++    if (bm.bmWidth != (LONG)width || bm.bmHeight != (LONG)height || bm.bmBitsPixel != bpp || bm.bmPlanes != 1)
++        return FALSE;
++    return NtGdiGetBitmapBits( bitmap, size, bits ) == size;
++}
++
++/* Owner side, on the thread that created the cursor: fill the snapshot of a static cursor. */
++BOOL get_cursor_snapshot( HCURSOR handle, struct cursor_snapshot *snapshot )
++{
++    struct cursoricon_object *obj;
++    UINT width, height, offset = 0;
++    BOOL ret = FALSE;
++
++    if (!foreign_window_surface_enabled()) return FALSE;
++    if (!(obj = get_icon_ptr( handle ))) return FALSE;
++
++    width = obj->frame.width;
++    height = obj->frame.height;
++    memset( snapshot, 0, FIELD_OFFSET( struct cursor_snapshot, bits ) );
++    if (obj->is_ani || !width || !height || width > CURSOR_SNAPSHOT_MAX_SIZE ||
++        height > CURSOR_SNAPSHOT_MAX_SIZE)
++        goto done;
++
++    if (obj->frame.color)
++    {
++        if (!get_snapshot_bits( obj->frame.color, width, height, 32, snapshot->bits )) goto done;
++        offset += width * height * 4;
++        snapshot->flags |= CURSOR_SNAPSHOT_COLOR;
++        if (obj->frame.alpha)
++        {
++            if (!get_snapshot_bits( obj->frame.alpha, width, height, 32, snapshot->bits + offset )) goto done;
++            offset += width * height * 4;
++            snapshot->flags |= CURSOR_SNAPSHOT_ALPHA;
++        }
++    }
++    if (!get_snapshot_bits( obj->frame.mask, width, obj->frame.color ? height : height * 2, 1,
++                            snapshot->bits + offset ))
++        goto done;
++    offset += (width + 15) / 16 * 2 * (obj->frame.color ? height : height * 2);
++
++    snapshot->width = width;
++    snapshot->height = height;
++    snapshot->hotspot_x = obj->frame.hotspot.x;
++    snapshot->hotspot_y = obj->frame.hotspot.y;
++    /* lets the driver map system cursors (e.g. user32 hand or I-beam) to its own; string
++     * resource names are not carried */
++    if (obj->module.Length && obj->module.Length <= sizeof(snapshot->module) && IS_INTRESOURCE( obj->resname ))
++    {
++        memcpy( snapshot->module, obj->module.Buffer, obj->module.Length );
++        snapshot->module_len = obj->module.Length;
++        snapshot->res_id = LOWORD( obj->resname );
++    }
++    snapshot->bits_size = offset;
++    ret = TRUE;
++
++done:
++    release_user_handle_ptr( obj );
++    if (ret) TRACE( "snapshot of %p: %ux%u hotspot (%d,%d) flags %#x module %s res %u\n", handle,
++                    width, height, snapshot->hotspot_x, snapshot->hotspot_y, snapshot->flags,
++                    debugstr_wn( snapshot->module, snapshot->module_len / sizeof(WCHAR) ), snapshot->res_id );
++    else WARN( "no snapshot of %p\n", handle );
++    return ret;
++}
++
++/* Receiver side: build a local cursor from a snapshot that came from another process. */
++static HCURSOR create_cursor_from_snapshot( const struct cursor_snapshot *snapshot )
++{
++    struct cursoricon_frame frame = { 0 };
++    struct cursoricon_desc desc = { .frames = &frame };
++    UNICODE_STRING module, res_name;
++    UINT width = snapshot->width, height = snapshot->height, mask_height, color_size, size;
++    HCURSOR copy = 0;
++
++    /* validate everything against what actually arrived; dimensions are bounded first, so
++     * the sizes below cannot overflow and fit in bits[] */
++    if (snapshot->data_size < FIELD_OFFSET( struct cursor_snapshot, bits ) ||
++        !width || !height || width > CURSOR_SNAPSHOT_MAX_SIZE || height > CURSOR_SNAPSHOT_MAX_SIZE ||
++        (snapshot->flags & ~(CURSOR_SNAPSHOT_COLOR | CURSOR_SNAPSHOT_ALPHA)) ||
++        ((snapshot->flags & CURSOR_SNAPSHOT_ALPHA) && !(snapshot->flags & CURSOR_SNAPSHOT_COLOR)) ||
++        snapshot->module_len > sizeof(snapshot->module) || snapshot->module_len % sizeof(WCHAR))
++        return 0;
++    color_size = width * height * 4;
++    mask_height = (snapshot->flags & CURSOR_SNAPSHOT_COLOR) ? height : height * 2;
++    size = (width + 15) / 16 * 2 * mask_height;
++    if (snapshot->flags & CURSOR_SNAPSHOT_COLOR) size += color_size;
++    if (snapshot->flags & CURSOR_SNAPSHOT_ALPHA) size += color_size;
++    if (snapshot->bits_size != size || snapshot->data_size < FIELD_OFFSET( struct cursor_snapshot, bits[size] ))
++        return 0;
++
++    size = 0;
++    if (snapshot->flags & CURSOR_SNAPSHOT_COLOR)
++    {
++        frame.color = NtGdiCreateBitmap( width, height, 1, 32, snapshot->bits );
++        size += color_size;
++    }
++    if (snapshot->flags & CURSOR_SNAPSHOT_ALPHA)
++    {
++        frame.alpha = NtGdiCreateBitmap( width, height, 1, 32, snapshot->bits + size );
++        size += color_size;
++    }
++    frame.mask = NtGdiCreateBitmap( width, mask_height, 1, 1, snapshot->bits + size );
++    if (!frame.mask || (!frame.color && (snapshot->flags & CURSOR_SNAPSHOT_COLOR)) ||
++        (!frame.alpha && (snapshot->flags & CURSOR_SNAPSHOT_ALPHA)))
++        goto failed;
++
++    frame.width = width;
++    frame.height = height;
++    frame.hotspot.x = snapshot->hotspot_x;
++    frame.hotspot.y = snapshot->hotspot_y;
++    module.Buffer = (WCHAR *)snapshot->module;
++    module.Length = module.MaximumLength = snapshot->module_len;
++    res_name.Buffer = MAKEINTRESOURCEW( snapshot->res_id );
++    res_name.Length = res_name.MaximumLength = 0;
++    if (!(copy = alloc_cursoricon_handle( FALSE ))) goto failed;
++    /* on success the cursor owns the bitmaps */
++    if (NtUserSetCursorIconData( copy, snapshot->module_len ? &module : NULL,
++                                 snapshot->module_len ? &res_name : NULL, &desc ))
++        return copy;
++    free_icon_handle( copy );
++
++failed:
++    if (frame.color) NtGdiDeleteObjectApp( frame.color );
++    if (frame.alpha) NtGdiDeleteObjectApp( frame.alpha );
++    if (frame.mask) NtGdiDeleteObjectApp( frame.mask );
++    return 0;
++}
++
++/* Ask the thread that created a foreign cursor for a snapshot; returns a local copy or 0. */
++static HCURSOR pull_foreign_cursor( HCURSOR handle )
++{
++    struct cursor_snapshot *snapshot;
++    DWORD_PTR res = 0;
++    DWORD pid, tid;
++    HCURSOR copy = 0;
++
++    /* sending requires the USER lock released */
++    if (user_lock_held() || !get_user_handle_owner( handle, NTUSER_OBJ_ICON, &pid, &tid ) ||
++        pid == GetCurrentProcessId())
++        return 0;
++    if (!(snapshot = calloc( 1, sizeof(*snapshot) ))) return 0;
++    /* no SMTO_BLOCK: the owner may be sending to this thread, e.g. to move its hosted window */
++    if (send_internal_message_timeout( pid, tid, WM_WINE_CURSORSNAPSHOT, (WPARAM)handle, (LPARAM)snapshot,
++                                       SMTO_ABORTIFHUNG, 200, &res ) && res)
++        copy = create_cursor_from_snapshot( snapshot );
++    if (copy)
++        TRACE( "foreign cursor %p: snapshot %ux%u hotspot (%d,%d) flags %#x applied as %p\n", handle,
++               snapshot->width, snapshot->height, snapshot->hotspot_x, snapshot->hotspot_y,
++               snapshot->flags, copy );
++    else
++        WARN( "foreign cursor %p: no snapshot from process %04x thread %04x\n", handle, pid, tid );
++    free( snapshot );
++    return copy;
++}
++
++/* Track the notified cursor and pull a snapshot for a new foreign one. Sets *copy to the copy
++ * to show (0 for the arrow fallback) and *old_copy to a copy to destroy after the driver shows
++ * the new cursor. Returns FALSE when a newer cursor was notified during the pull (a nested
++ * call while sent messages were processed, or another thread); the caller then shows nothing,
++ * so a late snapshot can neither replace a newer cursor nor show a hidden one again. */
++static BOOL update_foreign_cursor( HCURSOR handle, BOOL foreign, HCURSOR *copy, HCURSOR *old_copy )
++{
++    HCURSOR snapshot;
++    BOOL pull = FALSE, ret = TRUE;
++
++    user_lock();
++    if (foreign && handle == foreign_cursor) *copy = foreign_cursor_copy;
++    else
++    {
++        *old_copy = foreign_cursor_copy;
++        foreign_cursor = foreign ? handle : 0;
++        foreign_cursor_copy = 0;
++        pull = foreign && !is_failed_cursor( handle );
++    }
++    user_unlock();
++    if (!pull)
++    {
++        if (*copy) TRACE( "foreign cursor %p: reusing %p\n", handle, *copy );
++        else if (foreign) TRACE( "foreign cursor %p: no snapshot before, not pulling again\n", handle );
++        return TRUE;
++    }
++
++    snapshot = pull_foreign_cursor( handle );
++
++    user_lock();
++    if (!snapshot && !is_failed_cursor( handle ))
++        failed_cursors[failed_cursor_next++ % ARRAY_SIZE(failed_cursors)] = handle;
++    /* the cursor must still be the last notified, and no nested call may have resolved it */
++    if (foreign_cursor != handle || foreign_cursor_copy) ret = FALSE;
++    else foreign_cursor_copy = *copy = snapshot;
++    user_unlock();
++    if (!ret)
++    {
++        TRACE( "foreign cursor %p: superseded while pulling its snapshot\n", handle );
++        if (snapshot) free_icon_handle( snapshot );
++    }
++    return ret;
++}
++
+ BOOL process_wine_setcursor( HWND hwnd, HWND window, HCURSOR handle )
+ {
+-    HCURSOR arrow;
++    HCURSOR arrow, copy = 0, old_copy = 0;
+ 
+     TRACE( "hwnd %p, window %p, hcursor %p\n", hwnd, window, handle );
+ 
+-    if (handle && foreign_window_surface_enabled() && is_foreign_cursor( handle ) && (arrow = get_foreign_arrow()))
++    if (foreign_window_surface_enabled())
+     {
+-        TRACE( "foreign cursor %p: showing the arrow %p\n", handle, arrow );
+-        handle = arrow;
++        BOOL foreign = handle && is_foreign_cursor( handle );
++
++        if (!update_foreign_cursor( handle, foreign, &copy, &old_copy ))
++        {
++            if (old_copy) free_icon_handle( old_copy );
++            return TRUE;
++        }
++        if (copy) handle = copy;
++        /* no copy: fall back to the arrow */
++        else if (foreign && (arrow = get_foreign_arrow()))
++        {
++            TRACE( "foreign cursor %p: showing the arrow %p\n", handle, arrow );
++            handle = arrow;
++        }
+     }
+     user_driver->pSetCursor( window, handle );
++    if (old_copy)
++    {
++        TRACE( "releasing foreign cursor copy %p\n", old_copy );
++        free_icon_handle( old_copy );
++    }
+     return TRUE;
+ }
+ 
+diff --git a/dlls/win32u/message.c b/dlls/win32u/message.c
+--- a/dlls/win32u/message.c
++++ b/dlls/win32u/message.c
+@@ -920,6 +920,9 @@ static BOOL unpack_message( HWND hwnd, UINT message, WPARAM *wparam, LPARAM *lpa
+     case WM_WINE_FLUSHSHMSURFACE: /* CX HACK 23950 */
+         minsize = sizeof(struct flush_shm_surface_params);
+         break;
++    case WM_WINE_CURSORSNAPSHOT: /* Runeon: the request has no data, lparam receives the reply */
++        if (!get_buffer_space( buffer, sizeof(struct cursor_snapshot), buffer_size )) return FALSE;
++        break;
+     case CB_GETCOMBOBOXINFO:
+     {
+         COMBOBOXINFO cbi = { sizeof(COMBOBOXINFO) };
+@@ -1292,6 +1295,8 @@ static size_t pack_message( HWND hwnd, UINT message, WPARAM wparam, LPARAM lpara
+     case WM_WINE_FLUSHSHMSURFACE: /* CX HACK 23950 */
+         push_data( data, (struct flush_shm_surface_params *)lparam, sizeof(struct flush_shm_surface_params) );
+         return 0;
++    case WM_WINE_CURSORSNAPSHOT: /* Runeon */
++        return sizeof(struct cursor_snapshot);
+     case WM_NCPAINT:
+         if (wparam <= 1) return 0;
+         FIXME( "WM_NCPAINT hdc packing not supported yet\n" );
+@@ -1487,6 +1492,13 @@ static void pack_reply( HWND hwnd, UINT message, WPARAM wparam, LPARAM lparam,
+     case WM_ASKCBFORMATNAME:
+         push_data( data, (WCHAR *)lparam, (lstrlenW((WCHAR *)lparam) + 1) * sizeof(WCHAR) );
+         break;
++    case WM_WINE_CURSORSNAPSHOT: /* Runeon */
++    {
++        const struct cursor_snapshot *snapshot = (const struct cursor_snapshot *)lparam;
++        UINT bits_size = min( snapshot->bits_size, sizeof(snapshot->bits) );
++        if (res) push_data( data, snapshot, FIELD_OFFSET( struct cursor_snapshot, bits[bits_size] ) );
++        break;
++    }
+     }
+ }
+ 
+@@ -1602,6 +1614,14 @@ static void unpack_reply( HWND hwnd, UINT message, WPARAM wparam, LPARAM lparam,
+     case WM_MDIGETACTIVE:
+         if (lparam) memcpy( (BOOL *)lparam, buffer, min( sizeof(BOOL), size ));
+         break;
++    case WM_WINE_CURSORSNAPSHOT: /* Runeon */
++    {
++        struct cursor_snapshot *snapshot = (struct cursor_snapshot *)lparam;
++        size = min( sizeof(*snapshot), size );
++        memcpy( snapshot, buffer, size );
++        snapshot->data_size = size;
++        break;
++    }
+     case WM_NCCALCSIZE:
+         if (!wparam)
+             memcpy( (RECT *)lparam, buffer, min( sizeof(RECT), size ));
+@@ -2277,6 +2297,8 @@ static LRESULT handle_internal_message( HWND hwnd, UINT msg, WPARAM wparam, LPAR
+         if (wparam) return seed_shm_surface( (struct flush_shm_surface_params *)lparam );
+         process_surface_message( (struct flush_shm_surface_params *)lparam );
+         return 1;
++    case WM_WINE_CURSORSNAPSHOT: /* Runeon */
++        return get_cursor_snapshot( (HCURSOR)wparam, (struct cursor_snapshot *)lparam );
+     default:
+         if (msg >= WM_WINE_FIRST_DRIVER_MSG && msg <= WM_WINE_LAST_DRIVER_MSG)
+             return user_driver->pWindowMessage( hwnd, msg, wparam, lparam );
+diff --git a/dlls/win32u/win32u_private.h b/dlls/win32u/win32u_private.h
+--- a/dlls/win32u/win32u_private.h
++++ b/dlls/win32u/win32u_private.h
+@@ -38,6 +38,30 @@ extern void release_clipboard_owner( HWND hwnd );
+ 
+ /* cursoricon.c */
+ extern BOOL process_wine_setcursor( HWND hwnd, HWND window, HCURSOR handle );
++
++/* Runeon: static image of a cursor, copied to another process through
++ * WM_WINE_CURSORSNAPSHOT. The bits hold, in this order and in NtGdiGetBitmapBits() format,
++ * the 32 bpp colour bitmap and the 32 bpp alpha bitmap when present, and the 1 bpp mask
++ * (twice the height without a colour bitmap). 256x256 is the largest Windows cursor. */
++#define CURSOR_SNAPSHOT_MAX_SIZE  256
++#define CURSOR_SNAPSHOT_COLOR     0x1
++#define CURSOR_SNAPSHOT_ALPHA     0x2
++struct cursor_snapshot
++{
++    UINT  data_size;    /* bytes received, set by the receiving side's unpack_reply() */
++    UINT  flags;        /* CURSOR_SNAPSHOT_* */
++    UINT  width;
++    UINT  height;
++    INT   hotspot_x;
++    INT   hotspot_y;
++    UINT  res_id;       /* integer resource id, when module_len is not 0 */
++    UINT  module_len;   /* bytes of module */
++    WCHAR module[MAX_PATH];
++    UINT  bits_size;
++    BYTE  bits[2 * CURSOR_SNAPSHOT_MAX_SIZE * CURSOR_SNAPSHOT_MAX_SIZE * 4 +
++               CURSOR_SNAPSHOT_MAX_SIZE / 8 * 2 * CURSOR_SNAPSHOT_MAX_SIZE];
++};
++extern BOOL get_cursor_snapshot( HCURSOR handle, struct cursor_snapshot *snapshot );
+ extern HICON alloc_cursoricon_handle( BOOL is_icon );
+ extern ULONG_PTR get_icon_param( HICON handle );
+ extern ULONG_PTR set_icon_param( HICON handle, const struct free_icon_params *params );
+@@ -260,6 +284,7 @@ extern BOOL is_service_process(void);
+ 
+ /* window.c */
+ struct tagWND;
++extern BOOL get_user_handle_owner( HANDLE handle, unsigned short type, DWORD *pid, DWORD *tid );
+ extern BOOL client_to_screen( HWND hwnd, POINT *pt );
+ extern void destroy_thread_windows(void);
+ extern LRESULT destroy_window( HWND hwnd );
+diff --git a/dlls/win32u/window.c b/dlls/win32u/window.c
+--- a/dlls/win32u/window.c
++++ b/dlls/win32u/window.c
+@@ -239,6 +239,22 @@ static void set_user_handle_ptr( HANDLE handle, void *ptr )
+     InterlockedExchangePointer( &client_objects[index], ptr );
+ }
+ 
++/***********************************************************************
++ *           get_user_handle_owner
++ *
++ * Runeon: the process and thread that created a user object, which may be another
++ * process; used to ask the owner of a foreign cursor for a snapshot.
++ */
++BOOL get_user_handle_owner( HANDLE handle, unsigned short type, DWORD *pid, DWORD *tid )
++{
++    struct user_entry entry;
++
++    if (!get_user_entry( handle, type, &entry, &handle )) return FALSE;
++    *pid = entry.pid;
++    *tid = entry.tid;
++    return TRUE;
++}
++
+ /***********************************************************************
+  *           release_user_handle_ptr
+  */
+diff --git a/include/ntuser.h b/include/ntuser.h
+--- a/include/ntuser.h
++++ b/include/ntuser.h
+@@ -660,6 +660,7 @@ enum wine_internal_message
+     WM_WINE_TRACKMOUSEEVENT,
+     WM_WINE_SETPIXELFORMAT,
+     WM_WINE_FLUSHSHMSURFACE, /* CX HACK 23950 */
++    WM_WINE_CURSORSNAPSHOT, /* Runeon */
+     WM_WINE_FIRST_DRIVER_MSG = 0x80001000,  /* range of messages reserved for the USER driver */
+     WM_WINE_CLIPCURSOR = 0x80001ff0, /* internal driver notification messages */
+     WM_WINE_SETCURSOR,

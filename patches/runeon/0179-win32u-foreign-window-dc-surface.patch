@@ -1,0 +1,332 @@
+From: Runeon Contributors <dev@runeon.com>
+Subject: [PATCH] win32u: Give DCs of windows hosted in another process a surface.
+
+Opt-in through RUNEON_FOREIGN_WINDOW_SURFACE=1, set by the caller in
+every process of the session; without it, nothing changes.
+
+A DC obtained for a window whose surface top window belongs to another
+process gets no window surface: update_visible_region() only uses the
+surface of a top window of the current process, so the device rect is
+empty and the output is lost. On Windows such a DC draws into the
+window. Chromium software compositing hits this: its GPU process draws
+with GetDC()/BitBlt()/ReleaseDC() into a window of the browser process
+that is hosted inside a window of a third process.
+
+With the opt-in, such a cache DC of a client area gets a per-DC
+CrossOver Hack 23950 shared-memory surface targeting the top window.
+The top window's process first copies the window's current pixels into
+the section (WM_WINE_FLUSHSHMSURFACE with a non-zero wparam, answered
+only with the opt-in and only for the top-down 32 bpp layout the sender
+creates), so pixels the caller did not draw are written back
+unchanged. ReleaseDC() detaches the surface from the DCE under the
+USER lock and flushes it to the top window's process after dropping the
+lock. Window DCs, owned and class DCs, and DCs whose top window is
+local are unchanged.
+
+Limits: every GetDC() creates and seeds a new section, and every
+ReleaseDC() flushes it, each round trip waiting up to 500 ms; nothing
+is cached. The flush writes back the 8-pixel aligned dirty bounds from
+the seeded copy, so pixels another process changes between the seed and
+the flush can be reverted. A seed that fails leaves the DC without a
+surface, as unpatched; a flush that fails is dropped with a WARN, never
+retried. As for every Hack 23950 surface, the section handle stays open
+in the top window's process if that window is destroyed first. DPI
+scaling and Retina coordinates have not been verified.
+
+diff --git a/dlls/win32u/dce.c b/dlls/win32u/dce.c
+--- a/dlls/win32u/dce.c
++++ b/dlls/win32u/dce.c
+@@ -44,6 +44,8 @@ struct dce
+     UINT        flags;
+     LONG        count;         /* usage count; 0 or 1 for cache DCEs, always 1 for window DCEs,
+                                   always >= 1 for class DCEs */
++    struct window_surface *foreign_surface; /* Runeon: referenced per-DC surface, see
++                                               get_foreign_dc_surface(); protected by the USER lock */
+ };
+ 
+ static struct list dce_list = LIST_INIT(dce_list);
+@@ -821,8 +823,10 @@ static const struct window_surface_funcs shm_surface_funcs =
+     shm_surface_destroy,
+ };
+ 
+-struct window_surface *create_shm_surface( HWND window, HWND parent, const RECT *visible_rect,
+-                                           struct window_surface *old_surface )
++/* Runeon: the section access granted to the parent's process is a parameter, so that the
++ * foreign window DC surface can let the receiver seed the section. */
++static struct window_surface *create_shm_surface_access( HWND window, HWND parent, const RECT *visible_rect,
++                                                         struct window_surface *old_surface, ACCESS_MASK access )
+ {
+     OBJECT_ATTRIBUTES attr = { .Length = sizeof(OBJECT_ATTRIBUTES) };
+     struct shm_window_surface *surface;
+@@ -900,7 +904,7 @@ struct window_surface *create_shm_surface( HWND window, HWND parent, const RECT
+     }
+ 
+     status = NtDuplicateObject( GetCurrentProcess(), mapping, parent_process,
+-                                &surface->section, FILE_MAP_READ, FALSE, 0 );
++                                &surface->section, access, FALSE, 0 );
+     NtClose( parent_process );
+     NtClose( mapping );
+     if (status)
+@@ -913,6 +917,12 @@ struct window_surface *create_shm_surface( HWND window, HWND parent, const RECT
+     return &surface->header;
+ }
+ 
++struct window_surface *create_shm_surface( HWND window, HWND parent, const RECT *visible_rect,
++                                           struct window_surface *old_surface )
++{
++    return create_shm_surface_access( window, parent, visible_rect, old_surface, FILE_MAP_READ );
++}
++
+ void process_surface_message( struct flush_shm_surface_params *params )
+ {
+     HANDLE mapping = LongToHandle( params->section );
+@@ -945,6 +955,153 @@ void process_surface_message( struct flush_shm_surface_params *params )
+ 
+ /* CX HACK 23950 - END */
+ 
++/* Runeon, opt-in through RUNEON_FOREIGN_WINDOW_SURFACE=1, which the caller sets in the
++ * process that draws and in the process that owns the top window.
++ *
++ * Supported path: a cache DC of a window client area whose surface top window belongs to
++ * another process, such as a GPU process drawing into a browser window hosted inside a third
++ * process. Without this the DC gets no surface and its output is lost; on Windows such a DC
++ * draws into the window. The DC gets a per-DC Hack 23950 shared-memory surface instead, seeded
++ * by the top window's process with the window's current pixels, and flushed to that process
++ * when the DC is released. DCs that already have a surface, window (non-client) DCs and owned
++ * or class DCs are unchanged.
++ *
++ * Deliberate limits (ponytail: correct pixels first, no cache until a cost is measured):
++ * - a new section, one seed round trip and one flush round trip for every GetDC/ReleaseDC
++ *   pair, each waiting up to 500 ms for the receiving thread; nothing is cached across DCs;
++ * - the flush writes back the dirty bounds, 8-pixel aligned, from the seeded copy, so pixels the
++ *   caller did not draw but another process changed between the seed and the flush are
++ *   reverted;
++ * - a flush that fails (receiver hung or gone, or USER lock held) is dropped with a WARN;
++ * - as for every Hack 23950 surface, the section handle stays open in the top window's process
++ *   if that window is destroyed before the surface is released. */
++
++/* also the switch of the foreign cursor handling in cursoricon.c */
++BOOL foreign_window_surface_enabled(void)
++{
++    static int enabled = -1;
++
++    if (enabled == -1)
++    {
++        const char *env = getenv( "RUNEON_FOREIGN_WINDOW_SURFACE" );
++        enabled = env && !strcmp( env, "1" );
++    }
++    return enabled;
++}
++
++/* Receiver side, in the process of the window's top window, where the window's DC draws into
++ * a local surface: copy the window's current client pixels into the sender's section. */
++BOOL seed_shm_surface( struct flush_shm_surface_params *params )
++{
++    HWND hwnd = LongToHandle( params->hwnd );
++    HBITMAP bitmap, old_bitmap;
++    HDC hdc, mem_dc;
++    BOOL ret = FALSE;
++
++    /* without the opt-in, answer as unseeded so the sender keeps the unpatched behaviour */
++    if (!foreign_window_surface_enabled()) return FALSE;
++    /* the header comes from another process: accept only the layout create_shm_surface_access()
++     * makes, a top-down 32 bpp DIB whose image size matches its dimensions */
++    if (params->info.bmiHeader.biBitCount != 32 || params->info.bmiHeader.biCompression != BI_RGB ||
++        params->info.bmiHeader.biWidth <= 0 || params->info.bmiHeader.biHeight >= 0 ||
++        (ULONGLONG)params->info.bmiHeader.biWidth * 4 * -(LONGLONG)params->info.bmiHeader.biHeight !=
++        params->info.bmiHeader.biSizeImage)
++        return FALSE;
++    TRACE( "seeding %p window surface\n", hwnd );
++
++    /* the section and its size come from another process; the DIB section maps only what
++     * the header describes and fails if the section is smaller */
++    if (!(bitmap = NtGdiCreateDIBSection( 0, LongToHandle( params->section ), 0, &params->info,
++                                          DIB_RGB_COLORS, 0, 0, 0, NULL )))
++        return FALSE;
++    if ((hdc = NtUserGetDCEx( hwnd, NULL, DCX_CLIPSIBLINGS )))
++    {
++        if ((mem_dc = NtGdiCreateCompatibleDC( 0 )))
++        {
++            old_bitmap = NtGdiSelectBitmap( mem_dc, bitmap );
++            ret = NtGdiBitBlt( mem_dc, 0, 0, params->info.bmiHeader.biWidth,
++                               abs( params->info.bmiHeader.biHeight ), hdc, 0, 0, SRCCOPY, 0, 0 );
++            NtGdiSelectBitmap( mem_dc, old_bitmap );
++            NtGdiDeleteObjectApp( mem_dc );
++        }
++        NtUserReleaseDC( hwnd, hdc );
++    }
++    NtGdiDeleteObjectApp( bitmap );
++    return ret;
++}
++
++/* Flush and release a per-DC surface the caller owns a reference to. Must be called without
++ * the USER lock. The surface is not in window_surfaces, so a failed flush is never retried:
++ * replaying the seeded copy later could revert newer pixels, and the drawing thread need not
++ * run a message loop. */
++static void flush_foreign_dc_surface( struct window_surface *surface )
++{
++    window_surface_flush( surface );
++    window_surface_lock( surface );
++    if (!IsRectEmpty( &surface->bounds ))
++        WARN( "dropping %s of foreign DC surface %p for %p\n", wine_dbgstr_rect( &surface->bounds ),
++              surface, surface->hwnd );
++    window_surface_unlock( surface );
++    window_surface_release( surface );
++}
++
++/* Return a referenced surface for the DC, keeping the DCE's own reference, or NULL to keep the
++ * unpatched behaviour. Called without the USER lock, from update_visible_region(). */
++static struct window_surface *get_foreign_dc_surface( struct dce *dce, HWND top_win, const RECT *win_rect )
++{
++    struct flush_shm_surface_params params;
++    struct window_surface *surface, *old;
++    RECT rect = *win_rect;
++
++    /* creating and seeding the surface sends a message */
++    if (user_lock_held()) return NULL;
++
++    OffsetRect( &rect, -rect.left, -rect.top );
++    user_lock();
++    surface = old = dce->foreign_surface;
++    if (surface && EqualRect( &surface->rect, &rect ) && get_shm_surface( surface )->parent == top_win)
++    {
++        window_surface_add_ref( surface );
++        old = NULL;
++    }
++    else
++    {
++        dce->foreign_surface = surface = NULL;
++    }
++    user_unlock();
++
++    if (surface) return surface;
++    /* flush the previous surface first, so that the new seed contains its pixels */
++    if (old) flush_foreign_dc_surface( old );
++
++    if (!(surface = create_shm_surface_access( dce->hwnd, top_win, win_rect, NULL,
++                                               FILE_MAP_READ | FILE_MAP_WRITE )))
++        return NULL;
++
++    params.section = HandleToLong( get_shm_surface( surface )->section );
++    params.hwnd = HandleToLong( dce->hwnd );
++    params.info = get_shm_surface( surface )->info;
++    params.bounds = surface->rect;
++    /* window_surface_create() fills the surface with white; never use it unseeded */
++    if (!send_message_timeout( top_win, WM_WINE_FLUSHSHMSURFACE, 1, (LPARAM)&params,
++                               SMTO_ABORTIFHUNG | SMTO_BLOCK, 500, FALSE ))
++    {
++        WARN( "seeding foreign DC surface for %p in %p failed\n", dce->hwnd, top_win );
++        window_surface_release( surface );
++        return NULL;
++    }
++
++    user_lock();
++    old = dce->foreign_surface;
++    dce->foreign_surface = surface;
++    window_surface_add_ref( surface );
++    user_unlock();
++
++    /* a DC is used by one thread at a time, so this only guards against misuse */
++    if (old) flush_foreign_dc_surface( old );
++    return surface;
++}
++
+ 
+ /*******************************************************************
+  *           register_window_surface
+@@ -1091,6 +1248,11 @@ static void update_visible_region( struct dce *dce )
+             if (surface) window_surface_add_ref( surface );
+             release_win_ptr( win );
+         }
++        /* Runeon: the per-DC surface covers exactly the client area */
++        else if (win == WND_OTHER_PROCESS && !(flags & DCX_WINDOW) && (dce->flags & DCX_CACHE) &&
++                 foreign_window_surface_enabled() &&
++                 (surface = get_foreign_dc_surface( dce, top_win, &win_rect )))
++            top_rect = win_rect;
+     }
+ 
+     if (!surface) SetRectEmpty( &top_rect );
+@@ -1107,6 +1269,9 @@ static void release_dce( struct dce *dce )
+ 
+     set_visible_region( dce->hdc, 0, &dummy_surface.rect, &dummy_surface.rect, &dummy_surface );
+     user_driver->pReleaseDC( dce->hwnd, dce->hdc );
++    /* Runeon: a DC purged without ReleaseDC() loses its unflushed output */
++    if (dce->foreign_surface) window_surface_release( dce->foreign_surface );
++    dce->foreign_surface = NULL;
+ 
+     if (dce->clip_rgn) NtGdiDeleteObjectApp( dce->clip_rgn );
+     dce->clip_rgn = 0;
+@@ -1148,6 +1313,7 @@ BOOL delete_dce( struct dce *dce )
+     {
+         list_remove( &dce->entry );
+         if (dce->clip_rgn) NtGdiDeleteObjectApp( dce->clip_rgn );
++        if (dce->foreign_surface) window_surface_release( dce->foreign_surface );
+         free( dce );
+     }
+     user_unlock();
+@@ -1192,6 +1358,7 @@ static struct dce *alloc_dce(void)
+     dce->clip_rgn  = 0;
+     dce->flags     = 0;
+     dce->count     = 1;
++    dce->foreign_surface = NULL;
+ 
+     set_dc_dce( dce->hdc, dce );
+     return dce;
+@@ -1445,6 +1612,7 @@ void invalidate_dce( WND *win, const RECT *old_rect )
+ static INT release_dc( HWND hwnd, HDC hdc, BOOL end_paint )
+ {
+     struct list drawables = LIST_INIT( drawables );
++    struct window_surface *foreign_surface = NULL;
+     struct dce *dce;
+     BOOL ret = FALSE;
+ 
+@@ -1458,6 +1626,16 @@ static INT release_dc( HWND hwnd, HDC hdc, BOOL end_paint )
+         if (end_paint || (dce->flags & DCX_CACHE)) delete_clip_rgn( dce );
+         if (dce->flags & DCX_CACHE)
+         {
++            /* Runeon: take over the DCE's surface reference and detach the DC from
++             * the surface while the DC is still enabled, so that the flush below depends on
++             * neither the DCE nor the DC, which may be reused once the lock is dropped. A
++             * foreign window's visible region is recomputed on every GetDCEx(), so emptying
++             * the DCE loses nothing. */
++            if ((foreign_surface = dce->foreign_surface))
++            {
++                dce->foreign_surface = NULL;
++                release_dce( dce );
++            }
+             dce->count = 0;
+             set_dc_pixel_format_internal( hdc, 0, &drawables );
+             set_dce_flags( dce->hdc, DCHF_DISABLEDC );
+@@ -1466,6 +1644,8 @@ static INT release_dc( HWND hwnd, HDC hdc, BOOL end_paint )
+     }
+     user_unlock();
+ 
++    /* sending to the receiving process requires the USER lock to be released */
++    if (foreign_surface) flush_foreign_dc_surface( foreign_surface );
+     release_opengl_drawables( &drawables );
+     return ret;
+ }
+diff --git a/dlls/win32u/message.c b/dlls/win32u/message.c
+--- a/dlls/win32u/message.c
++++ b/dlls/win32u/message.c
+@@ -2273,6 +2273,8 @@ static LRESULT handle_internal_message( HWND hwnd, UINT msg, WPARAM wparam, LPAR
+         return NtUserTrackMouseEvent( &info );
+     }
+     case WM_WINE_FLUSHSHMSURFACE: /* CX HACK 23950 */
++        /* Runeon: only the opt-in foreign window DC surface sends a non-zero wparam. */
++        if (wparam) return seed_shm_surface( (struct flush_shm_surface_params *)lparam );
+         process_surface_message( (struct flush_shm_surface_params *)lparam );
+         return 1;
+     default:
+diff --git a/dlls/win32u/win32u_private.h b/dlls/win32u/win32u_private.h
+--- a/dlls/win32u/win32u_private.h
++++ b/dlls/win32u/win32u_private.h
+@@ -58,6 +58,8 @@ extern void *window_surface_get_color( struct window_surface *surface, BITMAPINF
+ extern struct window_surface *create_shm_surface( HWND hwnd, HWND parent, const RECT *visible_rect,
+                                                   struct window_surface *old_surface );
+ extern void process_surface_message( struct flush_shm_surface_params *params );
++extern BOOL seed_shm_surface( struct flush_shm_surface_params *params );
++extern BOOL foreign_window_surface_enabled(void);
+ 
+ /* defwnd.c */
+ extern BOOL adjust_window_rect( RECT *rect, DWORD style, BOOL menu, DWORD ex_style, UINT dpi );
