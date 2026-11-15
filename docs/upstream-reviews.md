@@ -1155,3 +1155,42 @@ On a complete local i386/x86_64 WoW64 build of `.37`, `tests/foreign-dc-probe.c`
 ### Not verified yet
 
 Owner drawing between a seed and its flush, window resizing or destruction while a DC is held, `0179` under DPI scaling and in Retina coordinates, a busy owner's worst-case cursor wait, and Retina hotspots. A windowed WebView2 game started from Steam on a local build of `.37` presented, took input, played sound, showed its own cursor and survived resizing and minimising; the Steam overlay did not open in it, and why was not established.
+
+
+<a id="hkcu-wow6432node"></a>
+
+## User hive Software shared between registry views
+
+Candidate patch set `cx26.3-wine11.0-runeon.37` adds `patches/runeon/0183` after `0182`. It changes `kernelbase` and `server`; `server` is ABI-sensitive, and the maintainer approved this patch individually on 2026-11-15. The approval covers this patch alone and is not a precedent. It is a downstream fix written for upstream submission, as a fix for WineHQ bug 57892; once an equivalent fix is merged upstream it is replaced by that backport.
+
+### Defect in the base
+
+Microsoft's "Registry Keys Affected by WOW64" lists `HKEY_CURRENT_USER\SOFTWARE` as shared between the 32-bit and 64-bit views; in a user hive only listed `Software\Classes` subtrees such as `CLSID` are redirected. Wine redirects the 32-bit view at any key with a `Wow6432Node` subkey, by two paths:
+
+- `server/registry.c`: `key_link_name()` stores a linked `Wow6432Node` subkey as the parent's `wow6432node` pointer. For a 32-bit process, `key_lookup_name()` steps into that pointer on each path element, and `open_key()`, `create_key()`, `grab_wow6432node()` and `get_wow6432node()` follow it. A 32-bit `RegOpenKeyEx()` reaches this through `NtOpenKeyEx()` directly, because `is_win64` is false in the 32-bit `kernelbase`.
+- `dlls/kernelbase/registry.c`: for `KEY_WOW64_32KEY` in a 64-bit process, and for a 32-bit create whose parents are missing, `open_key()` walks the path itself, and `open_subkey()` calls `open_wow6432node()`, which opens a subkey named `Wow6432Node` by name.
+
+Once any program creates `HKCU\Software\Wow6432Node`, `HKCU\Software\Valve\Steam` is looked up inside it in the 32-bit view. Locally, a 32-bit `steam_api` then logged that `SteamAPI_IsSteamRunning()` did not find Steam and the game restarted itself through Steam in a loop; deleting `HKCU\Software\Wow6432Node` with Steam stopped ended it. WineHQ master as of 2026-11-13 has the same logic; the patch attached to bug 57892 disables the mapping instead and is not used.
+
+### Change
+
+- `server`: `key_link_name()` no longer stores the `wow6432node` pointer when the parent lies in a user hive (`\Registry\User\...`) outside its `Software\Classes` subtree. A small `is_wow64_shared_user_key()` walks the parents up to the root key; it runs only when a key named `Wow6432Node` is linked.
+- `kernelbase`: `open_wow6432node()` keeps the original key when the opened `Wow6432Node` lies in the same part of a user hive, judged by its `NtQueryKey()` name. A failed name query keeps the base behaviour.
+- `dlls/advapi32/tests/registry.c`: `test_redirection_hkcu()`.
+
+Both paths stop at the same boundary. HKLM, the `Software\Classes` handling (not rewritten), paths that name `Wow6432Node` and the 64-bit view are unchanged. No protocol, request, structure or export changes. Existing data under `HKCU\Software\Wow6432Node` stays where it is, so settings a program wrote there while the defect was active are no longer seen through the shared path. With no pointer stored, renaming `HKCU\Software\Wow6432Node` is no longer refused.
+
+### Verification
+
+A complete local i386/x86_64 WoW64 build of `.37` with `0183` passed. Both runs below use a fresh prefix each, on that build and on `.37` without `0183`:
+
+- `tests/hkcu-wow6432node-probe.c` (32 checks per process): 15 failures in the i686 process and 9 in the x86_64 process without `0183`, all in the HKCU checks and `HKCU\Software\Classes\CLSID`, which the redirected `Software` key also hid; 0 failures in both with it. The HKLM and HKLM `Software\Classes` checks pass on both.
+- `dlls/advapi32/tests/registry.c` with the new test: without `0183`, `test_redirection_hkcu()` fails 21 times in the i386 process and 15 times in the x86_64 process; with it, it passes. In both builds the only other failures are the same two in `test_RegLoadMUIString()`, so `test_redirection()`, the classes root tests and the rest of the file show no new failures.
+- `dlls/ntdll/tests/reg.c`: no failures on either build, in either architecture.
+- In a copy of a Steam prefix with `HKCU\Software\Wow6432Node` present, 32-bit `reg.exe` and 64-bit `reg.exe /reg:32` could not find `HKCU\Software\Valve\Steam` without `0183` and found it with `0183`; the `Wow6432Node` key and its value stayed in place.
+
+The patch applies to WineHQ master of 2026-11-13 (`9f8c4ae4d3`); it was not built there.
+
+### Not verified yet
+
+No native Windows machine was available, so the expected values come from Microsoft's documentation and the existing tests, not from a Windows run of the new test. A 32-bit Steamworks game started through Steam with `HKCU\Software\Wow6432Node` present has not been run on this build yet. `HKEY_USERS` hives other than the current user's, registry notifications and key renaming were not exercised.
