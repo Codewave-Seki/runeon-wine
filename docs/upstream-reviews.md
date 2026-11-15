@@ -1161,7 +1161,7 @@ Owner drawing between a seed and its flush, window resizing or destruction while
 
 ## User hive Software shared between registry views
 
-Candidate patch set `cx26.3-wine11.0-runeon.37` adds `patches/runeon/0183` after `0182`. It changes `kernelbase` and `server`. `server` is ABI-sensitive and the patch is not opt-in, so it needs the maintainer's individual approval, which is pending. Once given, it covers this patch alone and is not a precedent. It is a downstream fix written for upstream submission, as a fix for WineHQ bug 57892; once an equivalent fix is merged upstream it is replaced by that backport.
+Candidate patch set `cx26.3-wine11.0-runeon.37` adds `patches/runeon/0183` after `0182`. It changes `kernelbase` and `server`. `server` is ABI-sensitive and the patch is not opt-in, so it needed the maintainer's individual approval: the maintainer approved it on 2026-11-15, for `server` and for shipping without an opt-in, for this patch alone; it is not a precedent. It is a downstream fix written for upstream submission, as a fix for WineHQ bug 57892; once an equivalent fix is merged upstream it is replaced by that backport.
 
 ### Defect in the base
 

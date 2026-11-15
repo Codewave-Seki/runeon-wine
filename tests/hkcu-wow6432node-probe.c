@@ -19,10 +19,13 @@
  * Prints one line per check and exits 0 if all pass, 1 if any fails, 2 on a
  * setup error. It removes its keys, and the HKCU keys above them only if it
  * created them and they are empty. Run it only in a scratch prefix, never
- * against a real user prefix or Steam bottle: it writes to HKCU and HKLM. Needs write access to HKLM (a Wine prefix
- * has it). Build both and run both in the same prefix:
- *   i686-w64-mingw32-gcc -O2 -Wall -Werror -o hkcu-wow6432node-probe32.exe hkcu-wow6432node-probe.c
- *   x86_64-w64-mingw32-gcc -O2 -Wall -Werror -o hkcu-wow6432node-probe64.exe hkcu-wow6432node-probe.c
+ * against a real user prefix or Steam bottle: it writes to HKCU and HKLM.
+ * Needs write access to HKLM (a Wine prefix has it). Build both and run
+ * both in the same prefix:
+ *   i686-w64-mingw32-gcc -O2 -Wall -Werror \
+ *     -o hkcu-wow6432node-probe32.exe hkcu-wow6432node-probe.c
+ *   x86_64-w64-mingw32-gcc -O2 -Wall -Werror \
+ *     -o hkcu-wow6432node-probe64.exe hkcu-wow6432node-probe.c
  * It does not cover HKEY_USERS paths other than the current user, renaming
  * keys, registry notifications, or Windows itself. */
 #include <windows.h>
