@@ -165,3 +165,4 @@ patches/runeon/0179-win32u-foreign-window-dc-surface.patch
 patches/runeon/0180-win32u-foreign-cursor-arrow-fallback.patch
 patches/runeon/0181-win32u-foreign-cursor-snapshot.patch
 patches/runeon/0182-steam-launch-preparation-cancel.patch
+patches/runeon/0183-registry-share-user-hive-software-between-views.patch

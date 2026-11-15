@@ -4154,6 +4154,30 @@
           "contains": "    RtlInitUnicodeString( &key, L\"RUNEON_LAUNCH_PREPARE_CANCEL_V1\" );"
         }
       ]
+    },
+    {
+      "order": 213,
+      "path": "patches/runeon/0183-registry-share-user-hive-software-between-views.patch",
+      "sha256": "55595389cf884160e6e90cc4da2f5f854a06f0827cfefe517fdc3605c9359284",
+      "kind": "runeon-product",
+      "status": "active",
+      "risk": "medium",
+      "summary": "On Windows HKCU\\Software is shared between the 32-bit and 64-bit registry views and only the Software\\Classes subtree of a user hive is redirected; Wine redirected the 32-bit view at any key with a Wow6432Node subkey, so once a program created HKCU\\Software\\Wow6432Node a 32-bit steam_api (or a 64-bit one using KEY_WOW64_32KEY) read an empty HKCU\\Software\\Valve\\Steam and reported that Steam was not running (WineHQ bug 57892). wineserver no longer records the Wow6432Node subkey of a key in a user hive outside Software\\Classes as its redirection target, and kernelbase open_wow6432node() treats such a subkey as an ordinary key, so both redirection paths stop at the same boundary. HKLM, Wine's existing Software\\Classes handling, paths that name Wow6432Node and the 64-bit view are unchanged; existing data under HKCU\\Software\\Wow6432Node is neither moved nor deleted. Not opt-in: it aligns with documented Windows behaviour and identifies no process. server is ABI-sensitive; no protocol, request or structure changes. The maintainer approved this patch individually on 2026-11-15, as an exception for this patch alone. Written in a form meant for upstream submission, with tests in dlls/advapi32/tests/registry.c.",
+      "testStrategy": "tests/hkcu-wow6432node-probe.c, built for i686 and x86_64 and run in one prefix where HKCU\\Software\\Wow6432Node exists, must exit 0 on .37 with 0183 and fails its HKCU checks without it: in the default view, with KEY_WOW64_32KEY and with KEY_WOW64_64KEY, full paths and paths continued from an open parent reach HKCU\\Software\\<key>, paths naming Wow6432Node reach that key, deep keys created and values written through the 32-bit view land in the shared key, RegGetValueA with RRF_SUBKEY_WOW6432KEY reads it, and HKLM\\Software, HKLM\\Software\\Classes and its CLSID subtree and HKCU\\Software\\Classes\\CLSID keep their redirection. The new test_redirection_hkcu() in dlls/advapi32/tests/registry.c checks the same for HKCU; the rest of that file must show no new failures. A complete i386/x86_64 WoW64 build is required.",
+      "verification": [
+        {
+          "path": "server/registry.c",
+          "contains": "static int is_wow64_shared_user_key( const struct key *key )"
+        },
+        {
+          "path": "dlls/kernelbase/registry.c",
+          "contains": "static BOOL is_shared_user_wow6432node( HANDLE key )"
+        },
+        {
+          "path": "dlls/advapi32/tests/registry.c",
+          "contains": "static void test_redirection_hkcu(void)"
+        }
+      ]
     }
   ],
   "targetedReview": {

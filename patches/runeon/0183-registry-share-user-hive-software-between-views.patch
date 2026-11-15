@@ -1,0 +1,241 @@
+From: Runeon Contributors <dev@runeon.com>
+Subject: [PATCH] kernelbase, server: Don't redirect user hive keys outside Software\Classes.
+
+On Windows HKEY_CURRENT_USER\Software is shared between the 32-bit and
+64-bit registry views; in a user hive only the Software\Classes subtree
+is redirected ("Registry Keys Affected by WOW64"). Wine redirects the
+32-bit view at any key that has a Wow6432Node subkey. Once a program
+creates HKCU\Software\Wow6432Node, every 32-bit view access below
+HKCU\Software, such as HKCU\Software\Valve\Steam, is sent into it: a
+32-bit steam_api, or a 64-bit one asking for KEY_WOW64_32KEY, then reads
+an empty key and decides that Steam is not running.
+
+There are two redirection paths. wineserver follows the Wow6432Node
+pointer key_link_name() stores in the parent, for 32-bit processes; it
+no longer stores it for a parent in a user hive outside Software\Classes.
+kernelbase's manual walk for KEY_WOW64_32KEY, and for a 32-bit create
+whose parents are missing, opens the Wow6432Node subkey by name;
+open_wow6432node() now treats such a subkey in the same part of a user
+hive as an ordinary key. HKLM, the Software\Classes handling, paths
+that name Wow6432Node and the 64-bit view are unchanged. Existing data
+under HKCU\Software\Wow6432Node is left in place.
+
+Wine-Bug: https://bugs.winehq.org/show_bug.cgi?id=57892
+
+diff --git a/dlls/advapi32/tests/registry.c b/dlls/advapi32/tests/registry.c
+--- a/dlls/advapi32/tests/registry.c
++++ b/dlls/advapi32/tests/registry.c
+@@ -3380,6 +3380,103 @@ static void test_redirection(void)
+     RegCloseKey( key32 );
+ }
+ 
++static void test_redirection_hkcu(void)
++{
++    static const DWORD views[] = { 0, KEY_WOW64_64KEY, KEY_WOW64_32KEY };
++    HKEY wow, key, key32, key64;
++    DWORD err, dw, len, disp, wow_disp, i;
++
++    if (!has_wow64())
++    {
++        skip( "Not on Wow64, no redirection\n" );
++        return;
++    }
++
++    /* HKCU\Software is shared, so an existing Software\Wow6432Node is an ordinary key */
++    err = RegCreateKeyExA( HKEY_CURRENT_USER, "Software\\Wow6432Node", 0, NULL, 0,
++                           KEY_WOW64_64KEY | KEY_ALL_ACCESS, NULL, &wow, &wow_disp );
++    ok( err == ERROR_SUCCESS, "RegCreateKeyExA failed: %lu\n", err );
++
++    err = RegCreateKeyExA( wow, "WineTest\\Winetest", 0, NULL, 0,
++                           KEY_WOW64_64KEY | KEY_ALL_ACCESS, NULL, &key32, NULL );
++    ok( err == ERROR_SUCCESS, "RegCreateKeyExA failed: %lu\n", err );
++    dw = 32;
++    err = RegSetValueExA( key32, "value", 0, REG_DWORD, (BYTE *)&dw, sizeof(dw) );
++    ok( err == ERROR_SUCCESS, "RegSetValueExA failed: %lu\n", err );
++
++    err = RegCreateKeyExA( HKEY_CURRENT_USER, "Software\\WineTest\\Winetest", 0, NULL, 0,
++                           KEY_WOW64_64KEY | KEY_ALL_ACCESS, NULL, &key64, NULL );
++    ok( err == ERROR_SUCCESS, "RegCreateKeyExA failed: %lu\n", err );
++    dw = 64;
++    err = RegSetValueExA( key64, "value", 0, REG_DWORD, (BYTE *)&dw, sizeof(dw) );
++    ok( err == ERROR_SUCCESS, "RegSetValueExA failed: %lu\n", err );
++
++    for (i = 0; i < ARRAY_SIZE(views); i++)
++    {
++        winetest_push_context( "%08lx", views[i] );
++        check_key_value( HKEY_CURRENT_USER, "Software\\WineTest\\Winetest", views[i], 64 );
++        check_key_value( HKEY_CURRENT_USER, "Software\\Wow6432Node\\WineTest\\Winetest", views[i], 32 );
++
++        err = RegOpenKeyExA( HKEY_CURRENT_USER, "Software", 0, views[i] | KEY_ALL_ACCESS, &key );
++        ok( err == ERROR_SUCCESS, "RegOpenKeyExA failed: %lu\n", err );
++        check_key_value( key, "WineTest\\Winetest", 0, 64 );
++        check_key_value( key, "WineTest\\Winetest", KEY_WOW64_64KEY, 64 );
++        check_key_value( key, "WineTest\\Winetest", KEY_WOW64_32KEY, 64 );
++        check_key_value( key, "Wow6432Node\\WineTest\\Winetest", 0, 32 );
++        check_key_value( key, "Wow6432Node\\WineTest\\Winetest", KEY_WOW64_32KEY, 32 );
++        RegCloseKey( key );
++
++        err = RegOpenKeyExA( HKEY_CURRENT_USER, "Software\\WineTest", 0, views[i] | KEY_ALL_ACCESS, &key );
++        ok( err == ERROR_SUCCESS, "RegOpenKeyExA failed: %lu\n", err );
++        check_key_value( key, "Winetest", 0, 64 );
++        check_key_value( key, "Winetest", KEY_WOW64_32KEY, 64 );
++        RegCloseKey( key );
++        winetest_pop_context();
++    }
++
++    if (pRegGetValueA)
++    {
++        dw = 0;
++        len = sizeof(dw);
++        err = pRegGetValueA( HKEY_CURRENT_USER, "Software\\WineTest\\Winetest", "value",
++                             RRF_RT_REG_DWORD | RRF_SUBKEY_WOW6432KEY, NULL, &dw, &len );
++        ok( err == ERROR_SUCCESS, "RegGetValueA failed: %lu\n", err );
++        ok( dw == 64, "wrong value %lu\n", dw );
++    }
++
++    /* keys created through the 32-bit view also land in the shared location */
++    err = RegCreateKeyExA( HKEY_CURRENT_USER, "Software\\WineTest\\Winetest", 0, NULL, 0,
++                           KEY_WOW64_32KEY | KEY_ALL_ACCESS, NULL, &key, &disp );
++    ok( err == ERROR_SUCCESS, "RegCreateKeyExA failed: %lu\n", err );
++    ok( disp == REG_OPENED_EXISTING_KEY, "wrong disposition %lu\n", disp );
++    RegCloseKey( key );
++
++    err = RegCreateKeyExA( HKEY_CURRENT_USER, "Software\\WineTest\\Created\\Deep", 0, NULL, 0,
++                           KEY_WOW64_32KEY | KEY_ALL_ACCESS, NULL, &key, NULL );
++    ok( err == ERROR_SUCCESS, "RegCreateKeyExA failed: %lu\n", err );
++    dw = 33;
++    err = RegSetValueExA( key, "value", 0, REG_DWORD, (BYTE *)&dw, sizeof(dw) );
++    ok( err == ERROR_SUCCESS, "RegSetValueExA failed: %lu\n", err );
++    RegCloseKey( key );
++    check_key_value( HKEY_CURRENT_USER, "Software\\WineTest\\Created\\Deep", KEY_WOW64_64KEY, 33 );
++    check_key_value( HKEY_CURRENT_USER, "Software\\Wow6432Node\\WineTest\\Created\\Deep", KEY_WOW64_64KEY, 0 );
++
++    delete_key( key64 );
++    RegCloseKey( key64 );
++    delete_key( key32 );
++    RegCloseKey( key32 );
++    err = RegOpenKeyExA( HKEY_CURRENT_USER, "Software\\WineTest", 0, KEY_WOW64_64KEY | KEY_ALL_ACCESS, &key );
++    ok( err == ERROR_SUCCESS, "RegOpenKeyExA failed: %lu\n", err );
++    delete_key( key );
++    RegCloseKey( key );
++    err = RegOpenKeyExA( wow, "WineTest", 0, KEY_WOW64_64KEY | KEY_ALL_ACCESS, &key );
++    ok( err == ERROR_SUCCESS, "RegOpenKeyExA failed: %lu\n", err );
++    delete_key( key );
++    RegCloseKey( key );
++    if (wow_disp == REG_CREATED_NEW_KEY) RegDeleteKeyA( wow, "" );
++    RegCloseKey( wow );
++}
++
+ static void test_classesroot(void)
+ {
+     HKEY hkey, hklm, hkcr, hkeysub1, hklmsub1, hkcrsub1, hklmsub2, hkcrsub2;
+@@ -5177,6 +5274,7 @@ START_TEST(registry)
+     test_multistring_termination();
+     test_symlinks();
+     test_redirection();
++    test_redirection_hkcu();
+     test_classesroot();
+     test_classesroot_enum();
+     test_classesroot_mask();
+diff --git a/dlls/kernelbase/registry.c b/dlls/kernelbase/registry.c
+--- a/dlls/kernelbase/registry.c
++++ b/dlls/kernelbase/registry.c
+@@ -151,6 +151,41 @@ static BOOL is_classes_wow6432node( HKEY key )
+     return ret;
+ }
+ 
++/* A user hive is shared between the 32-bit and 64-bit views except for its Software\Classes
++ * subtree, so a Wow6432Node subkey anywhere else in it is an ordinary key */
++static BOOL is_shared_user_wow6432node( HANDLE key )
++{
++    static const WCHAR user_root[] = L"\\Registry\\User\\";
++    static const WCHAR classes[] = L"\\Software\\Classes\\";
++    DWORD user_len = ARRAY_SIZE( user_root ) - 1, classes_len = ARRAY_SIZE( classes ) - 1;
++    char buffer[256], *buf_ptr = buffer;
++    KEY_NAME_INFORMATION *info = (KEY_NAME_INFORMATION *)buffer;
++    DWORD i, name_len, len = sizeof(buffer);
++    NTSTATUS status;
++    BOOL ret = FALSE;
++
++    status = NtQueryKey( key, KeyNameInformation, info, len, &len );
++    while (status == STATUS_BUFFER_OVERFLOW)
++    {
++        if (buf_ptr != buffer) HeapFree( GetProcessHeap(), 0, buf_ptr );
++        if (!(buf_ptr = HeapAlloc( GetProcessHeap(), 0, len ))) return FALSE;
++        info = (KEY_NAME_INFORMATION *)buf_ptr;
++        status = NtQueryKey( key, KeyNameInformation, info, len, &len );
++    }
++
++    name_len = status ? 0 : info->NameLength / sizeof(WCHAR);
++    if (name_len > user_len && !wcsnicmp( info->Name, user_root, user_len ))
++    {
++        /* skip the user SID */
++        i = user_len;
++        while (i < name_len && info->Name[i] != '\\') i++;
++        ret = name_len - i < classes_len || wcsnicmp( info->Name + i, classes, classes_len );
++    }
++
++    if (buf_ptr != buffer) HeapFree( GetProcessHeap(), 0, buf_ptr );
++    return ret;
++}
++
+ /* Open the Wow6432Node subkey of the specified key */
+ static HANDLE open_wow6432node( HANDLE key )
+ {
+@@ -160,6 +195,11 @@ static HANDLE open_wow6432node( HANDLE key )
+ 
+     InitializeObjectAttributes( &attr, &nameW, 0, key, NULL );
+     if (NtOpenKeyEx( &ret, MAXIMUM_ALLOWED | KEY_WOW64_64KEY, &attr, 0 )) return key;
++    if (is_shared_user_wow6432node( ret ))
++    {
++        NtClose( ret );
++        return key;
++    }
+     return ret;
+ }
+ 
+diff --git a/server/registry.c b/server/registry.c
+--- a/server/registry.c
++++ b/server/registry.c
+@@ -221,6 +221,31 @@ static inline struct key *get_parent( const struct key *key )
+     return (struct key *)parent;
+ }
+ 
++static inline int key_name_equal( const struct key *key, const WCHAR *name, data_size_t len )
++{
++    return key->obj.name->len == len && !memicmp_strW( key->obj.name->name, name, len );
++}
++
++/* A user hive is shared between the 32-bit and 64-bit views except for its Software\Classes
++ * subtree, so a Wow6432Node subkey anywhere else in it is an ordinary key */
++static int is_wow64_shared_user_key( const struct key *key )
++{
++    static const WCHAR userW[] = {'U','s','e','r'};
++    static const WCHAR softwareW[] = {'S','o','f','t','w','a','r','e'};
++    static const WCHAR classesW[] = {'C','l','a','s','s','e','s'};
++    const struct key *path[4] = { key };  /* the first four keys below the root key */
++    const struct key *parent;
++
++    while ((parent = get_parent( path[0] )) && parent != root_key)
++    {
++        memmove( path + 1, path, sizeof(path) - sizeof(path[0]) );
++        path[0] = parent;
++    }
++    if (!parent || !key_name_equal( path[0], userW, sizeof(userW) )) return 0;
++    return !path[3] || !key_name_equal( path[2], softwareW, sizeof(softwareW) ) ||
++           !key_name_equal( path[3], classesW, sizeof(classesW) );
++}
++
+ /*
+  * The registry text file format v2 used by this code is similar to the one
+  * used by REGEDIT import/export functionality, with the following differences:
+@@ -615,7 +640,8 @@ static int key_link_name( struct object *obj, struct object_name *name, struct o
+         parent_key->subkeys[i] = parent_key->subkeys[i - 1];
+     parent_key->subkeys[index] = (struct key *)grab_object( key );
+     if (is_wow6432node( name->name, name->len ) &&
+-        !is_wow6432node( parent_key->obj.name->name, parent_key->obj.name->len ))
++        !is_wow6432node( parent_key->obj.name->name, parent_key->obj.name->len ) &&
++        !is_wow64_shared_user_key( parent_key ))
+         parent_key->wow6432node = key;
+     name->parent = parent;
+     return 1;
