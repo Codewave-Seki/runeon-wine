@@ -17,8 +17,9 @@
  *   - HKCU\Software\Classes\CLSID is still redirected when
  *     HKCU\Software\Classes\Wow6432Node exists.
  * Prints one line per check and exits 0 if all pass, 1 if any fails, 2 on a
- * setup error. It removes its keys, and the two Wow6432Node keys only if it
- * created them and they are empty. Needs write access to HKLM (a Wine prefix
+ * setup error. It removes its keys, and the HKCU keys above them only if it
+ * created them and they are empty. Run it only in a scratch prefix, never
+ * against a real user prefix or Steam bottle: it writes to HKCU and HKLM. Needs write access to HKLM (a Wine prefix
  * has it). Build both and run both in the same prefix:
  *   i686-w64-mingw32-gcc -O2 -Wall -Werror -o hkcu-wow6432node-probe32.exe hkcu-wow6432node-probe.c
  *   x86_64-w64-mingw32-gcc -O2 -Wall -Werror -o hkcu-wow6432node-probe64.exe hkcu-wow6432node-probe.c
@@ -74,20 +75,19 @@ static BOOL write_value(HKEY root, const char *path, DWORD view, const char *val
 }
 
 /* deletes path and its subkeys in the 64-bit view, where nothing is redirected */
-static void delete_tree(HKEY root, const char *path)
+static BOOL delete_tree(HKEY root, const char *path)
 {
     char name[MAX_PATH], sub[2 * MAX_PATH];
     HKEY key;
 
-    if (RegOpenKeyExA(root, path, 0, KEY_ENUMERATE_SUB_KEYS | KEY_WOW64_64KEY, &key)) return;
+    if (RegOpenKeyExA(root, path, 0, KEY_ENUMERATE_SUB_KEYS | KEY_WOW64_64KEY, &key)) return FALSE;
     while (!RegEnumKeyA(key, 0, name, sizeof(name)))
     {
         snprintf(sub, sizeof(sub), "%s\\%s", path, name);
-        delete_tree(root, sub);
-        if (RegDeleteKeyExA(root, sub, KEY_WOW64_64KEY, 0)) break;
+        if (!delete_tree(root, sub)) break;
     }
     RegCloseKey(key);
-    RegDeleteKeyExA(root, path, KEY_WOW64_64KEY, 0);
+    return !RegDeleteKeyExA(root, path, KEY_WOW64_64KEY, 0);
 }
 
 static void delete_if_created_and_empty(HKEY root, const char *path, DWORD disp)
@@ -102,8 +102,16 @@ static void delete_if_created_and_empty(HKEY root, const char *path, DWORD disp)
     if (!subkeys && !values) RegDeleteKeyExA(root, path, KEY_WOW64_64KEY, 0);
 }
 
-static void cleanup(DWORD wow_disp, DWORD classes_wow_disp)
+/* HKCU keys the Classes checks may create in a fresh prefix, parents first */
+static const char *const classes_parents[] = {
+    "Software\\Classes", "Software\\Classes\\CLSID", "Software\\Classes\\Wow6432Node", "Software\\Classes\\Wow6432Node\\CLSID",
+};
+static DWORD classes_parent_disp[ARRAYSIZE(classes_parents)];
+
+static void cleanup(DWORD wow_disp)
 {
+    int n;
+
     delete_tree(HKEY_CURRENT_USER, "Software\\" PROBE);
     delete_tree(HKEY_CURRENT_USER, "Software\\Wow6432Node\\" PROBE);
     delete_tree(HKEY_CURRENT_USER, "Software\\Classes\\" CLSID_PROBE);
@@ -113,13 +121,14 @@ static void cleanup(DWORD wow_disp, DWORD classes_wow_disp)
     delete_tree(HKEY_LOCAL_MACHINE, "Software\\Classes\\" PROBE);
     delete_tree(HKEY_LOCAL_MACHINE, "Software\\Classes\\" CLSID_PROBE);
     delete_tree(HKEY_LOCAL_MACHINE, "Software\\Classes\\Wow6432Node\\" CLSID_PROBE);
-    delete_if_created_and_empty(HKEY_CURRENT_USER, "Software\\Classes\\Wow6432Node", classes_wow_disp);
+    for (n = ARRAYSIZE(classes_parents) - 1; n >= 0; n--)
+        delete_if_created_and_empty(HKEY_CURRENT_USER, classes_parents[n], classes_parent_disp[n]);
     delete_if_created_and_empty(HKEY_CURRENT_USER, "Software\\Wow6432Node", wow_disp);
 }
 
 int main(void)
 {
-    DWORD wow_disp = 0, classes_wow_disp = 0, data, size, i;
+    DWORD wow_disp = 0, data, size, i;
     char what[160];
     HKEY key;
 
@@ -136,7 +145,7 @@ int main(void)
         || !write_value(HKEY_CURRENT_USER, "Software\\" PROBE "\\Key", KEY_WOW64_64KEY, "sentinel", 0x64, NULL))
     {
         printf("setup failed: cannot write the sentinels\n");
-        cleanup(wow_disp, classes_wow_disp);
+        cleanup(wow_disp);
         return 2;
     }
 
@@ -207,8 +216,13 @@ int main(void)
     }
 
     /* Wine's existing HKCU\Software\Classes redirection is kept */
-    RegCreateKeyExA(HKEY_CURRENT_USER, "Software\\Classes\\Wow6432Node", 0, NULL, 0, KEY_READ | KEY_WOW64_64KEY, NULL, &key, &classes_wow_disp);
-    RegCloseKey(key);
+    for (i = 0; i < ARRAYSIZE(classes_parents); i++)
+    {
+        if (RegCreateKeyExA(HKEY_CURRENT_USER, classes_parents[i], 0, NULL, 0, KEY_READ | KEY_WOW64_64KEY, NULL,
+                            &key, &classes_parent_disp[i]))
+            continue;
+        RegCloseKey(key);
+    }
     if (!write_value(HKEY_CURRENT_USER, "Software\\Classes\\" CLSID_PROBE, KEY_WOW64_64KEY, "sentinel", 0x64, NULL)
         || !write_value(HKEY_CURRENT_USER, "Software\\Classes\\Wow6432Node\\" CLSID_PROBE, KEY_WOW64_64KEY, "sentinel", 0x32, NULL))
         check("HKCU classes setup", 0, 0, 1);
@@ -219,7 +233,7 @@ int main(void)
               read_value(HKEY_CURRENT_USER, "Software\\Classes\\" CLSID_PROBE, views[i], "sentinel"), redirected);
     }
 
-    cleanup(wow_disp, classes_wow_disp);
+    cleanup(wow_disp);
     printf("%d failure(s)\n", failures);
     return failures ? 1 : 0;
 }

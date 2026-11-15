@@ -2,8 +2,9 @@ From: Runeon Contributors <dev@runeon.com>
 Subject: [PATCH] kernelbase, server: Don't redirect user hive keys outside Software\Classes.
 
 On Windows HKEY_CURRENT_USER\Software is shared between the 32-bit and
-64-bit registry views; in a user hive only the Software\Classes subtree
-is redirected ("Registry Keys Affected by WOW64"). Wine redirects the
+64-bit registry views; in a user hive only listed subkeys of
+Software\Classes (CLSID, Interface, ...) are redirected ("Registry Keys
+Affected by WOW64"). Wine redirects the
 32-bit view at any key that has a Wow6432Node subkey. Once a program
 creates HKCU\Software\Wow6432Node, every 32-bit view access below
 HKCU\Software, such as HKCU\Software\Valve\Steam, is sent into it: a
@@ -16,8 +17,8 @@ no longer stores it for a parent in a user hive outside Software\Classes.
 kernelbase's manual walk for KEY_WOW64_32KEY, and for a 32-bit create
 whose parents are missing, opens the Wow6432Node subkey by name;
 open_wow6432node() now treats such a subkey in the same part of a user
-hive as an ordinary key. HKLM, the Software\Classes handling, paths
-that name Wow6432Node and the 64-bit view are unchanged. Existing data
+hive as an ordinary key. HKLM, Wine's own Software\Classes handling,
+paths that name Wow6432Node and the 64-bit view are unchanged. Existing data
 under HKCU\Software\Wow6432Node is left in place.
 
 Wine-Bug: https://bugs.winehq.org/show_bug.cgi?id=57892
