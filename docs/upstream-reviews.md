@@ -1227,4 +1227,6 @@ A complete local i386/x86_64 WoW64 build of `.38` passed. `tests/lasterror-gs-pr
 
 ### Not verified yet
 
-Wine's own test suites for `ntdll` and `kernel32` have not been run on `.37` and `.38`. i386 code reading `fs:[0x34]` was not examined. Whether threads created by host libraries ever run Wine PE code was checked only by reading the code.
+`dlls/ntdll/tests` and `dlls/kernel32/tests`, x86_64 and i386, were built from the `.37` and `.38` trees and run on both runtimes in fresh prefixes: none of the 128 files failed on `.38` in a way that `.37` does not also show on a rerun. `error`, `thread`, `time`, `sync` and `env` have no failures on either. The differing counts in kernel32 `debugger`, ntdll `file` and i386 ntdll `info` varied between reruns on both runtimes. ntdll `exception` stops on both runtimes with a Rosetta `unsupported privilege level` abort, so its later subtests did not run; the same holds for i386 ntdll `wow64` and x86_64 kernel32 `virtual`.
+
+i386 code reading `fs:[0x34]` was not examined. Whether threads created by host libraries ever run Wine PE code was checked only by reading the code.
