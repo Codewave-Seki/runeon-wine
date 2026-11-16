@@ -1194,3 +1194,37 @@ The patch applies to WineHQ master of 2026-11-13 (`9f8c4ae4d3`); it was not buil
 ### Not verified yet
 
 No native Windows machine was available, so the expected values come from Microsoft's documentation and the existing tests, not from a Windows run of the new test. A 32-bit Steamworks game started through Steam with `HKCU\Software\Wow6432Node` present has not been run on this build yet. `HKEY_USERS` hives other than the current user's, registry notifications and key renaming were not exercised.
+
+<a id="macos-lasterror-gs"></a>
+
+## Last error mirrored into the macOS %gs slot
+
+Candidate patch set `cx26.3-wine11.0-runeon.38` adds `patches/runeon/0184` after `0183`. It changes `ntdll` and the inline `SetLastError()` in `include/winbase.h`, which every Wine PE module compiles in. `ntdll` is ABI-sensitive and the patch is not opt-in, so it needed the maintainer's individual approval: the maintainer approved it on 2026-11-16, for `ntdll`, for the `include/winbase.h` change and for shipping without an opt-in, for this patch alone; it is not a precedent. Its shape differs from upstream, which instead swaps GSBASE between the TEB and the host thread data (WineHQ `3a16aabbf5`, Wine 10.5), so it is not written for upstream submission.
+
+### Defect in the base
+
+On Windows x64 %gs points to the TEB, and `gs:[0x68]` is `TEB.LastErrorValue`. Mono's x64 JIT reads the last error there inline after every P/Invoke declared with `SetLastError=true`, instead of calling `GetLastError()`. In the pinned base on macOS x86_64, GSBASE is always the host pthread's TSD array; `init_syscall_frame()` mirrors only `TEB.Self` (0x30), the TLS pointer (0x58) and the PEB (0x60) into it. `gs:[0x68]` is TSD slot 13, where libc `gmtime()` keeps a pointer to its buffer and registers a destructor that frees it.
+
+`tests/lasterror-gs-probe.c` on `.37`: after explicit `SetLastError()` calls and after failing `GetFileAttributesExW()`, `FindFirstFileExW()` and `FindNextFileW()`, `gs:[0x68]` never matched `GetLastError()`, while the TEB always did. The main thread read a constant host pointer; a Wine-created thread read 0, and a fresh `gmtime()` buffer after `GetTimeZoneInformation()`. A Unity game's corlib takes a failed attribute query whose captured error is 0 for success, so `FileInfo.Exists` reported a missing temporary file as present and the game disabled saving.
+
+### Change
+
+On macOS x86_64 only:
+
+- Every write of `TEB.LastErrorValue` also stores the value, zero-extended, over the whole 64-bit slot: `RtlSetLastWin32Error()` and its aliases (`RtlRestoreLastWin32Error`, kernel32/kernelbase `SetLastError` and `RestoreLastError`), `RtlSetLastWin32ErrorAndNtStatusFromNtStatus()`, the Unix-side `RtlSetLastWin32Error()` used by `win32u` and other Unix libraries, and the inline `SetLastError()` in `include/winbase.h`. PE code finds the slot through `TEB.Instrumentation[0]`, which only the macOS branch of `init_syscall_frame()` sets, as the loader's TLS pointer mirror already does; elsewhere it is NULL and nothing is written.
+- `gmtime()` is replaced by `gmtime_r()` on a thread-local buffer, installed next to the existing `localtime()` replacement for the PEB at 0x60. A scan and a run of the x86_64 libsystem_c time functions found no other user of slot 13.
+- `pthread_exit_wrapper()` clears the slot next to the existing 0x60 clear, so a `gmtime()` destructor registered before the replacement is never handed an error code to free. It is the only `pthread_exit()` call in the base; return, `ExitThread()` and `TerminateThread()` all reach it, and process exit runs no TSD destructors.
+
+`wow64win` writes the 32-bit TEB, which i386 code reads through fs, and is unchanged; Linux and i386 builds are unchanged. No protocol, export or shared structure changes. Code that writes the TEB or `gs:[0x68]` directly is not mirrored.
+
+### Verification
+
+A complete local i386/x86_64 WoW64 build of `.38` passed. `tests/lasterror-gs-probe.c`, each run in a fresh prefix:
+
+- On `.37` it exits 1 with 46 failing cases; on the `.38` build it exits 0 with none. Cases: explicit values including 0, 0xffffffff and 0x80000000, `RestoreLastError()`, `RtlSetLastWin32ErrorAndNtStatusFromNtStatus()`, three failing file APIs, a `user32` call failing on the Unix side and `GetTimeZoneInformation()` (host `gmtime()` with an error code in the slot), 1000 times each on the main thread and a second thread; 16 threads setting distinct values at once, counted only when all 16 started and finished; a window procedure reached by `SendMessage()`; 50 threads each ending by return, `ExitThread()` and `TerminateThread()`; a process exit with an error code in the main thread's slot.
+- A host-only model without Wine: a thread that leaves an error code in slot 13 after `gmtime()` registered its destructor aborts in `free()`; clearing the slot first avoids it.
+- In Runeon, the Unity game that could not save saved normally on the `.38` build; one DXMT game and one D3DMetal game started and exited normally.
+
+### Not verified yet
+
+Wine's own test suites for `ntdll` and `kernel32` have not been run on `.37` and `.38`. i386 code reading `fs:[0x34]` was not examined. Whether threads created by host libraries ever run Wine PE code was checked only by reading the code.

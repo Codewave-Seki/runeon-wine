@@ -1,0 +1,126 @@
+From: Runeon Contributors <dev@runeon.com>
+Subject: [PATCH] ntdll: Mirror the last error into the %gs slot on macOS x86_64.
+
+On Windows x64 %gs points to the TEB, and code may read the last error
+inline from gs:[0x68] (TEB.LastErrorValue) instead of calling
+GetLastError(); Mono's JIT does this after every P/Invoke declared with
+SetLastError=true. On macOS %gs points to the host pthread's TSD
+array, into which Wine mirrors only TEB.Self, the TLS pointer and the
+PEB. gs:[0x68] is TSD slot 13, where libc gmtime() keeps its buffer, so
+such code reads a stale pointer or zero, and can, for example, take a
+failed file query for a successful one.
+
+Every write of TEB.LastErrorValue on x86_64 now also stores the value,
+zero-extended, into that slot: RtlSetLastWin32Error() (and its aliases
+RtlRestoreLastWin32Error, SetLastError, RestoreLastError),
+RtlSetLastWin32ErrorAndNtStatusFromNtStatus(), the Unix-side
+RtlSetLastWin32Error() and the inline SetLastError() Wine's own PE
+modules use. PE code finds the slot through TEB.Instrumentation[0],
+which only the macOS build sets, as the TLS pointer mirror in the
+loader already does; elsewhere it is NULL and nothing changes.
+
+As is done for localtime() and the PEB at gs:[0x60], gmtime() is
+replaced by gmtime_r() on a thread-local buffer, so libc no longer
+reads or writes the slot, and Wine threads clear it before
+pthread_exit() so a gmtime() destructor registered earlier is never
+handed an error code to free(). gmtime() is the only libc function
+that uses this slot.
+
+diff --git a/dlls/ntdll/error.c b/dlls/ntdll/error.c
+--- a/dlls/ntdll/error.c
++++ b/dlls/ntdll/error.c
+@@ -121,7 +121,16 @@ DWORD WINAPI RtlGetLastWin32Error(void)
+  */
+ void WINAPI RtlSetLastWin32Error( DWORD err )
+ {
+-    NtCurrentTeb()->LastErrorValue = err;
++    TEB *teb = NtCurrentTeb();
++
++    teb->LastErrorValue = err;
++#ifdef __x86_64__
++    /* On macOS %gs points to the host thread data recorded in Instrumentation[0],
++     * not to the TEB. Code that reads gs:[0x68] inline, as on Windows, finds the
++     * error there; store it zero-extended over the whole host slot. */
++    if (teb->Instrumentation[0])
++        *(ULONG_PTR *)&((TEB *)teb->Instrumentation[0])->LastErrorValue = err;
++#endif
+ }
+ 
+ /***********************************************************************
+@@ -137,5 +146,5 @@ void WINAPI RtlSetLastWin32Error( DWORD err )
+  */
+ void WINAPI RtlSetLastWin32ErrorAndNtStatusFromNtStatus( NTSTATUS status )
+ {
+-    NtCurrentTeb()->LastErrorValue = RtlNtStatusToDosError( status );
++    RtlSetLastWin32Error( RtlNtStatusToDosError( status ) );
+ }
+diff --git a/dlls/ntdll/unix/env.c b/dlls/ntdll/unix/env.c
+--- a/dlls/ntdll/unix/env.c
++++ b/dlls/ntdll/unix/env.c
+@@ -2443,4 +2443,10 @@ void WINAPI RtlSetLastWin32Error( DWORD err )
+     if (wow_teb) wow_teb->LastErrorValue = err;
+ #endif
+     teb->LastErrorValue = err;
++#if defined(__APPLE__) && defined(__x86_64__)
++    /* Mirror it into the host slot %gs points to, see ntdll RtlSetLastWin32Error(). */
++    __asm__ volatile (".byte 0x65\n\tmovq %q0,%c1"
++                      :
++                      : "r" ((ULONG_PTR)err), "n" (FIELD_OFFSET(TEB, LastErrorValue)));
++#endif
+ }
+diff --git a/dlls/ntdll/unix/loader.c b/dlls/ntdll/unix/loader.c
+--- a/dlls/ntdll/unix/loader.c
++++ b/dlls/ntdll/unix/loader.c
+@@ -2291,6 +2291,13 @@ struct tm *my_localtime(const time_t *timep)
+     return localtime_r(timep, &localtime_tls);
+ }
+ 
++/* gmtime() keeps its buffer in the %gs field the last error is mirrored into. */
++static __thread struct tm gmtime_tls;
++static struct tm *my_gmtime(const time_t *timep)
++{
++    return gmtime_r(timep, &gmtime_tls);
++}
++
+ static void hook(void *to_hook, const void *replace)
+ {
+     size_t offset;
+@@ -2355,6 +2362,7 @@ static void start_main_thread(void)
+     /* This is necessary because we poke PEB into pthread TLS at offset 0x60. It is normally in use by
+      * localtime(), which is called a lot by system libraries. Make localtime() go away. */
+     hook(localtime, my_localtime);
++    hook(gmtime, my_gmtime);
+ #endif
+ 
+     /* CW Hack 24067 */
+diff --git a/dlls/ntdll/unix/thread.c b/dlls/ntdll/unix/thread.c
+--- a/dlls/ntdll/unix/thread.c
++++ b/dlls/ntdll/unix/thread.c
+@@ -1121,6 +1121,10 @@ static DECLSPEC_NORETURN void pthread_exit_wrapper( int status )
+     __asm__ volatile (".byte 0x65\n\tmovq %q0,%c1"
+                       :
+                       : "r" (NULL), "n" (FIELD_OFFSET(TEB, Peb)));
++    /* Likewise for the last error mirrored into the gmtime() field. */
++    __asm__ volatile (".byte 0x65\n\tmovq %q0,%c1"
++                      :
++                      : "r" (NULL), "n" (FIELD_OFFSET(TEB, LastErrorValue)));
+ #endif
+ 
+     pthread_exit( UIntToPtr(status) );
+diff --git a/include/winbase.h b/include/winbase.h
+--- a/include/winbase.h
++++ b/include/winbase.h
+@@ -2702,6 +2702,13 @@ static FORCEINLINE HANDLE WINAPI GetProcessHeap(void)
+ static FORCEINLINE void WINAPI SetLastError( DWORD err )
+ {
+     *(DWORD *)((void **)NtCurrentTeb() + 13) = err;
++#ifdef __x86_64__
++    {
++        /* TEB.Instrumentation[0]: the macOS %gs base, see RtlSetLastWin32Error(). */
++        void **gs_base = ((void ***)NtCurrentTeb())[0x16b8 / sizeof(void *)];
++        if (gs_base) gs_base[13] = (void *)(ULONG_PTR)err;
++    }
++#endif
+ }
+ 
+ #else  /* __WINESRC__ */
