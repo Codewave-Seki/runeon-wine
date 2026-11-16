@@ -1,0 +1,83 @@
+From: Runeon Contributors <dev@runeon.com>
+Subject: [PATCH] winemac.drv: Let clicks pass through transparent layered windows.
+
+EXPERIMENTAL, local test only; not reviewed for a patch set.
+
+On Windows, hit-testing skips a window whose extended style has both
+WS_EX_LAYERED and WS_EX_TRANSPARENT, so mouse input goes to whatever is
+below it; desktop overlays toggle WS_EX_TRANSPARENT to become
+click-through. The wineserver already skips such windows, but the mac
+driver kept the Cocoa window accepting mouse events, so macOS delivered
+clicks to it and Wine then dropped them.
+
+The mac driver now carries the state in macdrv_window_state and sets
+ignoresMouseEvents on the Cocoa window, only when the value changes:
+explicitly setting NO also disables AppKit's default pass-through on
+fully transparent pixels, so windows that never had the style keep
+their current behaviour.
+
+SetWindowStyle also returns early when the style did not change; some
+programs set the same extended style every frame, and each call
+re-synced all Cocoa window properties on the main thread.
+
+diff --git a/dlls/winemac.drv/cocoa_window.m b/dlls/winemac.drv/cocoa_window.m
+index 96348c5..c7b5848 100644
+--- a/dlls/winemac.drv/cocoa_window.m
++++ b/dlls/winemac.drv/cocoa_window.m
+@@ -1337,6 +1337,11 @@ - (void) setMacDrvState:(const struct macdrv_window_state*)state
+         self.disabled = state->disabled;
+         self.noForeground = state->no_foreground;
+ 
++        /* Only call the setter on a change: explicitly setting NO also turns off
++         * AppKit's default pass-through of clicks on fully transparent pixels. */
++        if ([self ignoresMouseEvents] != state->ignores_mouse_events)
++            [self setIgnoresMouseEvents:state->ignores_mouse_events];
++
+         if (self.floating != state->floating)
+         {
+             self.floating = state->floating;
+diff --git a/dlls/winemac.drv/macdrv_cocoa.h b/dlls/winemac.drv/macdrv_cocoa.h
+index bd095f8..7be1671 100644
+--- a/dlls/winemac.drv/macdrv_cocoa.h
++++ b/dlls/winemac.drv/macdrv_cocoa.h
+@@ -523,6 +523,7 @@ extern int macdrv_register_hot_key(macdrv_event_queue q, unsigned int vkey, unsi
+     unsigned int    minimized:1;
+     unsigned int    minimized_valid:1;
+     unsigned int    maximized:1;
++    unsigned int    ignores_mouse_events:1;
+ };
+ 
+ struct window_surface;
+diff --git a/dlls/winemac.drv/window.c b/dlls/winemac.drv/window.c
+index 7db1e1d..010a0d9 100644
+--- a/dlls/winemac.drv/window.c
++++ b/dlls/winemac.drv/window.c
+@@ -167,6 +167,10 @@ static void get_cocoa_window_state(struct macdrv_win_data *data,
+     state->minimized = (style & WS_MINIMIZE) != 0;
+     state->minimized_valid = state->minimized != data->minimized;
+     state->maximized = (style & WS_MAXIMIZE) != 0;
++    /* Windows hit-testing skips layered windows with WS_EX_TRANSPARENT (as the
++     * server's window_from_point does), so clicks go to whatever is below. */
++    state->ignores_mouse_events = (ex_style & (WS_EX_LAYERED | WS_EX_TRANSPARENT)) ==
++                                  (WS_EX_LAYERED | WS_EX_TRANSPARENT);
+ }
+ 
+ 
+@@ -290,6 +294,8 @@ static void set_cocoa_window_properties(struct macdrv_win_data *data)
+     macdrv_set_cocoa_window_features(data->cocoa_window, &wf);
+ 
+     get_cocoa_window_state(data, style, ex_style, &state);
++    TRACE("win %p/%p style 0x%08x ex_style 0x%08x ignores_mouse_events %d\n", data->hwnd,
++          data->cocoa_window, style, ex_style, state.ignores_mouse_events);
+     macdrv_set_cocoa_window_state(data->cocoa_window, &state);
+     if (state.minimized_valid)
+         data->minimized = state.minimized;
+@@ -1476,6 +1482,8 @@ void macdrv_SetWindowStyle(HWND hwnd, INT offset, STYLESTRUCT *style)
+ 
+     TRACE("hwnd %p offset %d styleOld 0x%08x styleNew 0x%08x\n", hwnd, offset, style->styleOld, style->styleNew);
+ 
++    /* Some programs set the same style every frame; nothing to sync then. */
++    if (style->styleNew == style->styleOld) return;
+     if (hwnd == NtUserGetDesktopWindow()) return;
+     if (!(data = get_win_data(hwnd))) return;
+ 

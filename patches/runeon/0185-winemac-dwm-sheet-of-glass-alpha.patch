@@ -1,0 +1,270 @@
+From: Runeon Contributors <dev@runeon.com>
+Subject: [PATCH] dwmapi, winemac.drv: Composite sheet-of-glass windows with alpha.
+
+EXPERIMENTAL, local test only; not reviewed for a patch set.
+
+On Windows, DwmExtendFrameIntoClientArea() with negative margins (the
+"sheet of glass") makes DWM composite the window's alpha channel onto
+the desktop; desktop overlays rely on it to show only what they draw.
+Wine's dwmapi ignored the call, so alpha-0 areas showed black.
+
+dwmapi now records the sheet-of-glass state as a window property and
+requests SWP_FRAMECHANGED when it changes. The mac driver reads the
+property when it creates the Cocoa window and on SWP_FRAMECHANGED, and
+then makes the window non-opaque through the existing transparency
+check, interprets the window surface with its alpha channel as DWM
+does, and makes the window's Metal layers non-opaque without a
+background. Any negative margin counts, as in Microsoft's example
+MARGINS margins = {-1}. A Metal view takes its window's state whenever
+it joins a window, including when SetParent moves its client surface to
+another top-level window. Windows without the property are unchanged.
+
+diff --git a/dlls/dwmapi/dwmapi_main.c b/dlls/dwmapi/dwmapi_main.c
+index 4b881b4..342a91a 100644
+--- a/dlls/dwmapi/dwmapi_main.c
++++ b/dlls/dwmapi/dwmapi_main.c
+@@ -68,7 +68,22 @@ HRESULT WINAPI DwmEnableComposition(UINT uCompositionAction)
+  */
+ HRESULT WINAPI DwmExtendFrameIntoClientArea(HWND hwnd, const MARGINS* margins)
+ {
+-    FIXME("(%p, %p) stub\n", hwnd, margins);
++    BOOL sheet_of_glass;
++
++    FIXME("(%p, %p) semi-stub\n", hwnd, margins);
++
++    /* Only the sheet-of-glass case is passed on: the mac driver then composites
++     * the window's alpha channel onto the desktop. Any negative margin means the
++     * whole window, as in Microsoft's own example MARGINS margins = {-1}, which
++     * leaves the other three at 0. Other margins are ignored. */
++    sheet_of_glass = margins && (margins->cxLeftWidth < 0 || margins->cxRightWidth < 0 ||
++                                 margins->cyTopHeight < 0 || margins->cyBottomHeight < 0);
++    if (!GetPropW(hwnd, L"__wine_dwm_sheet_of_glass") == !sheet_of_glass) return S_OK;
++
++    if (sheet_of_glass) SetPropW(hwnd, L"__wine_dwm_sheet_of_glass", (HANDLE)1);
++    else RemovePropW(hwnd, L"__wine_dwm_sheet_of_glass");
++    SetWindowPos(hwnd, 0, 0, 0, 0, 0, SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER |
++                 SWP_NOACTIVATE | SWP_NOOWNERZORDER);
+ 
+     return S_OK;
+ }
+diff --git a/dlls/winemac.drv/cocoa_window.m b/dlls/winemac.drv/cocoa_window.m
+index ffb7c6a..93f92ea 100644
+--- a/dlls/winemac.drv/cocoa_window.m
++++ b/dlls/winemac.drv/cocoa_window.m
+@@ -353,6 +353,7 @@ @interface WineMetalView : WineBaseView
+ }
+ 
+     - (id) initWithFrame:(NSRect)frame device:(id<MTLDevice>)device;
++    - (void) setSheetOfGlass:(BOOL)sheetOfGlass;
+ 
+ @end
+ 
+@@ -411,6 +412,7 @@ @interface WineWindow ()
+ @property (readonly, nonatomic) BOOL needsTransparency;
+ 
+ @property (nonatomic) BOOL usePerPixelAlpha;
++@property (nonatomic) BOOL sheetOfGlass;
+ 
+ @property (assign, nonatomic) void* himc;
+ @property (nonatomic) BOOL commandDone;
+@@ -517,7 +519,7 @@ - (BOOL) wantsUpdateLayer
+     - (void) updateLayer
+     {
+         WineWindow* window = (WineWindow*)[self window];
+-        CGImageRef image, maskedImage;
++        CGImageRef image, maskedImage, sourceImage;
+         CGRect imageRect;
+         CALayer* layer = [self layer];
+ 
+@@ -533,8 +535,21 @@ - (void) updateLayer
+         imageRect.size.width *= layer.contentsScale;
+         imageRect.size.height *= layer.contentsScale;
+ 
+-        maskedImage = shapeImage ? CGImageCreateWithMask(colorImage, shapeImage)
+-                                 : CGImageRetain(colorImage);
++        sourceImage = CGImageRetain(colorImage);
++        /* DWM composites a sheet-of-glass window's surface with its alpha channel */
++        if (window.sheetOfGlass && colorImage && CGImageGetAlphaInfo(colorImage) == kCGImageAlphaNoneSkipFirst)
++        {
++            CGImageRelease(sourceImage);
++            sourceImage = CGImageCreate(CGImageGetWidth(colorImage), CGImageGetHeight(colorImage),
++                                        CGImageGetBitsPerComponent(colorImage), CGImageGetBitsPerPixel(colorImage),
++                                        CGImageGetBytesPerRow(colorImage), CGImageGetColorSpace(colorImage),
++                                        kCGImageAlphaPremultipliedFirst | (CGImageGetBitmapInfo(colorImage) & kCGBitmapByteOrderMask),
++                                        CGImageGetDataProvider(colorImage), NULL,
++                                        CGImageGetShouldInterpolate(colorImage), CGImageGetRenderingIntent(colorImage));
++        }
++        maskedImage = shapeImage ? CGImageCreateWithMask(sourceImage, shapeImage)
++                                 : CGImageRetain(sourceImage);
++        CGImageRelease(sourceImage);
+         image = CGImageCreateWithImageInRect(maskedImage, imageRect);
+         CGImageRelease(maskedImage);
+ 
+@@ -996,6 +1011,34 @@ - (BOOL) isOpaque
+         return YES;
+     }
+ 
++    /* Under a sheet of glass the presented alpha must reach the desktop, so the
++       layer may not be opaque or draw its black background. The layer is left
++       untouched otherwise. */
++    /* A view joins a window when it is created and again when SetParent moves its
++       client surface to another top-level window; either way it takes that
++       window's sheet-of-glass state. */
++    - (void) viewDidMoveToWindow
++    {
++        [super viewDidMoveToWindow];
++        if ([self.window isKindOfClass:[WineWindow class]])
++            [self setSheetOfGlass:((WineWindow*)self.window).sheetOfGlass];
++    }
++
++    - (void) setSheetOfGlass:(BOOL)sheetOfGlass
++    {
++        CAMetalLayer *layer = (CAMetalLayer*)self.layer;
++        if (sheetOfGlass)
++        {
++            layer.opaque = NO;
++            layer.backgroundColor = NULL;
++        }
++        else if (!layer.opaque)
++        {
++            layer.opaque = YES;
++            layer.backgroundColor = CGColorGetConstantColor(kCGColorBlack);
++        }
++    }
++
+ @end
+ 
+ 
+@@ -1007,6 +1050,7 @@ @implementation WineWindow
+     @synthesize drawnSinceShown;
+     @synthesize shapeChangedSinceLastDraw;
+     @synthesize usePerPixelAlpha;
++    @synthesize sheetOfGlass;
+     @synthesize himc, commandDone;
+     @synthesize contentViewMaskLayer;
+ 
+@@ -2062,7 +2106,7 @@ - (void) setDisabled:(BOOL)newValue
+     - (BOOL) needsTransparency
+     {
+         WineContentView *view = self.contentView;
+-        return self.contentView.layer.mask || [view hasShapeImage] || self.usePerPixelAlpha ||
++        return self.contentView.layer.mask || [view hasShapeImage] || self.usePerPixelAlpha || self.sheetOfGlass ||
+                 (gl_surface_mode == GL_SURFACE_BEHIND && [view hasGLDescendant]);
+     }
+ 
+@@ -3751,6 +3795,34 @@ void macdrv_set_window_alpha(macdrv_window w, CGFloat alpha)
+ }
+ }
+ 
++/***********************************************************************
++ *              macdrv_window_set_sheet_of_glass
++ */
++void macdrv_window_set_sheet_of_glass(macdrv_window w, bool sheet_of_glass)
++{
++@autoreleasepool
++{
++    WineWindow* window = (WineWindow*)w;
++
++    OnMainThread(^{
++        NSMutableArray* views = [NSMutableArray arrayWithObject:[window contentView]];
++
++        window.sheetOfGlass = sheet_of_glass;
++        [window checkTransparency];
++        [[window contentView] setNeedsDisplay:YES];
++
++        while ([views count])
++        {
++            NSView* view = [views lastObject];
++            [views removeLastObject];
++            if ([view isKindOfClass:[WineMetalView class]])
++                [(WineMetalView*)view setSheetOfGlass:sheet_of_glass];
++            [views addObjectsFromArray:[view subviews]];
++        }
++    });
++}
++}
++
+ /***********************************************************************
+  *              macdrv_window_use_per_pixel_alpha
+  */
+diff --git a/dlls/winemac.drv/macdrv.h b/dlls/winemac.drv/macdrv.h
+index 5735ff7..163141f 100644
+--- a/dlls/winemac.drv/macdrv.h
++++ b/dlls/winemac.drv/macdrv.h
+@@ -194,6 +194,7 @@ extern BOOL macdrv_SystemParametersInfo(UINT action, UINT int_param, void *ptr_p
+     unsigned int        per_pixel_alpha : 1;    /* is window using per-pixel alpha? */
+     unsigned int        minimized : 1;          /* is window minimized? */
+     unsigned int        fullscreen : 1;         /* is the window visible rect fullscreen? (unrelated to native AppKit/Cocoa fullscreen) */
++    unsigned int        sheet_of_glass : 1;     /* has DwmExtendFrameIntoClientArea() extended the frame over the whole window? */
+ 
+     /* CW HACK 22435 */
+     CFMutableArrayRef   d3dmetal_client_surfaces;
+diff --git a/dlls/winemac.drv/macdrv_cocoa.h b/dlls/winemac.drv/macdrv_cocoa.h
+index ade1aa5..bd095f8 100644
+--- a/dlls/winemac.drv/macdrv_cocoa.h
++++ b/dlls/winemac.drv/macdrv_cocoa.h
+@@ -548,6 +548,7 @@ extern void macdrv_order_cocoa_window(macdrv_window w, macdrv_window prev,
+ extern void macdrv_set_window_shape(macdrv_window w, const CGRect *rects, int count);
+ extern void macdrv_set_window_alpha(macdrv_window w, CGFloat alpha);
+ extern void macdrv_window_use_per_pixel_alpha(macdrv_window w, bool use_per_pixel_alpha);
++extern void macdrv_window_set_sheet_of_glass(macdrv_window w, bool sheet_of_glass);
+ extern void macdrv_set_window_mask(macdrv_window w, CGRect rect);
+ extern void macdrv_give_cocoa_window_focus(macdrv_window w, bool activate);
+ extern void macdrv_set_window_min_max_sizes(macdrv_window w, CGSize min_size, CGSize max_size);
+diff --git a/dlls/winemac.drv/window.c b/dlls/winemac.drv/window.c
+index bfeae78..7db1e1d 100644
+--- a/dlls/winemac.drv/window.c
++++ b/dlls/winemac.drv/window.c
+@@ -340,6 +340,26 @@ static void sync_window_opacity(struct macdrv_win_data *data, BYTE alpha,
+ }
+ 
+ 
++/***********************************************************************
++ *              sync_window_sheet_of_glass
++ *
++ * dwmapi sets this property for a window whose frame was extended over the
++ * whole client area ("sheet of glass"), where DWM would composite the
++ * window's alpha channel onto the desktop.
++ */
++static void sync_window_sheet_of_glass(struct macdrv_win_data *data)
++{
++    static const WCHAR sheet_of_glassW[] = {'_','_','w','i','n','e','_','d','w','m','_','s','h','e','e','t','_','o','f','_','g','l','a','s','s',0};
++    BOOL sheet_of_glass = NtUserGetProp(data->hwnd, sheet_of_glassW) != 0;
++
++    if (!data->sheet_of_glass == !sheet_of_glass) return;
++
++    TRACE("setting window %p/%p sheet-of-glass to %d\n", data->hwnd, data->cocoa_window, sheet_of_glass);
++    macdrv_window_set_sheet_of_glass(data->cocoa_window, sheet_of_glass);
++    data->sheet_of_glass = sheet_of_glass;
++}
++
++
+ /***********************************************************************
+  *              sync_window_min_max_info
+  */
+@@ -529,6 +549,7 @@ static void create_cocoa_window(struct macdrv_win_data *data)
+     /* set the window opacity */
+     if (!NtUserGetLayeredWindowAttributes(data->hwnd, &key, &alpha, &layered_flags)) layered_flags = 0;
+     sync_window_opacity(data, alpha, FALSE, layered_flags);
++    sync_window_sheet_of_glass(data);
+ 
+ done:
+     if (win_rgn) NtGdiDeleteObjectApp(win_rgn);
+@@ -549,6 +570,7 @@ static void destroy_cocoa_window(struct macdrv_win_data *data)
+     macdrv_destroy_cocoa_window(data->cocoa_window);
+     data->cocoa_window = 0;
+     data->on_screen = FALSE;
++    data->sheet_of_glass = FALSE;
+ }
+ 
+ 
+@@ -1694,6 +1716,9 @@ void macdrv_WindowPosChanged(HWND hwnd, HWND insert_after, HWND owner_hint, UINT
+ 
+     if (!data->cocoa_window) goto done;
+ 
++    /* dwmapi requests SWP_FRAMECHANGED after changing the sheet-of-glass property */
++    if (swp_flags & SWP_FRAMECHANGED) sync_window_sheet_of_glass(data);
++
+     if (data->on_screen)
+     {
+         if ((swp_flags & SWP_HIDEWINDOW) && !(new_style & WS_VISIBLE))
