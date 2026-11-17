@@ -10,7 +10,7 @@ Runeon Wine is the public source-maintenance repository for Runeon's Steam Basel
 
 - CodeWeavers source: `crossover-sources-26.3.0.tar.gz`, Wine `11.0`, pinned in [`base/crossover-26.3-wine-11.0.json`](base/crossover-26.3-wine-11.0.json)
 <!-- release-facts:current-patch-set -->
-- Current stable source: [`cx26.3-wine11.0-runeon.37`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.37), for seed `2026.11.16` (App `>=1.16 (38)`). Definition in [`patchsets/cx26.3-wine11.0-runeon.37`](patchsets/cx26.3-wine11.0-runeon.37/manifest.json)
+- Current stable source: [`cx26.3-wine11.0-runeon.38`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.38), for seed `2026.11.17` (App `>=1.16 (39)`). Definition in [`patchsets/cx26.3-wine11.0-runeon.38`](patchsets/cx26.3-wine11.0-runeon.38/manifest.json)
 - Upstream reviewed through: `wine-11.15` (complete audit), `wine-11.20` (filtered sweeps); see [MAINTENANCE.md](MAINTENANCE.md#review-records)
 
 ## Repository layout
@@ -44,7 +44,7 @@ scripts/integration-check.sh "$source_root"
 `integration-check.sh` applies every patch in order to a temporary copy of the pinned baseline, checks the verification markers, and confirms that the series cannot be applied twice. To build the bundles for a Release:
 
 ```bash
-export RUNEON_WINE_PATCHSET_DEFINITION=patchsets/cx26.3-wine11.0-runeon.37
+export RUNEON_WINE_PATCHSET_DEFINITION=patchsets/cx26.3-wine11.0-runeon.38
 source_root="$(scripts/fetch-source.sh)"
 scripts/apply-series.sh "$source_root"
 scripts/build-source-bundle.sh "$source_root" dist
@@ -59,7 +59,8 @@ Each Release carries the patch-set bundle, the complete corresponding source and
 
 | Patch set | State | Seed | Status |
 |---|---|---|---|
-| [`.37`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.37) | stable, latest | `2026.11.16` | Current; delivered to App `>=1.16 (38)` |
+| [`.38`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.38) | stable, latest | `2026.11.17` | Current; delivered to App `>=1.16 (39)` |
+| [`.37`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.37) | stable | `2026.11.16` | Delivered to App `1.16 (38)` |
 | [`.36`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.36) | stable | `2026.11.12` | Delivered to App `1.16 (31)`–`1.16 (37)` |
 | [`.35`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.35) | stable | `2026.11.11` | Superseded, retained |
 | [`.34`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.34) | stable | `2026.11.08` | Superseded, retained |
