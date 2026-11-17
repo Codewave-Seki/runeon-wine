@@ -1,8 +1,6 @@
 From: Runeon Contributors <dev@runeon.com>
 Subject: [PATCH] winemac.drv: Let clicks pass through transparent layered windows.
 
-EXPERIMENTAL, local test only; not reviewed for a patch set.
-
 On Windows, hit-testing skips a window whose extended style has both
 WS_EX_LAYERED and WS_EX_TRANSPARENT, so mouse input goes to whatever is
 below it; desktop overlays toggle WS_EX_TRANSPARENT to become

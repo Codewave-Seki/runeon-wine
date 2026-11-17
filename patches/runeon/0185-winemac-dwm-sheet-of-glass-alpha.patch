@@ -1,8 +1,6 @@
 From: Runeon Contributors <dev@runeon.com>
 Subject: [PATCH] dwmapi, winemac.drv: Composite sheet-of-glass windows with alpha.
 
-EXPERIMENTAL, local test only; not reviewed for a patch set.
-
 On Windows, DwmExtendFrameIntoClientArea() with negative margins (the
 "sheet of glass") makes DWM composite the window's alpha channel onto
 the desktop; desktop overlays rely on it to show only what they draw.

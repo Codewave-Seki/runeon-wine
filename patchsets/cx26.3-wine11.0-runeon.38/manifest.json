@@ -4206,6 +4206,50 @@
           "contains": "/* Likewise for the last error mirrored into the gmtime() field. */"
         }
       ]
+    },
+    {
+      "order": 215,
+      "path": "patches/runeon/0185-winemac-dwm-sheet-of-glass-alpha.patch",
+      "sha256": "8683d5c00541af965cb960fa57292e297d5f371db00ff17a5d86eeb456214344",
+      "kind": "runeon-product",
+      "status": "active",
+      "risk": "high",
+      "summary": "Approved individually by the maintainer on 2026-11-17 for winemac.drv and for default use without an opt-in; not a precedent. On Windows, DwmExtendFrameIntoClientArea() with a negative margin (the sheet of glass, as in Microsoft's MARGINS margins = {-1}) makes DWM composite the window's alpha channel onto the desktop; Wine's dwmapi ignored the call, so desktop overlays showed black where they draw nothing. dwmapi now records the sheet-of-glass state as the window property __wine_dwm_sheet_of_glass and requests SWP_FRAMECHANGED when it changes; winemac.drv reads it when it creates the Cocoa window and on SWP_FRAMECHANGED, makes the window non-opaque through the existing transparency check, composites the window surface with its alpha channel and makes the window's Metal layers non-opaque, also when SetParent moves a Metal view to another window. It applies only when an application calls DwmExtendFrameIntoClientArea() with a negative margin; other margins, and windows that never did, are unchanged, and margins of 0 turn it off again. Semi-transparent output matches native macOS compositing of the same premultiplied colour. Not opt-in: it implements documented DWM behaviour that the calling application asks for, and identifies no process. winemac.drv is ABI-sensitive; no unix-call, protocol or shared structure changes, only a private window property and a winemac-internal function.",
+      "testStrategy": "tests/dwm-sheet-of-glass-probe.c, built for x86_64, shows a glass window and a control window with alpha 0, alpha 0.5 and opaque quadrants; the desktop is checked by screenshot. On a local complete WoW64 build with this patch the alpha-0 quadrant showed the window behind, opaque green and black stayed, the alpha-0.5 quadrant matched a native CALayer compositing the same premultiplied colour, the window turned opaque again after margins of 0, the control window never changed, and early and late glass calls gave the same result, on a D3D11 path through DXMT with its presenter keeping the layer opacity winemac.drv sets (a presenter that forces its layer opaque still shows black); in the reparent mode a child Metal view followed the transparency of the window it moved into. Not covered: partial margins, GDI-drawn content, i386, swap effects other than flip-discard, and Wine's own test suites.",
+      "verification": [
+        {
+          "path": "dlls/winemac.drv/cocoa_window.m",
+          "contains": "void macdrv_window_set_sheet_of_glass(macdrv_window w, bool sheet_of_glass)"
+        },
+        {
+          "path": "dlls/dwmapi/dwmapi_main.c",
+          "contains": "SetPropW(hwnd, L\"__wine_dwm_sheet_of_glass\", (HANDLE)1);"
+        }
+      ]
+    },
+    {
+      "order": 216,
+      "path": "patches/runeon/0186-winemac-click-through-transparent-layered-windows.patch",
+      "sha256": "2383b33ec574b22ffb503fe7e6987d90781912ed75b26a3f7ee7b47d0101685a",
+      "kind": "runeon-product",
+      "status": "active",
+      "risk": "high",
+      "summary": "Approved individually by the maintainer on 2026-11-17 for winemac.drv and for default use without an opt-in; not a precedent. On Windows, hit-testing skips a window whose extended style has both WS_EX_LAYERED and WS_EX_TRANSPARENT, so clicks reach whatever is below it, and wineserver already skips such windows; winemac.drv kept the Cocoa window accepting mouse events, so macOS delivered the clicks to it and Wine dropped them. winemac.drv now maps that rule to the Cocoa window's ignoresMouseEvents and sets it back only when Wine set it, because an explicit NO would also turn off AppKit's default pass-through on fully transparent pixels; windows that never had both styles keep their current behaviour. SetWindowStyle also returns early when the style did not change, so programs that set the same extended style every frame no longer re-sync every Cocoa window property each time. Not opt-in: it applies the Windows hit-testing rule wineserver already follows, and identifies no process. winemac.drv is ABI-sensitive; no unix-call, protocol or structure shared with other modules changes.",
+      "testStrategy": "tests/dwm-sheet-of-glass-probe.c clickthrough mode switches the glass window between WS_EX_LAYERED|WS_EX_TRANSPARENT|WS_EX_TOPMOST and WS_EX_TOPMOST, setting each value repeatedly, and prints the window centre. On a local complete WoW64 build with this patch a native windowNumberAtPoint hit test at that centre found the window behind during the click-through phase and the Wine window after it, in two runs; repeated identical style changes caused no Cocoa property sync, and each real change synced once in SetWindowStyle and once in the WindowPosChanged that follows. Not covered: windows with only WS_EX_TRANSPARENT or only WS_EX_LAYERED (unchanged by design), i386, and Wine's own test suites.",
+      "verification": [
+        {
+          "path": "dlls/winemac.drv/window.c",
+          "contains": "state->ignores_mouse_events = (ex_style & (WS_EX_LAYERED | WS_EX_TRANSPARENT)) =="
+        },
+        {
+          "path": "dlls/winemac.drv/window.c",
+          "contains": "if (style->styleNew == style->styleOld) return;"
+        },
+        {
+          "path": "dlls/winemac.drv/cocoa_window.m",
+          "contains": "[self setIgnoresMouseEvents:state->ignores_mouse_events];"
+        }
+      ]
     }
   ],
   "targetedReview": {

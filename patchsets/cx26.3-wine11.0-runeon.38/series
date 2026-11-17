@@ -167,3 +167,5 @@ patches/runeon/0181-win32u-foreign-cursor-snapshot.patch
 patches/runeon/0182-steam-launch-preparation-cancel.patch
 patches/runeon/0183-registry-share-user-hive-software-between-views.patch
 patches/runeon/0184-ntdll-macos-mirror-last-error-to-gs.patch
+patches/runeon/0185-winemac-dwm-sheet-of-glass-alpha.patch
+patches/runeon/0186-winemac-click-through-transparent-layered-windows.patch

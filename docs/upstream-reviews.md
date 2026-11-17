@@ -1230,3 +1230,41 @@ A complete local i386/x86_64 WoW64 build of `.38` passed. `tests/lasterror-gs-pr
 `dlls/ntdll/tests` and `dlls/kernel32/tests`, x86_64 and i386, were built from the `.37` and `.38` trees and run on both runtimes in fresh prefixes: none of the 128 files failed on `.38` in a way that `.37` does not also show on a rerun. `error`, `thread`, `time`, `sync` and `env` have no failures on either. The differing counts in kernel32 `debugger`, ntdll `file` and i386 ntdll `info` varied between reruns on both runtimes. ntdll `exception` stops on both runtimes with a Rosetta `unsupported privilege level` abort, so its later subtests did not run; the same holds for i386 ntdll `wow64` and x86_64 kernel32 `virtual`.
 
 i386 code reading `fs:[0x34]` was not examined. Whether threads created by host libraries ever run Wine PE code was checked only by reading the code.
+
+<a id="dwm-sheet-of-glass"></a>
+
+## DWM sheet of glass and click-through on macOS
+
+Candidate patch set `cx26.3-wine11.0-runeon.38` adds `patches/runeon/0185` and `0186` after `0184`. Both change `winemac.drv`, which is ABI-sensitive, and neither is opt-in, so each needed the maintainer's individual approval: the maintainer approved both on 2026-11-17, for `winemac.drv` and for default use without an opt-in, for these two patches alone; it is not a precedent.
+
+### Defects in the base
+
+- `DwmExtendFrameIntoClientArea()` in `dwmapi` is a stub. On Windows a negative margin (the sheet of glass, as in Microsoft's `MARGINS margins = {-1}`) makes DWM composite the window's alpha channel onto the desktop. In the base the Cocoa window and its Metal layers stay opaque, so a desktop overlay shows black where it draws nothing.
+- On Windows a window with both `WS_EX_LAYERED` and `WS_EX_TRANSPARENT` is skipped by hit-testing, and the base's wineserver skips it too, but `winemac.drv` never maps the style to Cocoa. A local overlay that toggles `WS_EX_TRANSPARENT` every frame took no clicks on the D3D11 path through DXMT: macOS delivered them to the Cocoa window, and Wine dropped them. `macdrv_SetWindowStyle()` also re-synced every Cocoa window property on each call, about 3,200 times in 100 seconds for that program, although the style rarely changed.
+
+### Change
+
+- `0185`: `dwmapi` sets the window property `__wine_dwm_sheet_of_glass` when any margin is negative, clears it otherwise, and requests `SWP_FRAMECHANGED` when it changes. `winemac.drv` reads it when it creates the Cocoa window and on `SWP_FRAMECHANGED`, makes the window non-opaque through the existing transparency check, composites the window surface with its alpha channel and makes the window's Metal layers non-opaque. A Metal view takes its window's state whenever it joins a window, including when `SetParent()` moves it to another top-level window.
+- `0186`: `macdrv_window_state` carries `ignores_mouse_events`, set when both styles are present; the Cocoa window calls `setIgnoresMouseEvents:` only when the value changes, so it is set back only when Wine set it. An explicit NO would also turn off AppKit's default pass-through on fully transparent pixels. `macdrv_SetWindowStyle()` returns early when the style did not change.
+
+No unix-call, wineserver protocol or structure shared with other modules changes. WineHQ has no `winemac.drv` equivalent; `winewayland` carries the same two-style rule for click-through.
+
+### Verification
+
+`tests/dwm-sheet-of-glass-probe.c` on a local complete WoW64 build with both patches, through DXMT with its presenter keeping the layer opacity `winemac.drv` sets:
+
+- The glass window showed the window behind in its alpha-0 quadrant, kept opaque green and black, and turned opaque again after margins of 0; the control window never changed; glass set before and after the swap chain was created gave the same result.
+- The alpha-0.5 quadrant read (181,150,143) over a cyan window; a native program compositing the same premultiplied colour through a CALayer read (180,150,143), and through a CAMetalLayer in sRGB (181,150,143). The output therefore matches native macOS compositing; a linear blend of sRGB values would give about (130,128,128), but macOS composites colour-managed.
+- In the click-through mode a native `windowNumberAtPoint` hit test at the window centre found the window behind while both styles were set and the Wine window otherwise, in two runs. Repeated identical styles caused no Cocoa property sync.
+- In the reparent mode a child Metal view followed the transparency of the window it moved into and out of.
+- A desktop overlay game became transparent and click-through on both D3DMetal and DXMT.
+
+### Limits
+
+- A Metal presenter that forces its layer opaque, such as DXMT without that presenter change, still shows black.
+- Partial margins (blur-behind frames) are not implemented; only the sheet of glass is.
+- Global keyboard and mouse state while another macOS application is active is a separate limitation and is not changed.
+
+### Not verified yet
+
+Partial margins, GDI-drawn content, i386, ordinary windows over a longer session and Wine's own `winemac.drv`-related tests were not run.
