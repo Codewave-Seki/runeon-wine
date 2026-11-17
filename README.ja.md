@@ -11,7 +11,7 @@ Runeon Wine は、Runeon の Steam Baseline runtime のソースを公開で管�
 - CodeWeavers ソース：`crossover-sources-26.3.0.tar.gz`、Wine `11.0`。[`base/crossover-26.3-wine-11.0.json`](base/crossover-26.3-wine-11.0.json) で固定
 <!-- release-facts:current-patch-set -->
 - 現在の正式ソース：[`cx26.3-wine11.0-runeon.38`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.38)。seed `2026.11.17`（App `>=1.16 (39)`）に対応。定義は [`patchsets/cx26.3-wine11.0-runeon.38`](patchsets/cx26.3-wine11.0-runeon.38/manifest.json)
-- 上流のレビュー範囲：完全な監査は `wine-11.15` まで、絞り込みスイープは `wine-11.20` まで。[MAINTENANCE.md](MAINTENANCE.md#review-records) を参照
+- 上流のレビュー範囲：完全な監査は `wine-11.15` まで、絞り込みスイープは `wine-11.22` まで。[MAINTENANCE.md](MAINTENANCE.md#review-records) を参照
 
 ## リポジトリ構成
 

@@ -11,7 +11,7 @@ Runeon Wine 是 Runeon Steam Baseline runtime 的公开源码维护仓库，包�
 - CodeWeavers 源码：`crossover-sources-26.3.0.tar.gz`，Wine `11.0`，固定于 [`base/crossover-26.3-wine-11.0.json`](base/crossover-26.3-wine-11.0.json)
 <!-- release-facts:current-patch-set -->
 - 当前正式源码：[`cx26.3-wine11.0-runeon.38`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.38)，对应 seed `2026.11.17`（App `>=1.16 (39)`）。定义见 [`patchsets/cx26.3-wine11.0-runeon.38`](patchsets/cx26.3-wine11.0-runeon.38/manifest.json)
-- 上游审查范围：完整审计至 `wine-11.15`，筛选回移至 `wine-11.20`；见 [MAINTENANCE.md](MAINTENANCE.md#review-records)
+- 上游审查范围：完整审计至 `wine-11.15`，筛选回移至 `wine-11.22`；见 [MAINTENANCE.md](MAINTENANCE.md#review-records)
 
 ## 仓库结构
 

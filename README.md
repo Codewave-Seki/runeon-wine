@@ -11,7 +11,7 @@ Runeon Wine is the public source-maintenance repository for Runeon's Steam Basel
 - CodeWeavers source: `crossover-sources-26.3.0.tar.gz`, Wine `11.0`, pinned in [`base/crossover-26.3-wine-11.0.json`](base/crossover-26.3-wine-11.0.json)
 <!-- release-facts:current-patch-set -->
 - Current stable source: [`cx26.3-wine11.0-runeon.38`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.38), for seed `2026.11.17` (App `>=1.16 (39)`). Definition in [`patchsets/cx26.3-wine11.0-runeon.38`](patchsets/cx26.3-wine11.0-runeon.38/manifest.json)
-- Upstream reviewed through: `wine-11.15` (complete audit), `wine-11.20` (filtered sweeps); see [MAINTENANCE.md](MAINTENANCE.md#review-records)
+- Upstream reviewed through: `wine-11.15` (complete audit), `wine-11.22` (filtered sweeps); see [MAINTENANCE.md](MAINTENANCE.md#review-records)
 
 ## Repository layout
 
