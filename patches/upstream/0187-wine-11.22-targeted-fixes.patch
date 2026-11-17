@@ -1,0 +1,1282 @@
+From: Wine upstream contributors (see commit list)
+Subject: [PATCH] Backport targeted Wine 11.22 fixes.
+
+Squashed backport of 43 WineHQ commits first released in wine-11.22,
+applied in upstream order on top of cx26.3-wine11.0-runeon.38 patches
+0001-0186. Test-only hunks are omitted. Every commit applies unchanged.
+c209164daf fixes a regression of 6b486ec783 (carried since .27) and
+ede017e2b2 fixes a regression of d56f36c1aa (carried in 0145).
+ede017e2b2 (winemac.drv) is carried under the macOS fix exception;
+673e09be71 (ntdll) and df33af7a82 (win32u) under the Windows-behaviour
+exception for ntdll, win32u and server.
+
+  f6a397054c Vitaly Lipatov: gdiplus: Fix the point count handling in GdipGetPathData().
+  228557e936 Vitaly Lipatov: gdiplus: Add missing NULL checks.
+  bcd4a666e4 Nikolay Sivov: dwrite: Ignore unsupported font files when creating custom collections.
+  53a0cdd776 Eric Pouech: dbghelp: Fix some memory leaks.
+  53bac7c5f3 Eric Pouech: dbghelp: Fix a couple of missing memory releases on error path.
+  f4eea401e4 Eric Pouech: dbghelp: Handle NULL Mask in SymEnumSourceFilesW.
+  9695343d71 Hans Leidekker: winhttp: Consistently use src_len in str_to_wire().
+  a5ea938598 Hans Leidekker: winhttp: Allow 'read' to be NULL in stream_Read().
+  11b324201d Hans Leidekker: winhttp: Return an error on allocation failure in handle_redirect().
+  2c56a54221 Hans Leidekker: winhttp: Return on failure from add_request_headers() in add_cookie_headers().
+  d52e2c87ae Hans Leidekker: winhttp: Check for allocation failure in insert_header().
+  087af9aff4 Hans Leidekker: winhttp: Don't touch BSTR out parameters on error.
+  99b764e094 Hans Leidekker: winhttp: Fix string termination in handle_redirect().
+  5df2ef62da Sky Leite: crypt32: Check CertAddEncodedCertificateToStore() return value in sync_trusted_roots_from_known_locations().
+  7009c1ed82 Vitaly Lipatov: mshtml: Don't use the released document object in navigation callbacks.
+  1170e76ca5 Vitaly Lipatov: crypt32: Don't close the certificate file twice.
+  2d2dc3db07 James Hawkins: cabinet: Return FDIERROR_TARGET_FILE when writing extracted data fails.
+  845b5ddcba Hans Leidekker: wbemprox: Validate len in fill_rawbiosdata().
+  b250fc643d Hans Leidekker: wbemprox: Handle optional fields in fill_printer().
+  2d863f2774 Hans Leidekker: wbemprox: Handle NULL resource in parse_resource().
+  dcd891037d Hans Leidekker: wbemprox: Fix row index in fill_printer().
+  ec7a423eff Hans Leidekker: wbemprox: Avoid assigning uninitialized process ID in process_create().
+  55e672f517 Hans Leidekker: wbemprox: Increase buffer size if necessary in enum_values().
+  783a8f8fe3 Hans Leidekker: wbemprox: Handle NULL out parameter in process_create().
+  9ead75872d Nikolay Sivov: d3dx9: Avoid file data name use-after-free on failure path.
+  f436af4047 Nikolay Sivov: mfplat/buffer: Do not leave uninitialized buffer on d3d9 LockRect() failure.
+  bfb465e290 Nikolay Sivov: mfplat/buffer: Do not leave uninitialized buffer on DXGI surface mapping failure.
+  26b318f826 Nikolay Sivov: mfplat: Fix new collection size in InsertElementAt().
+  662ebcb03b Nikolay Sivov: d2d1: Fix potential leak on error path.
+  7fccdf7e1c Nikolay Sivov: d2d1: Fix potential factory reference leak on failure path.
+  ee607cf42b Nikolay Sivov: d2d1/effect: Fix potential leak of failure path in CreateVertexBuffer().
+  c209164daf Paul Gofman: ddraw: Do not force render target for surface formats which do not support it.
+  8f4826ad8c Alistair Leslie-Hughes: quartz: Allow IObjectWithSite::SetSite(NULL).
+  4bd7fd80be Andrey Gusev: mscoree: Check for NULL This in DllGetClassObject().
+  62621e50ba Vishnunithyasoundhar S: msvcrt/scanf: Fix crash in fscanf due to null dereferencing a file.
+  c7e26cf11d Brendan McGrath: amstream: Fix segfault when 'ipin' is NULL.
+  8b4cf949c8 Brendan McGrath: amstream: Handle an uninitialised stream in IAMMultiMediaStream::Render.
+  7384c8babc Alex Henrie: kernelbase: Don't go past null in StrCmpN* or StrIsIntlEqual*.
+  f9022cf74b Paul Gofman: windows.gaming.input: Reset index before enumeration in initialize_providers().
+  ede017e2b2 Zhiyi Zhang: winemac.drv: Set window foreground when doing unminimization.
+  412a292464 James Hawkins: wininet: Clean up on failure when initializing cache index.
+  df33af7a82 Rémi Bernon: win32u: Always write to NtUserToUnicodeEx output buffer.
+  673e09be71 Alexandre Julliard: ntdll: Ignore files that don't have a name in get_unix_full_path().
+
+diff --git a/dlls/amstream/multimedia.c b/dlls/amstream/multimedia.c
+--- a/dlls/amstream/multimedia.c
++++ b/dlls/amstream/multimedia.c
+@@ -525,9 +525,15 @@ static HRESULT WINAPI multimedia_stream_Render(IAMMultiMediaStream *iface, DWORD
+ 
+     FIXME("(%p/%p)->(%lx) partial stub!\n", This, iface, dwFlags);
+ 
++    if (!This->initialized)
++        return VFW_E_CANNOT_CONNECT;
++
+     if(dwFlags != AMMSF_NOCLOCK)
+         return E_INVALIDARG;
+ 
++    if (!This->ipin)
++        return E_UNEXPECTED;
++
+     return IGraphBuilder_Render(This->graph, This->ipin);
+ }
+ 
+diff --git a/dlls/cabinet/fdi.c b/dlls/cabinet/fdi.c
+--- a/dlls/cabinet/fdi.c
++++ b/dlls/cabinet/fdi.c
+@@ -1953,8 +1953,8 @@ static int fdi_decomp(const struct fdi_file *fi, int savemode, fdi_decomp_state
+     if (cando > bytes) cando = bytes;
+ 
+     /* if cando != 0 */
+-    if (cando && savemode)
+-      CAB(fdi)->write(CAB(filehf), CAB(outpos), cando);
++    if (cando && savemode && CAB(fdi)->write(CAB(filehf), CAB(outpos), cando) != cando)
++      return DECR_OUTPUT;
+ 
+     CAB(outpos) += cando;
+     CAB(outlen) -= cando;
+@@ -2781,6 +2781,9 @@ BOOL __cdecl FDICopy(
+         case DECR_NOMEMORY:
+           set_error( fdi, FDIERROR_ALLOC_FAIL, ERROR_NOT_ENOUGH_MEMORY );
+           goto bail_and_fail;
++        case DECR_OUTPUT:
++          set_error( fdi, FDIERROR_TARGET_FILE, 0 );
++          goto bail_and_fail;
+         default:
+           set_error( fdi, FDIERROR_CORRUPT_CABINET, 0 );
+           goto bail_and_fail;
+diff --git a/dlls/crypt32/rootstore.c b/dlls/crypt32/rootstore.c
+--- a/dlls/crypt32/rootstore.c
++++ b/dlls/crypt32/rootstore.c
+@@ -716,7 +716,11 @@ static void sync_trusted_roots_from_known_locations( HKEY key, HCERTSTORE cached
+             continue;
+         }
+ 
+-        CertAddEncodedCertificateToStore( cached, X509_ASN_ENCODING, params.buffer, needed, CERT_STORE_ADD_ALWAYS, &cert );
++        if (!CertAddEncodedCertificateToStore( cached, X509_ASN_ENCODING, params.buffer, needed, CERT_STORE_ADD_ALWAYS, &cert ))
++        {
++            WARN( "adding root cert failed: %08lx\n", GetLastError() );
++            continue;
++        }
+         is_new = 1;
+         if (!CertSetCertificateContextProperty( cert, CERT_FIRST_USER_PROP_ID, 0, &exists_blob ))
+             ERR("Failed to set property.\n");
+diff --git a/dlls/crypt32/unixlib.c b/dlls/crypt32/unixlib.c
+--- a/dlls/crypt32/unixlib.c
++++ b/dlls/crypt32/unixlib.c
+@@ -547,16 +547,14 @@ static BOOL base64_to_cert( const char *str )
+     return TRUE;
+ }
+ 
+-/* Reads the file fd, and imports any certificates in it into store. */
+-static void import_certs_from_file( int fd )
++/* Reads the file fp, and imports any certificates in it into store. */
++static void import_certs_from_file( FILE *fp )
+ {
+-    FILE *fp = fdopen(fd, "r");
+     char line[1024];
+     BOOL in_cert = FALSE;
+     struct DynamicBuffer saved_cert = { 0, 0, NULL };
+     int num_certs = 0;
+ 
+-    if (!fp) return;
+     TRACE("\n");
+     while (fgets(line, sizeof(line), fp))
+     {
+@@ -579,7 +577,6 @@ static void import_certs_from_file( int fd )
+     }
+     free( saved_cert.data );
+     TRACE("Read %d certs\n", num_certs);
+-    fclose(fp);
+ }
+ 
+ static void import_certs_from_path(LPCSTR path, BOOL allow_dir);
+@@ -634,19 +631,19 @@ static void import_certs_from_dir( LPCSTR path )
+  */
+ static void import_certs_from_path(LPCSTR path, BOOL allow_dir)
+ {
+-    int fd;
++    FILE *fp;
+ 
+     TRACE("(%s, %d)\n", debugstr_a(path), allow_dir);
+ 
+-    fd = open(path, O_RDONLY);
+-    if (fd != -1)
++    fp = fopen(path, "r");
++    if (fp)
+     {
+         struct stat st;
+ 
+-        if (fstat(fd, &st) == 0)
++        if (fstat(fileno(fp), &st) == 0)
+         {
+             if (S_ISREG(st.st_mode))
+-                import_certs_from_file(fd);
++                import_certs_from_file(fp);
+             else if (S_ISDIR(st.st_mode))
+             {
+                 if (allow_dir)
+@@ -658,7 +655,7 @@ static void import_certs_from_path(LPCSTR path, BOOL allow_dir)
+             else
+                 ERR("%s: invalid file type\n", path);
+         }
+-        close(fd);
++        fclose(fp);
+     }
+ }
+ 
+diff --git a/dlls/d2d1/bitmap.c b/dlls/d2d1/bitmap.c
+--- a/dlls/d2d1/bitmap.c
++++ b/dlls/d2d1/bitmap.c
+@@ -635,18 +635,17 @@ HRESULT d2d_bitmap_create_shared(struct d2d_device_context *context, REFIID iid,
+             return D2DERR_UNSUPPORTED_OPERATION;
+         }
+ 
+-        if (!(*bitmap = calloc(1, sizeof(**bitmap))))
++        if (FAILED(hr = IDXGISurface_GetDesc(surface, &surface_desc)))
+         {
++            WARN("Failed to get surface desc, hr %#lx.\n", hr);
+             ID3D11Resource_Release(resource);
+-            return E_OUTOFMEMORY;
++            return hr;
+         }
+ 
+-
+-        if (FAILED(hr = IDXGISurface_GetDesc(surface, &surface_desc)))
++        if (!(*bitmap = calloc(1, sizeof(**bitmap))))
+         {
+-            WARN("Failed to get surface desc, hr %#lx.\n", hr);
+             ID3D11Resource_Release(resource);
+-            return hr;
++            return E_OUTOFMEMORY;
+         }
+ 
+         if (!desc)
+diff --git a/dlls/d2d1/brush.c b/dlls/d2d1/brush.c
+--- a/dlls/d2d1/brush.c
++++ b/dlls/d2d1/brush.c
+@@ -206,6 +206,7 @@ HRESULT d2d_gradient_create(ID2D1Factory *factory, ID3D11Device1 *device, const
+     gradient->stop_count = stop_count;
+     if (!(gradient->stops = calloc(stop_count, sizeof(*stops))))
+     {
++        ID2D1Factory_Release(gradient->factory);
+         ID3D11ShaderResourceView_Release(view);
+         free(gradient);
+         return E_OUTOFMEMORY;
+diff --git a/dlls/d2d1/effect.c b/dlls/d2d1/effect.c
+--- a/dlls/d2d1/effect.c
++++ b/dlls/d2d1/effect.c
+@@ -2493,14 +2493,17 @@ static HRESULT STDMETHODCALLTYPE d2d_effect_context_CreateVertexBuffer(ID2D1Effe
+     if (id && d2d_device_get_indexed_object(&context->vertex_buffers, id, (IUnknown **)buffer))
+         return S_OK;
+ 
+-    if (SUCCEEDED(hr = d2d_vertex_buffer_create(buffer)))
+-    {
+-        if (id)
+-            hr = d2d_device_add_indexed_object(&context->vertex_buffers, id, (IUnknown *)*buffer);
+-    }
++    if (FAILED(hr = d2d_vertex_buffer_create(buffer)))
++        return hr;
++
++    if (id)
++        hr = d2d_device_add_indexed_object(&context->vertex_buffers, id, (IUnknown *)*buffer);
+ 
+     if (FAILED(hr))
++    {
++        ID2D1VertexBuffer_Release(*buffer);
+         *buffer = NULL;
++    }
+ 
+     return hr;
+ }
+diff --git a/dlls/d3dx9_36/mesh.c b/dlls/d3dx9_36/mesh.c
+--- a/dlls/d3dx9_36/mesh.c
++++ b/dlls/d3dx9_36/mesh.c
+@@ -3645,9 +3645,14 @@ static HRESULT filedata_get_name(ID3DXFileData *filedata, char **name)
+ 
+     hr = filedata->lpVtbl->GetName(filedata, *name, &name_len);
+     if (FAILED(hr))
++    {
+         free(*name);
++        *name = NULL;
++    }
+     else if (!name_len)
++    {
+         (*name)[0] = 0;
++    }
+ 
+     return hr;
+ }
+diff --git a/dlls/dbghelp/dbghelp.c b/dlls/dbghelp/dbghelp.c
+--- a/dlls/dbghelp/dbghelp.c
++++ b/dlls/dbghelp/dbghelp.c
+@@ -556,6 +556,7 @@ BOOL WINAPI SymCleanup(HANDLE hProcess)
+ 
+             HeapFree(GetProcessHeap(), 0, (*ppcs)->search_path);
+             free((*ppcs)->environment);
++            HeapFree(GetProcessHeap(), 0, (*ppcs)->buffer);
+             next = (*ppcs)->next;
+             HeapFree(GetProcessHeap(), 0, *ppcs);
+             *ppcs = next;
+diff --git a/dlls/dbghelp/dwarf.c b/dlls/dbghelp/dwarf.c
+--- a/dlls/dbghelp/dwarf.c
++++ b/dlls/dbghelp/dwarf.c
+@@ -1460,7 +1460,11 @@ static struct addr_range* dwarf2_get_ranges(const dwarf2_debug_info_t* di, unsig
+ 
+     if (nr == 0) return NULL;
+     ranges = malloc(nr * sizeof(ranges[0]));
+-    if (!ranges || !dwarf2_fill_ranges(di, ranges, nr)) return NULL;
++    if (!ranges || !dwarf2_fill_ranges(di, ranges, nr))
++    {
++        free(ranges);
++        return NULL;
++    }
+     *num_ranges = nr;
+     return ranges;
+ }
+diff --git a/dlls/dbghelp/pdb.c b/dlls/dbghelp/pdb.c
+--- a/dlls/dbghelp/pdb.c
++++ b/dlls/dbghelp/pdb.c
+@@ -2971,7 +2971,11 @@ static enum pdb_result pdb_reader_TPI_fillin_enumlist(struct pdb_reader *pdb, sy
+     symref_t symref;
+ 
+     if ((result = pdb_reader_TPI_alloc_and_read_full_reftype(pdb, enumlist_cv_typeid, &cv_reftype, &tpi_offset))) return result;
+-    if (cv_reftype->generic.id != LF_FIELDLIST_V2) return PDB_REPORT_UNEXPECTED("enum list", cv_reftype->generic.id);
++    if (cv_reftype->generic.id != LF_FIELDLIST_V2)
++    {
++        pdb_reader_free(pdb, cv_reftype);
++        return PDB_REPORT_UNEXPECTED("enum list", cv_reftype->generic.id);
++    }
+     start = ptr = (const unsigned char *)cv_reftype->fieldlist.list;
+     last = (const unsigned char *)cv_reftype + sizeof(cv_reftype->generic.id) + cv_reftype->generic.len;
+ 
+@@ -3011,7 +3015,11 @@ static enum pdb_result pdb_reader_TPI_fillin_enumlist(struct pdb_reader *pdb, sy
+ 
+         case LF_INDEX_V2:
+             if ((result = pdb_reader_TPI_fillin_enumlist(pdb, container_symref, cv_field->index_v2.ref,
+-                                                         where, tfp))) return result;
++                                                         where, tfp)))
++            {
++                pdb_reader_free(pdb, cv_reftype);
++                return result;
++            }
+             ptr += sizeof(cv_field->index_v2);
+             break;
+ 
+@@ -3085,7 +3093,11 @@ static enum pdb_result pdb_reader_TPI_fillin_UDTlist(struct pdb_reader *pdb, sym
+     VARIANT v;
+ 
+     if ((result = pdb_reader_TPI_alloc_and_read_full_reftype(pdb, udtlist_cv_typeid, &cv_reftype, &tpi_offset))) return result;
+-    if (cv_reftype->generic.id != LF_FIELDLIST_V2) return PDB_REPORT_UNEXPECTED("list", cv_reftype->generic.id);
++    if (cv_reftype->generic.id != LF_FIELDLIST_V2)
++    {
++        pdb_reader_free(pdb, cv_reftype);
++        return PDB_REPORT_UNEXPECTED("list", cv_reftype->generic.id);
++    }
+     start = ptr = (const unsigned char *)cv_reftype->fieldlist.list;
+     last = (const unsigned char *)cv_reftype + sizeof(cv_reftype->generic.id) + cv_reftype->generic.len;
+ 
+@@ -3158,7 +3170,11 @@ static enum pdb_result pdb_reader_TPI_fillin_UDTlist(struct pdb_reader *pdb, sym
+             break;
+ 
+         case LF_INDEX_V2:
+-            if ((result = pdb_reader_TPI_fillin_UDTlist(pdb, container_symref, cv_field->index_v2.ref, where, tfp))) return result;
++            if ((result = pdb_reader_TPI_fillin_UDTlist(pdb, container_symref, cv_field->index_v2.ref, where, tfp)))
++            {
++                pdb_reader_free(pdb, cv_reftype);
++                return result;
++            }
+             length = sizeof(cv_field->index_v2);
+             break;
+ 
+@@ -3417,7 +3433,11 @@ static enum method_result pdb_reader_TPI_field_request(struct pdb_reader *pdb, s
+     walker.offset = entry->stream_offset;
+ 
+     if ((result = pdb_reader_alloc(pdb, entry->action_length, (void**)&cv_field))) return MR_FAILURE;
+-    if ((result = pdb_reader_read_from_stream(pdb, &walker, cv_field, entry->action_length, &num_read))) return MR_FAILURE;
++    if ((result = pdb_reader_read_from_stream(pdb, &walker, cv_field, entry->action_length, &num_read)))
++    {
++        pdb_reader_free(pdb, cv_field);
++        return MR_FAILURE;
++    }
+     if (num_read == entry->action_length)
+     {
+         switch (cv_field->generic.id)
+diff --git a/dlls/dbghelp/source.c b/dlls/dbghelp/source.c
+--- a/dlls/dbghelp/source.c
++++ b/dlls/dbghelp/source.c
+@@ -122,6 +122,7 @@ unsigned source_new(struct module* module, const char* base, const char* name)
+         }
+     }
+ done:
++    if (full != name) HeapFree(GetProcessHeap(), 0, (char*)full);
+     HeapFree(GetProcessHeap(), 0, tmp);
+     return ret;
+ }
+@@ -164,7 +165,7 @@ BOOL WINAPI SymEnumSourceFilesW(HANDLE hProcess, ULONG64 ModBase, PCWSTR Mask,
+     }
+     else
+     {
+-        WCHAR *bang = wcschr(Mask, '!');
++        WCHAR *bang = Mask ? wcschr(Mask, L'!') : NULL;
+         if (bang)
+         {
+             WCHAR    *module_name;
+diff --git a/dlls/ddraw/surface.c b/dlls/ddraw/surface.c
+--- a/dlls/ddraw/surface.c
++++ b/dlls/ddraw/surface.c
+@@ -6202,15 +6202,8 @@ static HRESULT ddraw_surface_reserve_memory(struct wined3d_texture *wined3d_text
+     return hr;
+ }
+ 
+-static bool is_render_target(struct ddraw *ddraw, DWORD caps, unsigned int surface_version)
+-{
+-    if (caps & DDSCAPS_3DDEVICE)
+-        return true;
+-    return surface_version == 1 && caps & DDSCAPS_PRIMARYSURFACE && !(ddraw->flags & DDRAW_NO3D);
+-}
+-
+ static void wined3d_resource_desc_from_ddraw(struct ddraw *ddraw,
+-        struct wined3d_resource_desc *wined3d_desc, const DDSURFACEDESC2 *desc, unsigned int version)
++        struct wined3d_resource_desc *wined3d_desc, const DDSURFACEDESC2 *desc, unsigned int is_render_target)
+ {
+     DWORD caps = desc->ddsCaps.dwCaps;
+     const DWORD caps2 = desc->ddsCaps.dwCaps2;
+@@ -6232,7 +6225,7 @@ static void wined3d_resource_desc_from_ddraw(struct ddraw *ddraw,
+     wined3d_desc->bind_flags |= WINED3D_BIND_SHADER_RESOURCE;
+     if (caps & DDSCAPS_ZBUFFER)
+         wined3d_desc->bind_flags |= WINED3D_BIND_DEPTH_STENCIL;
+-    else if (is_render_target(ddraw, caps, version))
++    else if (is_render_target)
+         wined3d_desc->bind_flags |= WINED3D_BIND_RENDER_TARGET;
+ 
+     if ((caps & DDSCAPS_SYSTEMMEMORY) && !(caps2 & (DDSCAPS2_TEXTUREMANAGE | DDSCAPS2_D3DTEXTUREMANAGE)))
+@@ -6250,7 +6243,7 @@ static void wined3d_resource_desc_from_ddraw(struct ddraw *ddraw,
+         else if (caps & DDSCAPS_VIDEOMEMORY)
+         {
+             /* Dynamic resources can't be written by the GPU. */
+-            if (!(caps & DDSCAPS_ZBUFFER) && !is_render_target(ddraw, caps, version))
++            if (!(caps & DDSCAPS_ZBUFFER) && !is_render_target)
+                 wined3d_desc->usage |= WINED3DUSAGE_DYNAMIC;
+         }
+     }
+@@ -6266,7 +6259,7 @@ static void wined3d_resource_desc_from_ddraw(struct ddraw *ddraw,
+ }
+ 
+ static HRESULT ddraw_texture_init(struct ddraw_texture *texture, struct ddraw *ddraw,
+-        unsigned int layers, unsigned int levels, bool sysmem_fallback, bool reserve_memory)
++        unsigned int layers, unsigned int levels, bool sysmem_fallback, bool is_render_target, bool reserve_memory)
+ {
+     struct wined3d_device *wined3d_device = ddraw->wined3d_device;
+     const DDSURFACEDESC2 *desc = &texture->surface_desc;
+@@ -6279,7 +6272,7 @@ static HRESULT ddraw_texture_init(struct ddraw_texture *texture, struct ddraw *d
+     unsigned int i, j;
+     HRESULT hr;
+ 
+-    wined3d_resource_desc_from_ddraw(ddraw, &wined3d_desc, desc, texture->version);
++    wined3d_resource_desc_from_ddraw(ddraw, &wined3d_desc, desc, is_render_target);
+ 
+     if (wined3d_desc.format == WINED3DFMT_UNKNOWN)
+     {
+@@ -6552,13 +6545,13 @@ HRESULT ddraw_surface_create(struct ddraw *ddraw, const DDSURFACEDESC2 *surface_
+         struct ddraw_surface **surface, IUnknown *outer_unknown, unsigned int version)
+ {
+     DDPIXELFORMAT wined3d_display_mode_format;
++    bool reserve_memory, is_render_target;
+     struct ddraw_surface *root, **attach;
+     struct wined3d_display_mode mode;
+     struct ddraw_texture *texture;
+     BOOL sysmem_fallback = FALSE;
+     unsigned int layers = 1;
+     DDSURFACEDESC2 *desc;
+-    bool reserve_memory;
+     UINT levels, i;
+     HRESULT hr;
+ 
+@@ -6839,6 +6832,15 @@ HRESULT ddraw_surface_create(struct ddraw *ddraw, const DDSURFACEDESC2 *surface_
+         levels = 1;
+     }
+ 
++    if (desc->ddsCaps.dwCaps & DDSCAPS_3DDEVICE)
++        is_render_target = 1;
++    else if (version == 1 && desc->ddsCaps.dwCaps & DDSCAPS_PRIMARYSURFACE && !(ddraw->flags & DDRAW_NO3D))
++        is_render_target = !!SUCCEEDED(wined3d_check_device_format(ddraw->wined3d, ddraw->wined3d_adapter,
++                WINED3D_DEVICE_TYPE_HAL, mode.format_id, 0, WINED3D_BIND_RENDER_TARGET, WINED3D_RTYPE_TEXTURE_2D,
++                wined3dformat_from_ddrawformat(&desc->ddpfPixelFormat)));
++    else
++        is_render_target = 0;
++
+     if (!(desc->ddsCaps.dwCaps & (DDSCAPS_VIDEOMEMORY | DDSCAPS_SYSTEMMEMORY)))
+     {
+         if (!(desc->ddsCaps.dwCaps2 & (DDSCAPS2_TEXTUREMANAGE | DDSCAPS2_D3DTEXTUREMANAGE)))
+@@ -6858,7 +6860,7 @@ HRESULT ddraw_surface_create(struct ddraw *ddraw, const DDSURFACEDESC2 *surface_
+ 
+             if (desc->ddsCaps.dwCaps & DDSCAPS_ZBUFFER)
+                 bind_flags |= WINED3D_BIND_DEPTH_STENCIL;
+-            else if (is_render_target(ddraw, desc->ddsCaps.dwCaps, version))
++            else if (is_render_target)
+                 bind_flags |= WINED3D_BIND_RENDER_TARGET;
+ 
+             if (!(ddraw->flags & DDRAW_NO3D) && SUCCEEDED(hr = wined3d_check_device_format(ddraw->wined3d,
+@@ -6973,7 +6975,7 @@ HRESULT ddraw_surface_create(struct ddraw *ddraw, const DDSURFACEDESC2 *surface_
+             && desc->ddsCaps.dwCaps & DDSCAPS_VIDEOMEMORY
+             && wined3d_display_mode_format.dwRGBBitCount <= 16;
+ 
+-    if (FAILED(hr = ddraw_texture_init(texture, ddraw, layers, levels, sysmem_fallback, reserve_memory)))
++    if (FAILED(hr = ddraw_texture_init(texture, ddraw, layers, levels, sysmem_fallback, is_render_target, reserve_memory)))
+     {
+         WARN("Failed to create wined3d texture, hr %#lx.\n", hr);
+         free(texture);
+@@ -7010,7 +7012,7 @@ HRESULT ddraw_surface_create(struct ddraw *ddraw, const DDSURFACEDESC2 *surface_
+                 desc->ddsCaps.dwCaps |= DDSCAPS_BACKBUFFER;
+             desc->dwBackBufferCount = 0;
+ 
+-            if (FAILED(hr = ddraw_texture_init(texture, ddraw, 1, 1, sysmem_fallback, reserve_memory)))
++            if (FAILED(hr = ddraw_texture_init(texture, ddraw, 1, 1, sysmem_fallback, is_render_target, reserve_memory)))
+             {
+                 free(texture);
+                 hr = hr_ddraw_from_wined3d(hr);
+diff --git a/dlls/dwrite/font.c b/dlls/dwrite/font.c
+--- a/dlls/dwrite/font.c
++++ b/dlls/dwrite/font.c
+@@ -4712,13 +4712,19 @@ HRESULT create_font_collection(IDWriteFactory7 *factory, IDWriteFontFileEnumerat
+             continue;
+         }
+ 
+-        /* add to scanned list */
+-        fileenum = malloc(sizeof(*fileenum));
+-        fileenum->file = file;
+-        list_add_tail(&scannedfiles, &fileenum->entry);
+-
+-        if (FAILED(hr = IDWriteFontSetBuilder1_AddFontFile(builder, file)))
+-            break;
++        if ((hr = IDWriteFontSetBuilder1_AddFontFile(builder, file)) == S_OK)
++        {
++            /* add to scanned list */
++            fileenum = malloc(sizeof(*fileenum));
++            fileenum->file = file;
++            list_add_tail(&scannedfiles, &fileenum->entry);
++        }
++        else
++        {
++            WARN("Set builder failed to add a file.\n");
++            IDWriteFontFile_Release(file);
++            hr = S_OK;
++        }
+     }
+ 
+     if (SUCCEEDED(hr))
+diff --git a/dlls/gdiplus/brush.c b/dlls/gdiplus/brush.c
+--- a/dlls/gdiplus/brush.c
++++ b/dlls/gdiplus/brush.c
+@@ -472,6 +472,9 @@ GpStatus WINGDIPAPI GdipCreateLineBrushFromRectI(GDIPCONST GpRect* rect,
+     TRACE("(%p, %lx, %lx, %d, %d, %p)\n", rect, startcolor, endcolor, mode,
+           wrap, line);
+ 
++    if(!rect)
++        return InvalidParameter;
++
+     set_rect(&rectF, rect->X, rect->Y, rect->Width, rect->Height);
+     return GdipCreateLineBrushFromRect(&rectF, startcolor, endcolor, mode, wrap, line);
+ }
+diff --git a/dlls/gdiplus/font.c b/dlls/gdiplus/font.c
+--- a/dlls/gdiplus/font.c
++++ b/dlls/gdiplus/font.c
+@@ -439,6 +439,9 @@ GpStatus WINGDIPAPI GdipGetLogFontA(GpFont *font, GpGraphics *graphics,
+ 
+     TRACE("(%p, %p, %p)\n", font, graphics, lfa);
+ 
++    if(!lfa)
++        return InvalidParameter;
++
+     status = GdipGetLogFontW(font, graphics, &lfw);
+     if(status != Ok)
+         return status;
+diff --git a/dlls/gdiplus/graphics.c b/dlls/gdiplus/graphics.c
+--- a/dlls/gdiplus/graphics.c
++++ b/dlls/gdiplus/graphics.c
+@@ -8032,6 +8032,9 @@ GpStatus WINGDIPAPI GdipIsVisibleClipEmpty(GpGraphics *graphics, BOOL *res)
+ 
+     TRACE("(%p, %p)\n", graphics, res);
+ 
++    if(!graphics || !res)
++        return InvalidParameter;
++
+     if((stat = GdipCreateRegion(&rgn)) != Ok)
+         return stat;
+ 
+diff --git a/dlls/gdiplus/graphicspath.c b/dlls/gdiplus/graphicspath.c
+--- a/dlls/gdiplus/graphicspath.c
++++ b/dlls/gdiplus/graphicspath.c
+@@ -1524,13 +1524,15 @@ GpStatus WINGDIPAPI GdipGetPathData(GpPath *path, GpPathData* pathData)
+ {
+     TRACE("(%p, %p)\n", path, pathData);
+ 
+-    if(!path || !pathData)
++    if(!path || !pathData || !pathData->Points || !pathData->Types)
+         return InvalidParameter;
+ 
+-    /* Only copy data. pathData allocation/freeing controlled by wrapper class.
+-       Assumed that pathData is enough wide to get all data - controlled by wrapper too. */
+-    memcpy(pathData->Points, path->pathdata.Points, sizeof(PointF) * pathData->Count);
+-    memcpy(pathData->Types , path->pathdata.Types , pathData->Count);
++    if(pathData->Count < path->pathdata.Count)
++        return OutOfMemory;
++
++    memcpy(pathData->Points, path->pathdata.Points, sizeof(PointF) * path->pathdata.Count);
++    memcpy(pathData->Types, path->pathdata.Types, path->pathdata.Count);
++    pathData->Count = path->pathdata.Count;
+ 
+     return Ok;
+ }
+diff --git a/dlls/gdiplus/image.c b/dlls/gdiplus/image.c
+--- a/dlls/gdiplus/image.c
++++ b/dlls/gdiplus/image.c
+@@ -5343,6 +5343,9 @@ GpStatus WINGDIPAPI GdipGetEncoderParameterListSize(GpImage *image,
+ 
+     TRACE("(%p,%s,%p)\n", image, debugstr_guid(clsidEncoder), size);
+ 
++    if(!image || !clsidEncoder || !size)
++        return InvalidParameter;
++
+     if(!(calls++))
+         FIXME("not implemented\n");
+ 
+diff --git a/dlls/gdiplus/matrix.c b/dlls/gdiplus/matrix.c
+--- a/dlls/gdiplus/matrix.c
++++ b/dlls/gdiplus/matrix.c
+@@ -87,7 +87,7 @@ GpStatus WINGDIPAPI GdipCreateMatrix3(GDIPCONST GpRectF *rect,
+ 
+     TRACE("(%s, %p, %p)\n", debugstr_rectf(rect), pt, matrix);
+ 
+-    if(!matrix || !pt)
++    if(!matrix || !pt || !rect)
+         return InvalidParameter;
+ 
+     m11 = (pt[1].X - pt[0].X) / rect->Width;
+@@ -109,6 +109,9 @@ GpStatus WINGDIPAPI GdipCreateMatrix3I(GDIPCONST GpRect *rect, GDIPCONST GpPoint
+ 
+     TRACE("(%p, %p, %p)\n", rect, pt, matrix);
+ 
++    if(!rect || !pt)
++        return InvalidParameter;
++
+     set_rect(&rectF, rect->X, rect->Y, rect->Width, rect->Height);
+ 
+     for (i = 0; i < 3; i++) {
+diff --git a/dlls/kernelbase/string.c b/dlls/kernelbase/string.c
+--- a/dlls/kernelbase/string.c
++++ b/dlls/kernelbase/string.c
+@@ -395,8 +395,20 @@ WCHAR * WINAPI StrStrNW(const WCHAR *str, const WCHAR *search, UINT max_len)
+ 
+ int WINAPI StrCmpNIA(const char *str, const char *cmp, int len)
+ {
++    int str_len, cmp_len;
++
+     TRACE("%s, %s, %i\n", wine_dbgstr_a(str), wine_dbgstr_a(cmp), len);
+-    return CompareStringA(GetThreadLocale(), NORM_IGNORECASE, str, len, cmp, len) - CSTR_EQUAL;
++
++    if (!str || !cmp)
++    {
++        SetLastError(ERROR_INVALID_PARAMETER);
++        return -2;
++    }
++    if (!len) return 0;
++    str_len = strnlen(str, len - 1) + 1;
++    cmp_len = strnlen(cmp, len - 1) + 1;
++
++    return CompareStringA(GetThreadLocale(), NORM_IGNORECASE, str, str_len, cmp, cmp_len) - CSTR_EQUAL;
+ }
+ 
+ WCHAR * WINAPI StrStrNIW(const WCHAR *str, const WCHAR *search, UINT max_len)
+@@ -422,13 +434,30 @@ WCHAR * WINAPI StrStrNIW(const WCHAR *str, const WCHAR *search, UINT max_len)
+ int WINAPI StrCmpNA(const char *str, const char *comp, int len)
+ {
+     TRACE("%s, %s, %i\n", wine_dbgstr_a(str), wine_dbgstr_a(comp), len);
++
++    if (!str || !comp || !len) return 0;
++    len = strnlen(str, len - 1) + 1;
++    len = strnlen(comp, len - 1) + 1;
++
+     return CompareStringA(GetThreadLocale(), 0, str, len, comp, len) - CSTR_EQUAL;
+ }
+ 
+ int WINAPI StrCmpNW(const WCHAR *str, const WCHAR *comp, int len)
+ {
++    int str_len, comp_len;
++
+     TRACE("%s, %s, %i\n", wine_dbgstr_w(str), wine_dbgstr_w(comp), len);
+-    return CompareStringW(GetThreadLocale(), 0, str, len, comp, len) - CSTR_EQUAL;
++
++    if (!str || !comp)
++    {
++        SetLastError(ERROR_INVALID_PARAMETER);
++        return -2;
++    }
++    if (!len) return 0;
++    str_len = wcsnlen(str, len - 1) + 1;
++    comp_len = wcsnlen(comp, len - 1) + 1;
++
++    return CompareStringW(GetThreadLocale(), 0, str, str_len, comp, comp_len) - CSTR_EQUAL;
+ }
+ 
+ DWORD WINAPI StrCmpNCA(const char *str, const char *comp, int len)
+@@ -443,8 +472,20 @@ DWORD WINAPI StrCmpNCW(const WCHAR *str, const WCHAR *comp, int len)
+ 
+ int WINAPI StrCmpNIW(const WCHAR *str, const WCHAR *comp, int len)
+ {
++    int str_len, comp_len;
++
+     TRACE("%s, %s, %i\n", wine_dbgstr_w(str), wine_dbgstr_w(comp), len);
+-    return CompareStringW(GetThreadLocale(), NORM_IGNORECASE, str, len, comp, len) - CSTR_EQUAL;
++
++    if (!str || !comp)
++    {
++        SetLastError(ERROR_INVALID_PARAMETER);
++        return -2;
++    }
++    if (!len) return 0;
++    str_len = wcsnlen(str, len - 1) + 1;
++    comp_len = wcsnlen(comp, len - 1) + 1;
++
++    return CompareStringW(GetThreadLocale(), NORM_IGNORECASE, str, str_len, comp, comp_len) - CSTR_EQUAL;
+ }
+ 
+ int WINAPI StrCmpW(const WCHAR *str, const WCHAR *comp)
+@@ -1340,10 +1381,20 @@ int WINAPI StrCmpLogicalW(const WCHAR *str, const WCHAR *comp)
+ 
+ BOOL WINAPI StrIsIntlEqualA(BOOL case_sensitive, const char *str, const char *cmp, int len)
+ {
++    int str_len, cmp_len;
+     DWORD flags;
+ 
+     TRACE("%d, %s, %s, %d\n", case_sensitive, wine_dbgstr_a(str), wine_dbgstr_a(cmp), len);
+ 
++    if (!str || !cmp)
++    {
++        SetLastError(ERROR_INVALID_PARAMETER);
++        return FALSE;
++    }
++    if (!len) return TRUE;
++    str_len = strnlen(str, len - 1) + 1;
++    cmp_len = strnlen(cmp, len - 1) + 1;
++
+     /* FIXME: This flag is undocumented and unknown by our CompareString.
+      *        We need a define for it.
+      */
+@@ -1351,15 +1402,25 @@ BOOL WINAPI StrIsIntlEqualA(BOOL case_sensitive, const char *str, const char *cm
+     if (!case_sensitive)
+         flags |= NORM_IGNORECASE;
+ 
+-    return (CompareStringA(GetThreadLocale(), flags, str, len, cmp, len) == CSTR_EQUAL);
++    return (CompareStringA(GetThreadLocale(), flags, str, str_len, cmp, cmp_len) == CSTR_EQUAL);
+ }
+ 
+ BOOL WINAPI StrIsIntlEqualW(BOOL case_sensitive, const WCHAR *str, const WCHAR *cmp, int len)
+ {
++    int str_len, cmp_len;
+     DWORD flags;
+ 
+     TRACE("%d, %s, %s, %d\n", case_sensitive, debugstr_w(str), debugstr_w(cmp), len);
+ 
++    if (!str || !cmp)
++    {
++        SetLastError(ERROR_INVALID_PARAMETER);
++        return FALSE;
++    }
++    if (!len) return TRUE;
++    str_len = wcsnlen(str, len - 1) + 1;
++    cmp_len = wcsnlen(cmp, len - 1) + 1;
++
+     /* FIXME: This flag is undocumented and unknown by our CompareString.
+      *        We need a define for it.
+      */
+@@ -1367,7 +1428,7 @@ BOOL WINAPI StrIsIntlEqualW(BOOL case_sensitive, const WCHAR *str, const WCHAR *
+     if (!case_sensitive)
+         flags |= NORM_IGNORECASE;
+ 
+-    return (CompareStringW(GetThreadLocale(), flags, str, len, cmp, len) == CSTR_EQUAL);
++    return (CompareStringW(GetThreadLocale(), flags, str, str_len, cmp, cmp_len) == CSTR_EQUAL);
+ }
+ 
+ char * WINAPI StrCatBuffA(char *str, const char *cat, INT max_len)
+diff --git a/dlls/mfplat/buffer.c b/dlls/mfplat/buffer.c
+--- a/dlls/mfplat/buffer.c
++++ b/dlls/mfplat/buffer.c
+@@ -406,6 +406,11 @@ static HRESULT WINAPI d3d9_surface_buffer_Lock(IMFMediaBuffer *iface, BYTE **dat
+                         buffer->_2d.width, buffer->_2d.height);
+                 IDirect3DSurface9_UnlockRect(buffer->d3d9_surface.surface);
+             }
++            else
++            {
++                free(buffer->_2d.linear_buffer);
++                buffer->_2d.linear_buffer = NULL;
++            }
+         }
+     }
+ 
+@@ -1038,6 +1043,11 @@ static HRESULT WINAPI dxgi_surface_buffer_Lock(IMFMediaBuffer *iface, BYTE **dat
+                 copy_image(buffer, buffer->_2d.linear_buffer, buffer->_2d.width, buffer->dxgi_surface.map_desc.pData,
+                         buffer->dxgi_surface.map_desc.RowPitch, buffer->_2d.width, buffer->_2d.height);
+             }
++            else
++            {
++                free(buffer->_2d.linear_buffer);
++                buffer->_2d.linear_buffer = NULL;
++            }
+         }
+     }
+ 
+diff --git a/dlls/mfplat/main.c b/dlls/mfplat/main.c
+--- a/dlls/mfplat/main.c
++++ b/dlls/mfplat/main.c
+@@ -7763,12 +7763,12 @@ static HRESULT WINAPI collection_RemoveElement(IMFCollection *iface, DWORD idx,
+ static HRESULT WINAPI collection_InsertElementAt(IMFCollection *iface, DWORD idx, IUnknown *element)
+ {
+     struct collection *collection = impl_from_IMFCollection(iface);
+-    size_t i;
++    size_t i, count;
+ 
+     TRACE("%p, %lu, %p.\n", iface, idx, element);
+ 
+-    if (!mf_array_reserve((void **)&collection->elements, &collection->capacity, idx + 1,
+-            sizeof(*collection->elements)))
++    count = max(idx + 1, collection->count + 1);
++    if (!mf_array_reserve((void **)&collection->elements, &collection->capacity, count, sizeof(*collection->elements)))
+         return E_OUTOFMEMORY;
+ 
+     if (idx < collection->count)
+diff --git a/dlls/mscoree/mscoree_main.c b/dlls/mscoree/mscoree_main.c
+--- a/dlls/mscoree/mscoree_main.c
++++ b/dlls/mscoree/mscoree_main.c
+@@ -716,6 +716,8 @@ HRESULT WINAPI DllGetClassObject(REFCLSID rclsid, REFIID riid, LPVOID* ppv)
+         return E_INVALIDARG;
+ 
+     This = malloc(sizeof(mscorecf));
++    if (!This)
++        return E_OUTOFMEMORY;
+ 
+     This->IClassFactory_iface.lpVtbl = &mscorecf_vtbl;
+     This->pfnCreateInstance = create_monodata;
+diff --git a/dlls/mshtml/navigate.c b/dlls/mshtml/navigate.c
+--- a/dlls/mshtml/navigate.c
++++ b/dlls/mshtml/navigate.c
+@@ -1458,7 +1458,7 @@ static void handle_navigation_error(nsChannelBSC *This, DWORD result)
+ 
+     outer_window = This->bsc.window->base.outer_window;
+     doc = outer_window->browser->doc;
+-    if(!doc->doc_object_service || !doc->client)
++    if(!doc || !doc->doc_object_service || !doc->client)
+         return;
+ 
+     hres = IDocObjectService_IsErrorUrl(doc->doc_object_service,
+diff --git a/dlls/mshtml/persist.c b/dlls/mshtml/persist.c
+--- a/dlls/mshtml/persist.c
++++ b/dlls/mshtml/persist.c
+@@ -441,7 +441,7 @@ static void notif_readystate(HTMLOuterWindow *window)
+     if(frame_element)
+         IHTMLDOMNode_AddRef(&frame_element->element.node.IHTMLDOMNode_iface);
+ 
+-    if(is_main_content_window(window))
++    if(is_main_content_window(window) && window->browser->doc)
+         call_property_onchanged(&window->browser->doc->cp_container, DISPID_READYSTATE);
+ 
+     hres = create_document_event(inner_window->doc, EVENTID_READYSTATECHANGE, &event);
+diff --git a/dlls/msvcrt/scanf.h b/dlls/msvcrt/scanf.h
+--- a/dlls/msvcrt/scanf.h
++++ b/dlls/msvcrt/scanf.h
+@@ -213,6 +213,9 @@ _FUNCTION_ {
+ #endif /* STRING */
+ #endif /* CONSOLE */
+ #endif /* WIDE_SCANF */
++#if !defined(STRING) && !defined(CONSOLE)
++    if (!MSVCRT_CHECK_PMT(file)) return -1;
++#endif /* STRING && CONSOLE */
+     _LOCK_FILE_(file);
+ 
+     nch = _GETC_(file);
+diff --git a/dlls/ntdll/path.c b/dlls/ntdll/path.c
+--- a/dlls/ntdll/path.c
++++ b/dlls/ntdll/path.c
+@@ -548,7 +548,8 @@ static BOOL get_unix_full_path( LPCWSTR name, LPWSTR buffer, ULONG size, ULONG *
+         ULONG retsize, bufsize = sizeof(OBJECT_NAME_INFORMATION) + size + 4 * sizeof(WCHAR);
+         OBJECT_NAME_INFORMATION *info = RtlAllocateHeap( GetProcessHeap(), 0, bufsize );
+ 
+-        if (!(status = NtQueryObject( handle, ObjectNameInformation, info, bufsize, &retsize )))
++        if (!(status = NtQueryObject( handle, ObjectNameInformation, info, bufsize, &retsize )) &&
++            info->Name.Length)
+         {
+             ULONG len = info->Name.Length;
+             WCHAR *name = info->Name.Buffer;
+diff --git a/dlls/quartz/filtergraph.c b/dlls/quartz/filtergraph.c
+--- a/dlls/quartz/filtergraph.c
++++ b/dlls/quartz/filtergraph.c
+@@ -2826,14 +2826,16 @@ static ULONG WINAPI ObjectWithSite_Release(IObjectWithSite *iface)
+ 
+ /*** IObjectWithSite methods ***/
+ 
+-static HRESULT WINAPI ObjectWithSite_SetSite(IObjectWithSite *iface, IUnknown *pUnkSite)
++static HRESULT WINAPI ObjectWithSite_SetSite(IObjectWithSite *iface, IUnknown *site)
+ {
+-    struct filter_graph *This = impl_from_IObjectWithSite( iface );
++    struct filter_graph *graph = impl_from_IObjectWithSite(iface);
+ 
+-    TRACE("(%p/%p)->()\n", This, iface);
+-    if (This->pSite) IUnknown_Release(This->pSite);
+-    This->pSite = pUnkSite;
+-    IUnknown_AddRef(This->pSite);
++    TRACE("graph %p, site %p.\n", graph, site);
++
++    if (graph->pSite)
++        IUnknown_Release(graph->pSite);
++    if ((graph->pSite = site))
++        IUnknown_AddRef(graph->pSite);
+     return S_OK;
+ }
+ 
+diff --git a/dlls/wbemprox/builtin.c b/dlls/wbemprox/builtin.c
+--- a/dlls/wbemprox/builtin.c
++++ b/dlls/wbemprox/builtin.c
+@@ -1840,7 +1840,7 @@ static enum fill_status fill_rawbiosdata( struct table *table, const struct expr
+     if (!resize_table( table, 1, sizeof(*rec) )) return FILL_STATUS_FAILED;
+ 
+     len = GetSystemFirmwareTable( RSMB, 0, NULL, 0 );
+-    if (!(buf = malloc( len ))) return FILL_STATUS_FAILED;
++    if (len < sizeof(*buf) || !(buf = malloc( len ))) return FILL_STATUS_FAILED;
+     GetSystemFirmwareTable( RSMB, 0, buf, len );
+ 
+     rec = (struct record_rawsmbiostables *)table->data;
+@@ -3730,14 +3730,14 @@ static enum fill_status fill_printer( struct table *table, const struct expr *co
+         swprintf( id, ARRAY_SIZE( id ), L"Printer%u", i );
+         rec->device_id            = wcsdup( id );
+         rec->drivername           = wcsdup( info[i].pDriverName );
+-        rec->horizontalresolution = info[i].pDevMode->dmPrintQuality;
++        rec->horizontalresolution = info[i].pDevMode ? info[i].pDevMode->dmPrintQuality : 0;
+         rec->local                = -1;
+-        rec->location             = wcsdup( info[i].pLocation );
++        rec->location             = info[i].pLocation ? wcsdup( info[i].pLocation ) : NULL;
+         rec->name                 = wcsdup( info[i].pPrinterName );
+         rec->portname             = wcsdup( info[i].pPortName );
+-        if (!match_row( table, i, cond, &status ))
++        if (!match_row( table, num_rows, cond, &status ))
+         {
+-            free_row_values( table, i );
++            free_row_values( table, num_rows );
+             continue;
+         }
+         offset += sizeof(*rec);
+diff --git a/dlls/wbemprox/process.c b/dlls/wbemprox/process.c
+--- a/dlls/wbemprox/process.c
++++ b/dlls/wbemprox/process.c
+@@ -125,7 +125,7 @@ HRESULT process_create( IWbemClassObject *obj, IWbemContext *context, IWbemClass
+ 
+     FIXME("%p, %p, %p, %p stub\n", obj, context, in, out);
+ 
+-    *out = NULL;
++    if (out) *out = NULL;
+ 
+     if ((hr = create_signature( WBEMPROX_NAMESPACE_CIMV2, L"Win32_Process", L"Create", PARAM_OUT, &sig ))) return hr;
+ 
+@@ -199,10 +199,11 @@ HRESULT process_create( IWbemClassObject *obj, IWbemContext *context, IWbemClass
+         VariantInit( &v );
+ 
+         V_VT( &v ) = VT_UI4;
+-        V_UI4( &v ) = pi.dwProcessId;
+-
+-        if (bret && (ret = IWbemClassObject_Put( out_params, L"ProcessId", 0, &v, 0 ))) goto done;
+-
++        if (bret)
++        {
++            V_UI4( &v ) = pi.dwProcessId;
++            if ((ret = IWbemClassObject_Put( out_params, L"ProcessId", 0, &v, 0 ))) goto done;
++        }
+         V_UI4( &v ) = error;
+         if ((ret = IWbemClassObject_Put( out_params, L"ReturnValue", 0, &v, 0 ))) goto done;
+ 
+diff --git a/dlls/wbemprox/reg.c b/dlls/wbemprox/reg.c
+--- a/dlls/wbemprox/reg.c
++++ b/dlls/wbemprox/reg.c
+@@ -276,8 +276,8 @@ static HRESULT enum_values( HKEY root, const WCHAR *subkey, VARIANT *names, VARI
+ {
+     HKEY hkey = NULL;
+     HRESULT hr = S_OK;
+-    BSTR *value_names = NULL;
+-    DWORD count, buflen, len, *value_types = NULL;
++    BSTR *value_names = NULL, *tmp_names;
++    DWORD count, buflen, len, *value_types = NULL, *tmp_types;
+     LONG res, i = 0;
+     WCHAR *buf = NULL;
+ 
+@@ -295,6 +295,14 @@ static HRESULT enum_values( HKEY root, const WCHAR *subkey, VARIANT *names, VARI
+     hr = S_OK;
+     for (;;)
+     {
++        if (i >= count)
++        {
++            count *= 2;
++            if (!(tmp_names = realloc( value_names, count * sizeof(*tmp_names) ))) { hr = E_OUTOFMEMORY; break; }
++            value_names = tmp_names;
++            if (!(tmp_types = realloc( value_types, count * sizeof(*tmp_types) ))) { hr = E_OUTOFMEMORY; break; }
++            value_types = tmp_types;
++        }
+         len = buflen + 1;
+         res = RegEnumValueW( hkey, i, buf, &len, NULL, &value_types[i], NULL, NULL );
+         if (res == ERROR_NO_MORE_ITEMS)
+diff --git a/dlls/wbemprox/wbemlocator.c b/dlls/wbemprox/wbemlocator.c
+--- a/dlls/wbemprox/wbemlocator.c
++++ b/dlls/wbemprox/wbemlocator.c
+@@ -102,6 +102,7 @@ static HRESULT parse_resource( const WCHAR *resource, WCHAR **server, WCHAR **na
+ 
+     *server = NULL;
+     *namespace = NULL;
++    if (!resource) return WBEM_E_INVALID_PARAMETER;
+     p = q = resource;
+     if (*p == '\\' || *p == '/')
+     {
+diff --git a/dlls/win32u/input.c b/dlls/win32u/input.c
+--- a/dlls/win32u/input.c
++++ b/dlls/win32u/input.c
+@@ -1289,7 +1289,11 @@ INT WINAPI NtUserToUnicodeEx( UINT virt, UINT scan, const BYTE *state,
+                       virt, scan, state, str, size, flags, layout );
+ 
+     if (!state || !size) return 0;
+-    if ((len = user_driver->pToUnicodeEx( virt, scan, state, str, size, flags, layout )) >= -1) return len;
++    if ((len = user_driver->pToUnicodeEx( virt, scan, state, str, size, flags, layout )) >= -1)
++    {
++        if (!len && str && size) *str = 0;
++        return len;
++    }
+ 
+     if (!(kbd_tables = user_driver->pKbdLayerDescriptor( layout ))) kbd_tables = &kbdus_tables;
+     if (scan & 0x8000) str[0] = 0; /* key up */
+diff --git a/dlls/windows.gaming.input/main.c b/dlls/windows.gaming.input/main.c
+--- a/dlls/windows.gaming.input/main.c
++++ b/dlls/windows.gaming.input/main.c
+@@ -87,6 +87,7 @@ static void initialize_providers( void )
+ 
+     HidD_GetHidGuid( &guid );
+ 
++    i = 0;
+     while (SetupDiEnumDeviceInterfaces( set, NULL, &guid, i++, &iface ))
+     {
+         detail->cbSize = sizeof(*detail);
+diff --git a/dlls/winemac.drv/window.c b/dlls/winemac.drv/window.c
+--- a/dlls/winemac.drv/window.c
++++ b/dlls/winemac.drv/window.c
+@@ -1999,6 +1999,8 @@ void macdrv_window_did_unminimize(HWND hwnd)
+     {
+         TRACE("restoring win %p/%p\n", hwnd, data->cocoa_window);
+         release_win_data(data);
++        if (can_window_become_foreground(hwnd))
++            NtUserSetForegroundWindowInternal(hwnd);
+         NtUserSetActiveWindow(hwnd);
+         send_message(hwnd, WM_SYSCOMMAND, SC_RESTORE, 0);
+         return;
+diff --git a/dlls/winhttp/cookie.c b/dlls/winhttp/cookie.c
+--- a/dlls/winhttp/cookie.c
++++ b/dlls/winhttp/cookie.c
+@@ -371,6 +371,11 @@ DWORD add_cookie_headers( struct request *request )
+                     ret = add_request_headers( request, header, len,
+                                                WINHTTP_ADDREQ_FLAG_ADD | WINHTTP_ADDREQ_FLAG_COALESCE_WITH_SEMICOLON );
+                     free( header );
++                    if (ret)
++                    {
++                        LeaveCriticalSection( &session->cs );
++                        return ret;
++                    }
+                 }
+             }
+         }
+diff --git a/dlls/winhttp/request.c b/dlls/winhttp/request.c
+--- a/dlls/winhttp/request.c
++++ b/dlls/winhttp/request.c
+@@ -397,8 +397,12 @@ static DWORD insert_header( struct request *request, struct header *header )
+     if (!hdrs) return ERROR_OUTOFMEMORY;
+ 
+     request->headers = hdrs;
+-    request->headers[count - 1].field = wcsdup( header->field );
+-    request->headers[count - 1].value = wcsdup( header->value );
++    if (!(request->headers[count - 1].field = wcsdup( header->field ))) return ERROR_OUTOFMEMORY;
++    if (!(request->headers[count - 1].value = wcsdup( header->value )))
++    {
++        free( request->headers[count - 1].field );
++        return ERROR_OUTOFMEMORY;
++    }
+     request->headers[count - 1].is_request = header->is_request;
+     request->num_headers = count;
+     return ERROR_SUCCESS;
+@@ -2135,7 +2139,7 @@ static DWORD str_to_wire( const WCHAR *src, int src_len, char *dst, enum escape_
+     len = WideCharToMultiByte( CP_UTF8, 0, src, src_len, NULL, 0, NULL, NULL );
+     if (!(utf8 = malloc( len ))) return 0;
+ 
+-    WideCharToMultiByte( CP_UTF8, 0, src, -1, utf8, len, NULL, NULL );
++    WideCharToMultiByte( CP_UTF8, 0, src, src_len, utf8, len, NULL, NULL );
+     len = escape_string( utf8, len, dst, flags );
+     free( utf8 );
+ 
+@@ -2824,7 +2828,7 @@ static DWORD handle_redirect( struct request *request, DWORD status )
+             lstrcpyW( path, request->path );
+             lstrcatW( path, L"/" );
+             memcpy( path + lstrlenW(path), location, len_loc * sizeof(WCHAR) );
+-            path[len_loc] = 0;
++            path[len] = 0;
+         }
+         free( request->path );
+         request->path = path;
+@@ -2888,7 +2892,11 @@ static DWORD handle_redirect( struct request *request, DWORD status )
+         if (uc.dwUrlPathLength)
+         {
+             len = uc.dwUrlPathLength + uc.dwExtraInfoLength;
+-            if (!(request->path = malloc( (len + 1) * sizeof(WCHAR) ))) goto end;
++            if (!(request->path = malloc( (len + 1) * sizeof(WCHAR) )))
++            {
++                ret = ERROR_OUTOFMEMORY;
++                goto end;
++            }
+             memcpy( request->path, uc.lpszUrlPath, (len + 1) * sizeof(WCHAR) );
+             request->path[len] = 0;
+         }
+@@ -5205,6 +5213,7 @@ static HRESULT WINAPI winhttp_request_GetResponseHeader(
+ {
+     struct winhttp_request *request = impl_from_IWinHttpRequest( iface );
+     DWORD size, err = ERROR_SUCCESS;
++    BSTR str;
+ 
+     TRACE("%p, %p\n", request, header);
+ 
+@@ -5225,16 +5234,17 @@ static HRESULT WINAPI winhttp_request_GetResponseHeader(
+         err = GetLastError();
+         if (err != ERROR_INSUFFICIENT_BUFFER) goto done;
+     }
+-    if (!(*value = SysAllocStringLen( NULL, size / sizeof(WCHAR) )))
++    if (!(str = SysAllocStringLen( NULL, size / sizeof(WCHAR) )))
+     {
+         err = ERROR_OUTOFMEMORY;
+         goto done;
+     }
+     err = ERROR_SUCCESS;
+-    if (!WinHttpQueryHeaders( request->hrequest, WINHTTP_QUERY_CUSTOM, header, *value, &size, NULL ))
++    if (WinHttpQueryHeaders( request->hrequest, WINHTTP_QUERY_CUSTOM, header, str, &size, NULL )) *value = str;
++    else
+     {
+         err = GetLastError();
+-        SysFreeString( *value );
++        SysFreeString( str );
+     }
+ done:
+     LeaveCriticalSection( &request->cs );
+@@ -5247,6 +5257,7 @@ static HRESULT WINAPI winhttp_request_GetAllResponseHeaders(
+ {
+     struct winhttp_request *request = impl_from_IWinHttpRequest( iface );
+     DWORD size, err = ERROR_SUCCESS;
++    BSTR str;
+ 
+     TRACE("%p, %p\n", request, headers);
+ 
+@@ -5264,16 +5275,17 @@ static HRESULT WINAPI winhttp_request_GetAllResponseHeaders(
+         err = GetLastError();
+         if (err != ERROR_INSUFFICIENT_BUFFER) goto done;
+     }
+-    if (!(*headers = SysAllocStringLen( NULL, size / sizeof(WCHAR) )))
++    if (!(str = SysAllocStringLen( NULL, size / sizeof(WCHAR) )))
+     {
+         err = ERROR_OUTOFMEMORY;
+         goto done;
+     }
+     err = ERROR_SUCCESS;
+-    if (!WinHttpQueryHeaders( request->hrequest, WINHTTP_QUERY_RAW_HEADERS_CRLF, NULL, *headers, &size, NULL ))
++    if (WinHttpQueryHeaders( request->hrequest, WINHTTP_QUERY_RAW_HEADERS_CRLF, NULL, str, &size, NULL )) *headers = str;
++    else
+     {
+         err = GetLastError();
+-        SysFreeString( *headers );
++        SysFreeString( str );
+     }
+ done:
+     LeaveCriticalSection( &request->cs );
+@@ -5606,6 +5618,7 @@ static HRESULT WINAPI winhttp_request_get_StatusText(
+ {
+     struct winhttp_request *request = impl_from_IWinHttpRequest( iface );
+     DWORD err = ERROR_SUCCESS, len = 0, index = 0;
++    BSTR str;
+ 
+     TRACE("%p, %p\n", request, status);
+ 
+@@ -5622,17 +5635,18 @@ static HRESULT WINAPI winhttp_request_get_StatusText(
+         err = GetLastError();
+         if (err != ERROR_INSUFFICIENT_BUFFER) goto done;
+     }
+-    if (!(*status = SysAllocStringLen( NULL, len / sizeof(WCHAR) )))
++    if (!(str = SysAllocStringLen( NULL, len / sizeof(WCHAR) )))
+     {
+         err = ERROR_OUTOFMEMORY;
+         goto done;
+     }
+     index = 0;
+     err = ERROR_SUCCESS;
+-    if (!WinHttpQueryHeaders( request->hrequest, WINHTTP_QUERY_STATUS_TEXT, NULL, *status, &len, &index ))
++    if (WinHttpQueryHeaders( request->hrequest, WINHTTP_QUERY_STATUS_TEXT, NULL, str, &len, &index )) *status = str;
++    else
+     {
+         err = GetLastError();
+-        SysFreeString( *status );
++        SysFreeString( str );
+     }
+ done:
+     LeaveCriticalSection( &request->cs );
+@@ -5676,6 +5690,7 @@ static HRESULT WINAPI winhttp_request_get_ResponseText(
+     struct winhttp_request *request = impl_from_IWinHttpRequest( iface );
+     UINT codepage;
+     DWORD err = ERROR_SUCCESS;
++    BSTR str;
+     int len;
+ 
+     TRACE("%p, %p\n", request, body);
+@@ -5690,13 +5705,14 @@ static HRESULT WINAPI winhttp_request_get_ResponseText(
+     }
+     if ((err = request_get_codepage( request, &codepage ))) goto done;
+     len = MultiByteToWideChar( codepage, 0, request->buffer, request->offset, NULL, 0 );
+-    if (!(*body = SysAllocStringLen( NULL, len )))
++    if (!(str = SysAllocStringLen( NULL, len )))
+     {
+         err = ERROR_OUTOFMEMORY;
+         goto done;
+     }
+-    MultiByteToWideChar( codepage, 0, request->buffer, request->offset, *body, len );
+-    (*body)[len] = 0;
++    MultiByteToWideChar( codepage, 0, request->buffer, request->offset, str, len );
++    str[len] = 0;
++    *body = str;
+ 
+ done:
+     LeaveCriticalSection( &request->cs );
+@@ -5806,14 +5822,14 @@ static HRESULT WINAPI stream_Read( IStream *iface, void *buf, ULONG len, ULONG *
+ 
+     if (stream->pos.QuadPart >= stream->size.QuadPart)
+     {
+-        *read = 0;
++        if (read) *read = 0;
+         return S_FALSE;
+     }
+ 
+     size = min( stream->size.QuadPart - stream->pos.QuadPart, len );
+     memcpy( buf, stream->data + stream->pos.QuadPart, size );
+     stream->pos.QuadPart += size;
+-    *read = size;
++    if (read) *read = size;
+ 
+     return S_OK;
+ }
+diff --git a/dlls/wininet/urlcache.c b/dlls/wininet/urlcache.c
+--- a/dlls/wininet/urlcache.c
++++ b/dlls/wininet/urlcache.c
+@@ -428,8 +428,9 @@ static DWORD cache_container_set_size(cache_container *container, HANDLE file, D
+ 
+     header = MapViewOfFile(mapping, FILE_MAP_WRITE, 0, 0, 0);
+     if(!header) {
++        DWORD error = GetLastError();
+         CloseHandle(mapping);
+-        return GetLastError();
++        return error;
+     }
+ 
+     if(blocks_no != MIN_BLOCK_NO) {
+@@ -515,14 +516,21 @@ static DWORD cache_container_set_size(cache_container *container, HANDLE file, D
+                     header->directory_data[i].name[k] = dir_name[k];
+                 break;
+             }else if(j >= 255) {
++                DWORD error = GetLastError();
++
+                 /* Give up. The most likely cause of this
+                  * is a full disk, but whatever the cause
+                  * is, it should be more than apparent that
+                  * we won't succeed.
+                  */
++                while(i--) {
++                    for(k = 0; k < 8; ++k)
++                        dir_name[k] = header->directory_data[i].name[k];
++                    RemoveDirectoryW(dir_path);
++                }
+                 UnmapViewOfFile(header);
+                 CloseHandle(mapping);
+-                return GetLastError();
++                return error;
+             }
+         }
+     }
+@@ -551,6 +559,14 @@ static BOOL cache_container_is_valid(urlcache_header *header, DWORD file_size)
+     if(FILE_SIZE(header->capacity_in_blocks) != file_size)
+         return FALSE;
+ 
++    if(header->dirs_no > MAX_DIR_NO)
++        return FALSE;
++
++    for(i=0; i<header->dirs_no; i++) {
++        if(!header->directory_data[i].name[0])
++            return FALSE;
++    }
++
+     allocation_size = 0;
+     for(i=0; i<header->capacity_in_blocks/8; i++) {
+         for(count_bits = header->allocation_table[i]; count_bits!=0; count_bits>>=1) {
+@@ -623,6 +639,8 @@ static DWORD cache_container_open_index(cache_container *container, DWORD blocks
+     if(file_size < FILE_SIZE(blocks_no)) {
+         DWORD ret = cache_container_set_size(container, file, blocks_no);
+         CloseHandle(file);
++        if(ret != ERROR_SUCCESS && blocks_no == MIN_BLOCK_NO)
++            DeleteFileW(index_path);
+         ReleaseMutex(container->mutex);
+         return ret;
+     }

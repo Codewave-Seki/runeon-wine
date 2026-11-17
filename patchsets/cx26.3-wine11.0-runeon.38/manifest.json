@@ -4250,6 +4250,88 @@
           "contains": "[self setIgnoresMouseEvents:state->ignores_mouse_events];"
         }
       ]
+    },
+    {
+      "order": 217,
+      "path": "patches/upstream/0187-wine-11.22-targeted-fixes.patch",
+      "sha256": "e26d3c862370da7d691968bd29a5f4f00874d9bf209ca1781ba8bb21a04eb0b9",
+      "kind": "upstream-backport",
+      "status": "active",
+      "risk": "medium",
+      "firstWineRelease": "wine-11.22",
+      "upstreamCommits": [
+        "f6a397054c487a5cd9479f219b36b246d1cb79b5",
+        "228557e936658a8b7be2fe2033937c294ff02b16",
+        "bcd4a666e4408983b963cc7317c3c4eb6361817a",
+        "53a0cdd776be3b930df85a5b41fdcb6c3f6587ec",
+        "53bac7c5f399f7f55f82f79af9243b9dcd729e8b",
+        "f4eea401e486a8300ea626c39b872bd113c42883",
+        "9695343d71e1caf9fce85b459f13d329f91330c1",
+        "a5ea938598fdb504cbc4d3832834fedfdefbd32e",
+        "11b324201dd6eb91b304eb93bff34ab9b97d4d9e",
+        "2c56a5422185eb22fac9e1d1b93141161cb4d4a0",
+        "d52e2c87ae84ebf6c47ed7bfc2180d7e2ad64cbe",
+        "087af9aff4a6cab0b14451d9d04d9048436ca236",
+        "99b764e0949cc7743873c2fe8acfa65cd08b8833",
+        "5df2ef62da98f1883a9f8cbf73918e02a65f3311",
+        "7009c1ed82102b13c74832130fd141e0c7ca0cc9",
+        "1170e76ca5ae87dce29017deadadc378984ef081",
+        "2d2dc3db07c499e7792505a6e90442f77783786a",
+        "845b5ddcba2636299159ffc354f525249ae8bce6",
+        "b250fc643da67926aa25ffb687c01f19c9252ea5",
+        "2d863f2774102e00c65d426424472718e28f3cf5",
+        "dcd891037d08b3072550325c07008d32445945a0",
+        "ec7a423eff906f0380b0ac8c1038ff79cc054f5b",
+        "55e672f517f8729305c83db1033f9a1db63603eb",
+        "783a8f8fe31ac0eb65bc51ec622f588018c3be00",
+        "9ead75872de96408be6210cf2e660ea8a3374c71",
+        "f436af404772ab751c10403453a921cd6c20931f",
+        "bfb465e2902fdbefebaaa4fdde52ee3f96dea650",
+        "26b318f8265ece961ae4271841d1b198299b1331",
+        "662ebcb03b8cab791403ff8da5444b97d5e39473",
+        "7fccdf7e1ca0b4d0934e5e6d5d134d696df877f4",
+        "ee607cf42b80246a25577b7a1c12500cfe39ed47",
+        "c209164dafff4f731791cd820f4ab65c8843dd35",
+        "8f4826ad8cb73995a29c99071a9b79055dc0a471",
+        "4bd7fd80bede8505fb5fca8757087a964ec2bad4",
+        "62621e50bafe0804223c557faeca947f572e0e27",
+        "c7e26cf11d42ec4d73bb17ce897d677aac4e5385",
+        "8b4cf949c8cf7e5a769c943de1b2f034190466ed",
+        "7384c8babcaa411a0014bf223068a633d7bfa899",
+        "f9022cf74b58085de2741a681272a95270882b15",
+        "ede017e2b246ff270dc5dd2d12d5e4c24d57092d",
+        "412a292464272236e8c3cd0c2499c47713850b0b",
+        "df33af7a823e4e398d5ebceae7da878549216bb4",
+        "673e09be718dbc55517872a325ddbaf12f56ea3f"
+      ],
+      "summary": "Squashed fixes first released in wine-11.22 for DLLs used by Steam, launchers, installers and games: crash, memory-safety, leak and error-path fixes in gdiplus, dwrite (a custom font collection failed entirely on one unsupported file), dbghelp, winhttp, crypt32, mshtml, cabinet, wbemprox, d3dx9, mfplat, d2d1, quartz, mscoree, msvcrt (fscanf on a NULL file), amstream, kernelbase (StrCmpN* and StrIsIntlEqual* read past the terminator, Wine-Bug 60241), windows.gaming.input (HID controller enumeration started at the index where XInput enumeration stopped and skipped that many devices) and wininet (a failed cache initialisation left the cache permanently broken, Wine-Bug 60560); c209164daf fixes a ddraw regression of 6b486ec783, carried since .27. Three commits in ABI-sensitive modules are carried under the exceptions in CLAUDE.md section 3: ede017e2b2 (winemac.drv, macOS fix exception) makes a window restored from the Dock the foreground window before it is activated, fixing a regression of d56f36c1aa carried in 0145; 673e09be71 (ntdll) and df33af7a82 (win32u), under the Windows-behaviour exception, stop get_unix_full_path() writing through an empty object name (Wine-Bug 60781) and make NtUserToUnicodeEx() always terminate its output. None changes a unix-call or server protocol. Feature series, behaviour changes and other ABI-sensitive commits are excluded; see docs/upstream-reviews.md#backports-11.22-sweep.",
+      "testStrategy": "Every commit applies unchanged, in upstream order and without fuzz or offset, on top of patches 0001-0186; the defect each fixes was confirmed in the base source. A complete i386/x86_64 WoW64 build, Wine's tests for the affected modules against .37, and product acceptance are required before tagging. Upstream test hunks are omitted.",
+      "verification": [
+        {
+          "path": "dlls/ddraw/surface.c",
+          "contains": "        is_render_target = !!SUCCEEDED(wined3d_check_device_format(ddraw->wined3d, ddraw->wined3d_adapter,"
+        },
+        {
+          "path": "dlls/gdiplus/graphicspath.c",
+          "contains": "    if(pathData->Count < path->pathdata.Count)"
+        },
+        {
+          "path": "dlls/wbemprox/reg.c",
+          "contains": "            if (!(tmp_names = realloc( value_names, count * sizeof(*tmp_names) ))) { hr = E_OUTOFMEMORY; break; }"
+        },
+        {
+          "path": "dlls/winemac.drv/window.c",
+          "contains": "        if (can_window_become_foreground(hwnd))"
+        },
+        {
+          "path": "dlls/ntdll/path.c",
+          "contains": "        if (!(status = NtQueryObject( handle, ObjectNameInformation, info, bufsize, &retsize )) &&"
+        },
+        {
+          "path": "dlls/win32u/input.c",
+          "contains": "        if (!len && str && size) *str = 0;"
+        }
+      ]
     }
   ],
   "targetedReview": {
