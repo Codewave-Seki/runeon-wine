@@ -1273,17 +1273,17 @@ Partial margins, GDI-drawn content, i386, ordinary windows over a longer session
 
 ## Wine 11.22 user-mode fix sweep
 
-Candidate patch set `cx26.3-wine11.0-runeon.38` adds `patches/upstream/0187-wine-11.22-targeted-fixes.patch` after `0186`. It squashes 43 WineHQ commits first released in `wine-11.22`. The patch lists every commit with its author, and the manifest records the full commit IDs. Test-only hunks are omitted, and no commit is adapted.
+Candidate patch set `cx26.3-wine11.0-runeon.38` adds `patches/upstream/0187-wine-11.22-targeted-fixes.patch` and `0188-wine-11.22-wined3d-whole-buffer-write-upload.patch` after `0186`. `0187` squashes 47 WineHQ commits: 46 first released in `wine-11.22`, and `673e09be71`, which is on master after `wine-11.22` and not yet released. `0188` carries `b6810e410f` alone, with its tests. Each patch lists every commit with its author, and the manifest records the full commit IDs. Test-only hunks are omitted from `0187`. Two commits in `0187` are adapted to fix memory errors of their own (below).
 
 ### Selection
 
 All 324 commits of `wine-11.21..wine-11.22` were reviewed with the rules of the [previous sweep](#backports-11.21-sweep), against a tree made of the pinned CrossOver archive plus patches `0001`–`0186`:
 
 - 35 commits change only tests.
-- 126 commits change only `ntdll`, `server`, `win32u`, `winemac.drv`, `wow64`, the loader and preloader, `include`, the build tools, bundled libraries, fonts, locale data, translations or the X11 and Wayland drivers. Most are feature work: address-space randomisation and reservation growth, ARM64EC extended state, moving `NtSetInformationFile()` classes to the server, CD-ROM pass-through, the OpenGL context rework and IOSurface window surfaces in `winemac.drv`. Each was read; three small fixes are taken under the exceptions in `CLAUDE.md` §3 (below).
-- Of the 163 user-mode commits, the sweep takes crash, memory-safety, leak, hang and error-path fixes in DLLs that Steam, launchers, installers or games load, and one ddraw regression fix under the graphics rule.
+- 126 commits change only `ntdll`, `server`, `win32u`, `winemac.drv`, `wow64`, the loader and preloader, `include`, the build tools, bundled libraries, fonts, locale data, translations or the X11 and Wayland drivers. Most are feature work: address-space randomisation and reservation growth, ARM64EC extended state, moving `NtSetInformationFile()` classes to the server, CD-ROM pass-through, the OpenGL context rework and IOSurface window surfaces in `winemac.drv`. Each was read; three small fixes are taken under the exceptions in `CLAUDE.md` §3 and four with the maintainer's individual approval (below).
+- Of the 163 user-mode commits, the sweep takes crash, memory-safety, leak, hang and error-path fixes in DLLs that Steam, launchers, installers or games load, one ddraw regression fix and, in its own patch, one wined3d buffer upload fix under the graphics rule.
 
-For each taken commit the defect was confirmed in the base source, not inferred from a clean apply: every one applies unchanged, without fuzz or offset, in upstream order. Commit messages of the whole range and of master up to `433ffc868d` (2026-11-16) were searched for commits carried earlier: `c209164daf` names `6b486ec783` and `ede017e2b2` names `d56f36c1aa`, both carried, and both are taken. No later master commit names a taken one.
+For each taken commit the defect was confirmed in the base source, not inferred from a clean apply: every one applies without fuzz or offset, in upstream order; only the two adapted commits differ from upstream. Commit messages of the whole range and of master up to `433ffc868d` (2026-11-16) were searched for commits carried earlier: `c209164daf` names `6b486ec783` and `ede017e2b2` names `d56f36c1aa`, both carried, and both are taken. No later master commit names a taken one.
 
 ### Taken
 
@@ -1310,9 +1310,29 @@ For each taken commit the defect was confirmed in the base source, not inferred 
 | wininet | `412a292464` | A failed directory creation left a full-size `index.dat` with empty directory names, which broke the URL cache for good even after disk space was freed (Wine-Bug 60560). |
 | winemac.drv | `ede017e2b2` | Since `d56f36c1aa` (carried in `0145`), a window restored from the Dock was activated before it became the foreground window, so it got `WM_NCACTIVATE` with wParam 0; upstream reports a game that depends on it. The base matches the code before the fix. |
 | ntdll | `673e09be71` | `get_unix_full_path()` wrote a backslash through the name buffer of an object without a name, a page fault at address 2 (Wine-Bug 60781). |
+| server | `3d15b75cfa` | When the descriptor a request passes was still in the socket buffer, an error left by the earlier receive attempt could make the request fail although the descriptor arrived; the error is now cleared once the descriptor is received. |
+| server | `6fd2ef6b19` | A failed allocation of a window class's shared memory leaked the reference to its process. |
+| win32u | `83fddb06f5` | `NtGdiCreateDIBSection()` with a section handle mapped the view without the caller's zero bits, so a 32-bit process under WoW64 could get bits above 4 GB, which WoW64 truncates to 32 bits. The existing `zero_bits` is now passed; it is 0 for native 64-bit callers, which are unchanged. |
+| wow64win | `d7f7d8031a` | `NtUserGetRawInputDeviceList()` for 32-bit callers copied as many entries as the buffer holds instead of the returned count, filling the rest with uninitialised data. |
 | win32u | `df33af7a82` | `NtUserToUnicodeEx()` left the output buffer untouched when the driver produced no character; Windows writes a terminator. `winemac.drv` implements the driver call, so the path is reached on macOS. |
 
 `ede017e2b2` is carried under the macOS fix exception: it fixes a defect present in the base, touches only unchanged Wine code (the hunk is about 300 lines below the closest CrossOver change in `window.c`), changes no protocol or shared structure, and takes effect on x86_64. `673e09be71` and `df33af7a82` are carried under the Windows-behaviour exception for `ntdll`, `win32u` and `server`: each applies without fuzz, no Runeon patch touches its file, and it changes no protocol, unix-call table, export or shared structure. The added lines use only fields and functions present in the base.
+
+`3d15b75cfa`, `6fd2ef6b19` (server), `83fddb06f5` (win32u) and `d7f7d8031a` (wow64win) need the maintainer's individual approval; the maintainer approved them on 2026-11-17, for these four commits only; it is not a precedent. None changes the server protocol, a request or reply structure, msync, a unix-call table or a structure shared between modules.
+
+### Taken in `0188`, on condition
+
+`b6810e410f` (wined3d, graphics rule): a non-managed buffer mapped for writing becomes dirty as a whole, as on Windows, instead of only the mapped range; managed buffers still upload only the mapped range. Upstream reports a game that maps four bytes of a vertex buffer and writes all of it. Its upstream tests, `test_map_partial_range()` in the d3d8 and d3d9 `visual` tests, are carried. The maintainer accepted it on 2026-11-17 on condition: it is a separate patch so it can be dropped alone, and stable adoption requires the regression run to check the upload and flush cost of frequent partial writes on wined3d against `.37`.
+
+### Adaptations
+
+| Commit | Adaptation |
+|---|---|
+| `55e672f517` wbemprox | Upstream doubles the array count when `enum_values()` runs out of room; for a key without values the count stays 0, `realloc()` frees the array and returns NULL, and the cleanup frees it again. The count now grows to at least 1; the error handling is unchanged. |
+| `53bac7c5f3` dbghelp | Upstream frees the type record and then reads its id for the report in `pdb_reader_TPI_fillin_enumlist()` and `pdb_reader_TPI_fillin_UDTlist()`. The report result is now computed first. |
+| `b6810e410f` wined3d tests | `test_map_partial_range()` is called at the end of `START_TEST(visual)`, whose last lines differ from upstream. |
+
+Upstream master up to `433ffc868d` has no later commit touching either function or naming either commit, so there was no upstream fix to take instead.
 
 ### Left out after review
 
@@ -1321,7 +1341,6 @@ For each taken commit the defect was confirmed in the base source, not inferred 
 | `1b7689efe4` msi, `40a5fd6496` kerberos, `8c8759fb20` msv1_0, `effa85a115` bcrypt, `94958d450a`, `0a374631bf` winhttp | The base does not have the code: msi's combo box update allocates no text there, `map_auth_data` does not exist, bcrypt and CrossOver's winhttp request code differ. |
 | `42a9195be1` wbemprox, `778f28f131` dbghelp | Do not apply: the leak happens only when `SetupDiGetClassDevsW` fails, and the PDB checks harden against malformed files that debuggers and crash reporters read. |
 | `af38a86cfa` wined3d/dxgi | A Unity game hung after its window was minimised because occluded presents never released the frame latency semaphore (Wine-Bug 60111). It reaches only D3D10/11 through wined3d, adds a swapchain flag to the wined3d interface and does not apply to the base. |
-| `b6810e410f` wined3d | Uploads the whole buffer on every write map of a non-managed buffer, as native does. It changes how much is uploaded for every D3D8/9 game on wined3d; deferred until it can be tested on games. |
 | `eea4380ae7` wined3d, `d622c94d96` d3d8 | The d3d8 half does not apply, and the wined3d validation alone changes nothing. |
 | `16931061c1` vbscript, the mfreadwrite sink writer series, the odbc32 `SQLDescribeCol` series, `3374e6b458` cfgmgr32, `45b9f838e5`, `c00edca7b5` mfplat D3D12 buffers, msxml3 DTD validation, the XPath engine and the namespace helpers, `cmd` `DIR` fixes | Do not apply: the base code differs or the commit builds on post-11.0 code. |
 | `415a275e38` kernel32, `55ac249ed7` avifil32, `06f5b057bc` windowscodecs, `14af32b5b2`, `deacf31e09` gdiplus, `30a8ee48ce`, `ccd9f75e68` d2d1, `1f47e34e99` quartz, `e199427123` urlmon, `16a2532a84`, `13d2b5d8c6` msi, `3029211329` inetcomm, `699bd7b84e` msxml3, `9f5162bba0` services, `aa5d80283c` shell32, `37279f3648`, `9152de07c2` kernelbase, `a3199d7615`, `36c8900128`, `5af0addac2` wbemprox, `be8fe5d69d` uxtheme, `d1d484fe5e` sechost, `29aef98781`, `400454efc0` odbccp32, `b60db1e42b` odbc32, `ca48ffcd28` http | Correctness or behaviour changes with no crash, leak, hang or error path. |
@@ -1332,14 +1351,10 @@ For each taken commit the defect was confirmed in the base source, not inferred 
 
 ### ABI-sensitive commits
 
-Apart from the three taken, these were left out:
+Apart from the seven taken, these were left out:
 
 | Commit | Area | Reason |
 |---|---|---|
-| `3d15b75cfa` | server | When the descriptor a request passes was still in the socket buffer, an error left by the earlier receive attempt could make the request fail although the descriptor arrived. The base has the same code; it needs the maintainer's individual approval and is held for it. |
-| `83fddb06f5` | win32u | `NtGdiCreateDIBSection` with a section handle mapped the view without the caller's zero bits, so a 32-bit process could get bits above 4 GB. Address-space layout is reviewed one by one; held for an individual decision. |
-| `d7f7d8031a` | wow64win | `NtUserGetRawInputDeviceList` copied the buffer's capacity instead of the returned count; the extra entries are uninitialised, but the returned count is right. wow64 needs individual approval and the impact is small. |
-| `6fd2ef6b19` | server | Leaks a process reference only when allocating a class's shared memory fails. |
 | `48c5aa7ffa`, `90d140f6ae`, `b94b54c62b`, `b663047255`, `1a796c367c` | ntdll, win32u, server | Do not apply, or follow commits the base does not carry (`f3de8edf99`, `73d340dd17`, the server file disposition refactor). |
 | `3f4393e5ff` | ntdll | Limits export forwarders to 32 (Wine-Bug 60130); needs the import resolution refactor `d667eb8e74` and `4180667a0c`. |
 | `a9dd4878b1`, `f80250df92` | ntdll | Debugger support and a log improvement, not defects. |
@@ -1347,10 +1362,12 @@ Apart from the three taken, these were left out:
 | `c63ff8b706`, `35cab28451`, `50128d5b97`, `6a8402a68b`, `1fd19f83c8`, `1ec9649f57`, `0a391a4b47` | winemac.drv | Minimise, inactive-command, clipboard-on-activation and device-caps locking rework; no defect is stated, and most do not apply. |
 | `d9590c210a` | winemac.drv | The upstream form of `0134`; it relies on DPI scaling in `win32u` that the base does not have, so `0134` stays. |
 
-The 28 master commits after `wine-11.22` up to `433ffc868d` were checked for macOS fixes only; they will be swept with `wine-11.23`. None is taken: `9df43df01b` and `77bf09aaa1` move key repeat to the server, `433ffc868d` changes the Mach message that sends the task port to wineserver (a protocol change), `0a6a0dcb02` and `0e367b9393` correct return types without a stated defect, and `7e7ebb398f` silences warnings in a build tool.
+The 28 master commits after `wine-11.22` up to `433ffc868d` were checked for macOS fixes; they will be swept with `wine-11.23`. Of them only `673e09be71`, an ntdll crash fix, is taken (above). No macOS commit is taken: `9df43df01b` and `77bf09aaa1` move key repeat to the server, `433ffc868d` changes the Mach message that sends the task port to wineserver (a protocol change), `0a6a0dcb02` and `0e367b9393` correct return types without a stated defect, and `7e7ebb398f` silences warnings in a build tool.
 
 ### Validation
 
-`scripts/static-check.sh` and `scripts/integration-check.sh` pass for `.38`. Not done yet: a complete i386/x86_64 build, Wine's tests for the affected modules against `.37`, and product acceptance.
+`scripts/static-check.sh` and `scripts/integration-check.sh` pass for `.38`. Not done yet: a complete i386/x86_64 build, Wine's tests for the affected modules against `.37` (including the carried `test_map_partial_range()`), the `0188` upload cost check, and product acceptance.
+
+Unchanged in the base and not addressed here: `pdb_reader_TPI_fillin_enumlist()` also reads `cv_field->generic.id` after freeing the record that holds it, on its unexpected-field path; upstream master has the same code.
 
 `upstreamAuditThrough` stays at `wine-11.15`. The base manifest records `upstreamSweepThrough: wine-11.22`.

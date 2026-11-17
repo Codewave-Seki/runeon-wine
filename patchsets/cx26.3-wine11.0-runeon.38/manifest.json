@@ -4254,7 +4254,7 @@
     {
       "order": 217,
       "path": "patches/upstream/0187-wine-11.22-targeted-fixes.patch",
-      "sha256": "e26d3c862370da7d691968bd29a5f4f00874d9bf209ca1781ba8bb21a04eb0b9",
+      "sha256": "d8dd588b2ef601955af53616a5a95f8f840d7c43b4bd557de26d00fc46f1f6de",
       "kind": "upstream-backport",
       "status": "active",
       "risk": "medium",
@@ -4262,6 +4262,7 @@
       "upstreamCommits": [
         "f6a397054c487a5cd9479f219b36b246d1cb79b5",
         "228557e936658a8b7be2fe2033937c294ff02b16",
+        "6fd2ef6b191ac2151fddf975a7bcb94d5d56dc37",
         "bcd4a666e4408983b963cc7317c3c4eb6361817a",
         "53a0cdd776be3b930df85a5b41fdcb6c3f6587ec",
         "53bac7c5f399f7f55f82f79af9243b9dcd729e8b",
@@ -4275,6 +4276,7 @@
         "99b764e0949cc7743873c2fe8acfa65cd08b8833",
         "5df2ef62da98f1883a9f8cbf73918e02a65f3311",
         "7009c1ed82102b13c74832130fd141e0c7ca0cc9",
+        "3d15b75cfa1116dcce4bb7b149fdfddda8a2a101",
         "1170e76ca5ae87dce29017deadadc378984ef081",
         "2d2dc3db07c499e7792505a6e90442f77783786a",
         "845b5ddcba2636299159ffc354f525249ae8bce6",
@@ -4299,13 +4301,16 @@
         "8b4cf949c8cf7e5a769c943de1b2f034190466ed",
         "7384c8babcaa411a0014bf223068a633d7bfa899",
         "f9022cf74b58085de2741a681272a95270882b15",
+        "d7f7d8031ac3ae0238f4be3d643d8e41d817f229",
+        "83fddb06f5b29b6f4b1112adfe260e57c65ce21e",
         "ede017e2b246ff270dc5dd2d12d5e4c24d57092d",
         "412a292464272236e8c3cd0c2499c47713850b0b",
         "df33af7a823e4e398d5ebceae7da878549216bb4",
         "673e09be718dbc55517872a325ddbaf12f56ea3f"
       ],
-      "summary": "Squashed fixes first released in wine-11.22 for DLLs used by Steam, launchers, installers and games: crash, memory-safety, leak and error-path fixes in gdiplus, dwrite (a custom font collection failed entirely on one unsupported file), dbghelp, winhttp, crypt32, mshtml, cabinet, wbemprox, d3dx9, mfplat, d2d1, quartz, mscoree, msvcrt (fscanf on a NULL file), amstream, kernelbase (StrCmpN* and StrIsIntlEqual* read past the terminator, Wine-Bug 60241), windows.gaming.input (HID controller enumeration started at the index where XInput enumeration stopped and skipped that many devices) and wininet (a failed cache initialisation left the cache permanently broken, Wine-Bug 60560); c209164daf fixes a ddraw regression of 6b486ec783, carried since .27. Three commits in ABI-sensitive modules are carried under the exceptions in CLAUDE.md section 3: ede017e2b2 (winemac.drv, macOS fix exception) makes a window restored from the Dock the foreground window before it is activated, fixing a regression of d56f36c1aa carried in 0145; 673e09be71 (ntdll) and df33af7a82 (win32u), under the Windows-behaviour exception, stop get_unix_full_path() writing through an empty object name (Wine-Bug 60781) and make NtUserToUnicodeEx() always terminate its output. None changes a unix-call or server protocol. Feature series, behaviour changes and other ABI-sensitive commits are excluded; see docs/upstream-reviews.md#backports-11.22-sweep.",
-      "testStrategy": "Every commit applies unchanged, in upstream order and without fuzz or offset, on top of patches 0001-0186; the defect each fixes was confirmed in the base source. A complete i386/x86_64 WoW64 build, Wine's tests for the affected modules against .37, and product acceptance are required before tagging. Upstream test hunks are omitted.",
+      "summary": "Squashed fixes for DLLs used by Steam, launchers, installers and games: 46 commits first released in wine-11.22 and 673e09be71, on master after wine-11.22 and not yet released. Crash, memory-safety, leak and error-path fixes in gdiplus, dwrite (a custom font collection failed entirely on one unsupported file), dbghelp, winhttp, crypt32, mshtml, cabinet, wbemprox, d3dx9, mfplat, d2d1, quartz, mscoree, msvcrt (fscanf on a NULL file), amstream, kernelbase (StrCmpN* and StrIsIntlEqual* read past the terminator, Wine-Bug 60241), windows.gaming.input (HID controller enumeration started at the index where XInput enumeration stopped and skipped that many devices) and wininet (a failed cache initialisation left the cache permanently broken, Wine-Bug 60560); c209164daf fixes a ddraw regression of 6b486ec783, carried since .27. Commits in ABI-sensitive modules: ede017e2b2 (winemac.drv, macOS fix exception) makes a window restored from the Dock the foreground window before it is activated, fixing a regression of d56f36c1aa carried in 0145; 673e09be71 (ntdll) and df33af7a82 (win32u), under the Windows-behaviour exception, stop get_unix_full_path() writing through an empty object name (Wine-Bug 60781) and make NtUserToUnicodeEx() always terminate its output. Approved individually by the maintainer on 2026-11-17, for these commits only and not as a precedent: 3d15b75cfa (server) clears the error once thread_get_inflight_fd() has received the descriptor, so a request whose descriptor was still in the socket buffer no longer fails with an error left by the earlier receive attempt; 83fddb06f5 (win32u) passes the caller's existing zero_bits when NtGdiCreateDIBSection() maps a section, since WoW64 truncates the returned pointer to 32 bits (zero_bits is 0 for native 64-bit callers, so they are unchanged); d7f7d8031a (wow64win) copies Raw Input devices by the returned count instead of the buffer capacity; 6fd2ef6b19 (server) releases the process reference when allocating a window class's shared memory fails. None changes a unix-call or server protocol, a request or reply structure, msync or a structure shared between modules. Feature series, behaviour changes and other ABI-sensitive commits are excluded; see docs/upstream-reviews.md#backports-11.22-sweep.",
+      "adaptation": "Two fixes to memory errors that the upstream commits introduce and upstream master (433ffc868d) still has; no upstream fix exists yet. 55e672f517 (wbemprox enum_values) doubled the array count when it ran out, so for a key without values a count of 0 stayed 0, realloc() freed the array and returned NULL, and the cleanup freed it again; the count now grows to at least 1, with the error handling unchanged. 53bac7c5f3 (dbghelp) freed the type record and then read its id for the report in pdb_reader_TPI_fillin_enumlist() and pdb_reader_TPI_fillin_UDTlist(); the report result is now computed before the free. Production code is otherwise identical.",
+      "testStrategy": "Every commit applies in upstream order without fuzz or offset on top of patches 0001-0186, the two adapted ones with their Runeon change; the defect each fixes was confirmed in the base source. A complete i386/x86_64 WoW64 build, Wine's tests for the affected modules against .37, and product acceptance are required before tagging. Upstream test hunks are omitted.",
       "verification": [
         {
           "path": "dlls/ddraw/surface.c",
@@ -4330,6 +4335,47 @@
         {
           "path": "dlls/win32u/input.c",
           "contains": "        if (!len && str && size) *str = 0;"
+        },
+        {
+          "path": "dlls/wbemprox/reg.c",
+          "contains": "            count = count ? count * 2 : 1;"
+        },
+        {
+          "path": "dlls/dbghelp/pdb.c",
+          "contains": "        result = PDB_REPORT_UNEXPECTED(\"enum list\", cv_reftype->generic.id);"
+        },
+        {
+          "path": "dlls/win32u/dib.c",
+          "contains": "        if (NtMapViewOfSection( section, GetCurrentProcess(), &mapBits, zero_bits, 0, &map_offset,"
+        },
+        {
+          "path": "dlls/wow64win/user.c",
+          "contains": "        for (i = 0; i < ret; ++i)"
+        }
+      ]
+    },
+    {
+      "order": 218,
+      "path": "patches/upstream/0188-wine-11.22-wined3d-whole-buffer-write-upload.patch",
+      "sha256": "596642e1084104600f7d893ba1c2619c9674640ce0bede5abdd74dbda27dd33a",
+      "kind": "upstream-backport",
+      "status": "active",
+      "risk": "medium",
+      "firstWineRelease": "wine-11.22",
+      "upstreamCommits": [
+        "b6810e410f97662d443873a7d125b1bec2605f1d"
+      ],
+      "summary": "Graphics rule, accepted by the maintainer on 2026-11-17 on condition: wined3d now treats a non-managed buffer mapped for writing as dirty as a whole, as Windows does, instead of only the mapped range; managed buffers still upload only the mapped range. A D3D8/9 game that maps part of a buffer and writes outside it (upstream: Pure Pinball maps four bytes of a vertex buffer and writes all of it) otherwise draws stale data. Kept as its own patch so it can be dropped alone: stable adoption requires the regression run to check the upload and flush cost of frequent partial writes on wined3d. See docs/upstream-reviews.md#backports-11.22-sweep.",
+      "adaptation": "test_map_partial_range() is called at the end of START_TEST(visual) in dlls/d3d8/tests/visual.c and dlls/d3d9/tests/visual.c, whose last lines differ from upstream. Production code and the tests are otherwise identical.",
+      "testStrategy": "Applies without fuzz or offset after 0187. The upstream test_map_partial_range() in dlls/d3d8/tests/visual.c and dlls/d3d9/tests/visual.c is carried and should fail on .37 and pass with this patch. The regression run must also compare frame time on a wined3d D3D8/9 game that maps buffers partially and often against .37.",
+      "verification": [
+        {
+          "path": "dlls/wined3d/buffer.c",
+          "contains": "    if ((flags & WINED3D_MAP_WRITE) && !wined3d_resource_access_is_managed(resource->access))"
+        },
+        {
+          "path": "dlls/d3d9/tests/visual.c",
+          "contains": "static void test_map_partial_range(void)"
         }
       ]
     }

@@ -1,20 +1,30 @@
 From: Wine upstream contributors (see commit list)
 Subject: [PATCH] Backport targeted Wine 11.22 fixes.
 
-Squashed backport of 43 WineHQ commits first released in wine-11.22,
-applied in upstream order on top of cx26.3-wine11.0-runeon.38 patches
-0001-0186. Test-only hunks are omitted. Every commit applies unchanged.
-c209164daf fixes a regression of 6b486ec783 (carried since .27) and
-ede017e2b2 fixes a regression of d56f36c1aa (carried in 0145).
+Squashed backport of 47 WineHQ commits: 46 first released in
+wine-11.22, and 673e09be71, on master after wine-11.22 and not yet
+released. Applied in upstream order on top of
+cx26.3-wine11.0-runeon.38 patches 0001-0186. Test-only hunks are
+omitted. c209164daf fixes a regression of 6b486ec783 (carried since
+.27) and ede017e2b2 fixes a regression of d56f36c1aa (carried in 0145).
 ede017e2b2 (winemac.drv) is carried under the macOS fix exception;
 673e09be71 (ntdll) and df33af7a82 (win32u) under the Windows-behaviour
-exception for ntdll, win32u and server.
+exception for ntdll, win32u and server; 6fd2ef6b19 and 3d15b75cfa
+(server), 83fddb06f5 (win32u) and d7f7d8031a (wow64win) with the
+maintainer's individual approval.
+Runeon adaptations, marked [adapted] below, fix memory errors the
+upstream commits introduce and upstream master (433ffc868d) still has:
+55e672f517 grows the value arrays to at least one entry, because
+doubling a count of 0 made realloc() free the array that the cleanup
+then freed again; 53bac7c5f3 reports the unexpected type id before
+freeing the type record instead of reading it after the free.
 
   f6a397054c Vitaly Lipatov: gdiplus: Fix the point count handling in GdipGetPathData().
   228557e936 Vitaly Lipatov: gdiplus: Add missing NULL checks.
+  6fd2ef6b19 Nikolay Sivov: server/class: Fix missing object release on failure path.
   bcd4a666e4 Nikolay Sivov: dwrite: Ignore unsupported font files when creating custom collections.
   53a0cdd776 Eric Pouech: dbghelp: Fix some memory leaks.
-  53bac7c5f3 Eric Pouech: dbghelp: Fix a couple of missing memory releases on error path.
+  53bac7c5f3 Eric Pouech: dbghelp: Fix a couple of missing memory releases on error path. [adapted]
   f4eea401e4 Eric Pouech: dbghelp: Handle NULL Mask in SymEnumSourceFilesW.
   9695343d71 Hans Leidekker: winhttp: Consistently use src_len in str_to_wire().
   a5ea938598 Hans Leidekker: winhttp: Allow 'read' to be NULL in stream_Read().
@@ -25,6 +35,7 @@ exception for ntdll, win32u and server.
   99b764e094 Hans Leidekker: winhttp: Fix string termination in handle_redirect().
   5df2ef62da Sky Leite: crypt32: Check CertAddEncodedCertificateToStore() return value in sync_trusted_roots_from_known_locations().
   7009c1ed82 Vitaly Lipatov: mshtml: Don't use the released document object in navigation callbacks.
+  3d15b75cfa Alexandre Julliard: server: Don't return an error when thread_get_inflight_fd() succeeds.
   1170e76ca5 Vitaly Lipatov: crypt32: Don't close the certificate file twice.
   2d2dc3db07 James Hawkins: cabinet: Return FDIERROR_TARGET_FILE when writing extracted data fails.
   845b5ddcba Hans Leidekker: wbemprox: Validate len in fill_rawbiosdata().
@@ -32,7 +43,7 @@ exception for ntdll, win32u and server.
   2d863f2774 Hans Leidekker: wbemprox: Handle NULL resource in parse_resource().
   dcd891037d Hans Leidekker: wbemprox: Fix row index in fill_printer().
   ec7a423eff Hans Leidekker: wbemprox: Avoid assigning uninitialized process ID in process_create().
-  55e672f517 Hans Leidekker: wbemprox: Increase buffer size if necessary in enum_values().
+  55e672f517 Hans Leidekker: wbemprox: Increase buffer size if necessary in enum_values(). [adapted]
   783a8f8fe3 Hans Leidekker: wbemprox: Handle NULL out parameter in process_create().
   9ead75872d Nikolay Sivov: d3dx9: Avoid file data name use-after-free on failure path.
   f436af4047 Nikolay Sivov: mfplat/buffer: Do not leave uninitialized buffer on d3d9 LockRect() failure.
@@ -49,6 +60,8 @@ exception for ntdll, win32u and server.
   8b4cf949c8 Brendan McGrath: amstream: Handle an uninitialised stream in IAMMultiMediaStream::Render.
   7384c8babc Alex Henrie: kernelbase: Don't go past null in StrCmpN* or StrIsIntlEqual*.
   f9022cf74b Paul Gofman: windows.gaming.input: Reset index before enumeration in initialize_providers().
+  d7f7d8031a Alexandre Julliard: wow64win: Fix return device mapping in wow64_NtUserGetRawInputDeviceList().
+  83fddb06f5 Alexandre Julliard: win32u: Specify zero bits when mapping a DIB section.
   ede017e2b2 Zhiyi Zhang: winemac.drv: Set window foreground when doing unminimization.
   412a292464 James Hawkins: wininet: Clean up on failure when initializing cache index.
   df33af7a82 Rémi Bernon: win32u: Always write to NtUserToUnicodeEx output buffer.
@@ -289,20 +302,21 @@ diff --git a/dlls/dbghelp/dwarf.c b/dlls/dbghelp/dwarf.c
 diff --git a/dlls/dbghelp/pdb.c b/dlls/dbghelp/pdb.c
 --- a/dlls/dbghelp/pdb.c
 +++ b/dlls/dbghelp/pdb.c
-@@ -2971,7 +2971,11 @@ static enum pdb_result pdb_reader_TPI_fillin_enumlist(struct pdb_reader *pdb, sy
+@@ -2971,7 +2971,12 @@ static enum pdb_result pdb_reader_TPI_fillin_enumlist(struct pdb_reader *pdb, sy
      symref_t symref;
  
      if ((result = pdb_reader_TPI_alloc_and_read_full_reftype(pdb, enumlist_cv_typeid, &cv_reftype, &tpi_offset))) return result;
 -    if (cv_reftype->generic.id != LF_FIELDLIST_V2) return PDB_REPORT_UNEXPECTED("enum list", cv_reftype->generic.id);
 +    if (cv_reftype->generic.id != LF_FIELDLIST_V2)
 +    {
++        result = PDB_REPORT_UNEXPECTED("enum list", cv_reftype->generic.id);
 +        pdb_reader_free(pdb, cv_reftype);
-+        return PDB_REPORT_UNEXPECTED("enum list", cv_reftype->generic.id);
++        return result;
 +    }
      start = ptr = (const unsigned char *)cv_reftype->fieldlist.list;
      last = (const unsigned char *)cv_reftype + sizeof(cv_reftype->generic.id) + cv_reftype->generic.len;
  
-@@ -3011,7 +3015,11 @@ static enum pdb_result pdb_reader_TPI_fillin_enumlist(struct pdb_reader *pdb, sy
+@@ -3011,7 +3016,11 @@ static enum pdb_result pdb_reader_TPI_fillin_enumlist(struct pdb_reader *pdb, sy
  
          case LF_INDEX_V2:
              if ((result = pdb_reader_TPI_fillin_enumlist(pdb, container_symref, cv_field->index_v2.ref,
@@ -315,20 +329,21 @@ diff --git a/dlls/dbghelp/pdb.c b/dlls/dbghelp/pdb.c
              ptr += sizeof(cv_field->index_v2);
              break;
  
-@@ -3085,7 +3093,11 @@ static enum pdb_result pdb_reader_TPI_fillin_UDTlist(struct pdb_reader *pdb, sym
+@@ -3085,7 +3094,12 @@ static enum pdb_result pdb_reader_TPI_fillin_UDTlist(struct pdb_reader *pdb, sym
      VARIANT v;
  
      if ((result = pdb_reader_TPI_alloc_and_read_full_reftype(pdb, udtlist_cv_typeid, &cv_reftype, &tpi_offset))) return result;
 -    if (cv_reftype->generic.id != LF_FIELDLIST_V2) return PDB_REPORT_UNEXPECTED("list", cv_reftype->generic.id);
 +    if (cv_reftype->generic.id != LF_FIELDLIST_V2)
 +    {
++        result = PDB_REPORT_UNEXPECTED("list", cv_reftype->generic.id);
 +        pdb_reader_free(pdb, cv_reftype);
-+        return PDB_REPORT_UNEXPECTED("list", cv_reftype->generic.id);
++        return result;
 +    }
      start = ptr = (const unsigned char *)cv_reftype->fieldlist.list;
      last = (const unsigned char *)cv_reftype + sizeof(cv_reftype->generic.id) + cv_reftype->generic.len;
  
-@@ -3158,7 +3170,11 @@ static enum pdb_result pdb_reader_TPI_fillin_UDTlist(struct pdb_reader *pdb, sym
+@@ -3158,7 +3172,11 @@ static enum pdb_result pdb_reader_TPI_fillin_UDTlist(struct pdb_reader *pdb, sym
              break;
  
          case LF_INDEX_V2:
@@ -341,7 +356,7 @@ diff --git a/dlls/dbghelp/pdb.c b/dlls/dbghelp/pdb.c
              length = sizeof(cv_field->index_v2);
              break;
  
-@@ -3417,7 +3433,11 @@ static enum method_result pdb_reader_TPI_field_request(struct pdb_reader *pdb, s
+@@ -3417,7 +3435,11 @@ static enum method_result pdb_reader_TPI_field_request(struct pdb_reader *pdb, s
      walker.offset = entry->stream_offset;
  
      if ((result = pdb_reader_alloc(pdb, entry->action_length, (void**)&cv_field))) return MR_FAILURE;
@@ -965,7 +980,7 @@ diff --git a/dlls/wbemprox/reg.c b/dlls/wbemprox/reg.c
      {
 +        if (i >= count)
 +        {
-+            count *= 2;
++            count = count ? count * 2 : 1;
 +            if (!(tmp_names = realloc( value_names, count * sizeof(*tmp_names) ))) { hr = E_OUTOFMEMORY; break; }
 +            value_names = tmp_names;
 +            if (!(tmp_types = realloc( value_types, count * sizeof(*tmp_types) ))) { hr = E_OUTOFMEMORY; break; }
@@ -985,6 +1000,18 @@ diff --git a/dlls/wbemprox/wbemlocator.c b/dlls/wbemprox/wbemlocator.c
      p = q = resource;
      if (*p == '\\' || *p == '/')
      {
+diff --git a/dlls/win32u/dib.c b/dlls/win32u/dib.c
+--- a/dlls/win32u/dib.c
++++ b/dlls/win32u/dib.c
+@@ -1540,7 +1540,7 @@ HBITMAP WINAPI NtGdiCreateDIBSection( HDC hdc, HANDLE section, DWORD offset, con
+ 
+         map_offset.QuadPart = offset - (offset % system_info.AllocationGranularity);
+         map_size = bmp->dib.dsBmih.biSizeImage + (offset - map_offset.QuadPart);
+-        if (NtMapViewOfSection( section, GetCurrentProcess(), &mapBits, 0, 0, &map_offset,
++        if (NtMapViewOfSection( section, GetCurrentProcess(), &mapBits, zero_bits, 0, &map_offset,
+                                 &map_size, ViewShare, 0, PAGE_READWRITE ))
+             goto error;
+         bmp->dib.dsBm.bmBits = (char *)mapBits + (offset - map_offset.QuadPart);
 diff --git a/dlls/win32u/input.c b/dlls/win32u/input.c
 --- a/dlls/win32u/input.c
 +++ b/dlls/win32u/input.c
@@ -1280,3 +1307,37 @@ diff --git a/dlls/wininet/urlcache.c b/dlls/wininet/urlcache.c
          ReleaseMutex(container->mutex);
          return ret;
      }
+diff --git a/dlls/wow64win/user.c b/dlls/wow64win/user.c
+--- a/dlls/wow64win/user.c
++++ b/dlls/wow64win/user.c
+@@ -3041,7 +3041,7 @@ NTSTATUS WINAPI wow64_NtUserGetRawInputDeviceList( UINT *args )
+         ret = NtUserGetRawInputDeviceList( devices64, count, sizeof(RAWINPUTDEVICELIST) );
+         if (ret == ~0u) return ret;
+ 
+-        for (i = 0; i < *count; ++i)
++        for (i = 0; i < ret; ++i)
+         {
+             devices32[i].hDevice = (UINT_PTR)devices64[i].hDevice;
+             devices32[i].dwType  = devices64[i].dwType;
+diff --git a/server/class.c b/server/class.c
+--- a/server/class.c
++++ b/server/class.c
+@@ -87,6 +87,7 @@ static struct window_class *create_class( struct process *process, int local, st
+     return class;
+ 
+ failed:
++    release_object( class->process );
+     free( class );
+     return NULL;
+ }
+diff --git a/server/thread.c b/server/thread.c
+--- a/server/thread.c
++++ b/server/thread.c
+@@ -1598,6 +1598,7 @@ int thread_get_inflight_fd( struct thread *thread, int client )
+             {
+                 ret = thread->inflight[i].server;
+                 thread->inflight[i].server = thread->inflight[i].client = -1;
++                clear_error();
+                 return ret;
+             }
+         }

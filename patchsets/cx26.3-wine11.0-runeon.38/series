@@ -170,3 +170,4 @@ patches/runeon/0184-ntdll-macos-mirror-last-error-to-gs.patch
 patches/runeon/0185-winemac-dwm-sheet-of-glass-alpha.patch
 patches/runeon/0186-winemac-click-through-transparent-layered-windows.patch
 patches/upstream/0187-wine-11.22-targeted-fixes.patch
+patches/upstream/0188-wine-11.22-wined3d-whole-buffer-write-upload.patch
