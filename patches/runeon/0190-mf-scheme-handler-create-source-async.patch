@@ -1,0 +1,319 @@
+From: Runeon Contributors <dev@runeon.com>
+Subject: [PATCH] mf: Create the media source asynchronously in the scheme handler.
+
+The file and urlmon scheme handlers run on MFASYNC_CALLBACK_QUEUE_IO.
+With MF_RESOLUTION_MEDIASOURCE they called
+IMFSourceResolver::CreateObjectFromByteStream(), which waits without a
+timeout for the byte stream handler, and the GStreamer byte stream
+handler does its work on the same IO queue. That queue has at most
+four threads: when four sources are opened at once, as a video player
+opening several clips does, every thread waits for work queued behind
+it and no request completes again. Windows does not deadlock here, and
+its documentation says work queue callbacks must not block.
+
+The scheme handler now calls BeginCreateObjectFromByteStream() and
+completes the original request from the resolver callback, through the
+same result list and MFInvokeCallback() call as before. If Begin*()
+fails no callback follows, so the request is completed at once with
+that error. Each request is completed exactly once. The resolver's
+async result keeps the caller's result and the scheme handler (through
+its new callback interface) alive until the callback has run.
+
+Requests without MF_RESOLUTION_MEDIASOURCE are unchanged, and so is
+cancellation, which still only drops completed results. The urlmon
+handler still opens the URL with a blocking call on the IO queue.
+
+This relies on the resolver returning a failed asynchronous request's
+own HRESULT from End*(). The test's files are created in a new
+temporary directory, so concurrent test runs do not share them.
+
+diff --git a/dlls/mf/scheme_handler.c b/dlls/mf/scheme_handler.c
+index 9efe0ff..4fdc404 100644
+--- a/dlls/mf/scheme_handler.c
++++ b/dlls/mf/scheme_handler.c
+@@ -46,6 +46,7 @@ struct scheme_handler
+ {
+     IMFSchemeHandler IMFSchemeHandler_iface;
+     IMFAsyncCallback IMFAsyncCallback_iface;
++    IMFAsyncCallback resolver_callback_iface;
+     LONG refcount;
+     IMFSourceResolver *resolver;
+     struct list results;
+@@ -63,6 +64,11 @@ static struct scheme_handler *impl_from_IMFAsyncCallback(IMFAsyncCallback *iface
+     return CONTAINING_RECORD(iface, struct scheme_handler, IMFAsyncCallback_iface);
+ }
+ 
++static struct scheme_handler *impl_from_resolver_IMFAsyncCallback(IMFAsyncCallback *iface)
++{
++    return CONTAINING_RECORD(iface, struct scheme_handler, resolver_callback_iface);
++}
++
+ static HRESULT WINAPI scheme_handler_QueryInterface(IMFSchemeHandler *iface, REFIID riid, void **obj)
+ {
+     TRACE("%p, %s, %p.\n", iface, debugstr_guid(riid), obj);
+@@ -375,10 +381,37 @@ static HRESULT scheme_handler_get_resolver(struct scheme_handler *handler, IMFSo
+     return S_OK;
+ }
+ 
++static void scheme_handler_complete(struct scheme_handler *handler, IMFAsyncResult *caller, HRESULT hr,
++        MF_OBJECT_TYPE obj_type, IUnknown *object)
++{
++    struct scheme_handler_result *handler_result;
++
++    handler_result = malloc(sizeof(*handler_result));
++    if (handler_result)
++    {
++        handler_result->result = caller;
++        IMFAsyncResult_AddRef(handler_result->result);
++        handler_result->obj_type = obj_type;
++        handler_result->object = object;
++
++        EnterCriticalSection(&handler->cs);
++        list_add_tail(&handler->results, &handler_result->entry);
++        LeaveCriticalSection(&handler->cs);
++    }
++    else
++    {
++        if (object)
++            IUnknown_Release(object);
++        hr = E_OUTOFMEMORY;
++    }
++
++    IMFAsyncResult_SetStatus(caller, hr);
++    MFInvokeCallback(caller);
++}
++
+ static HRESULT WINAPI scheme_handler_callback_Invoke(IMFAsyncCallback *iface, IMFAsyncResult *result)
+ {
+     struct scheme_handler *handler = impl_from_IMFAsyncCallback(iface);
+-    struct scheme_handler_result *handler_result;
+     MF_OBJECT_TYPE obj_type = MF_OBJECT_INVALID;
+     IUnknown *object = NULL, *context_object;
+     struct create_object_context *context;
+@@ -403,11 +436,20 @@ static HRESULT WINAPI scheme_handler_callback_Invoke(IMFAsyncCallback *iface, IM
+         {
+             if (SUCCEEDED(hr = scheme_handler_get_resolver(handler, &resolver)))
+             {
+-                hr = IMFSourceResolver_CreateObjectFromByteStream(resolver, stream, context->url, context->flags,
+-                        context->props, &obj_type, &object);
++                /* Waiting here for the media source would block this work queue thread, while byte stream
++                   handlers complete on the same queue; the resolver callback completes the caller instead.
++                   Its result holds references to the caller result and to this handler. */
++                hr = IMFSourceResolver_BeginCreateObjectFromByteStream(resolver, stream, context->url, context->flags,
++                        context->props, NULL, &handler->resolver_callback_iface, (IUnknown *)caller);
+                 IMFSourceResolver_Release(resolver);
+             }
+             IMFByteStream_Release(stream);
++
++            if (SUCCEEDED(hr))
++            {
++                IUnknown_Release(&context->IUnknown_iface);
++                return S_OK;
++            }
+         }
+         else
+         {
+@@ -416,29 +458,9 @@ static HRESULT WINAPI scheme_handler_callback_Invoke(IMFAsyncCallback *iface, IM
+         }
+     }
+ 
+-    handler_result = malloc(sizeof(*handler_result));
+-    if (handler_result)
+-    {
+-        handler_result->result = caller;
+-        IMFAsyncResult_AddRef(handler_result->result);
+-        handler_result->obj_type = obj_type;
+-        handler_result->object = object;
+-
+-        EnterCriticalSection(&handler->cs);
+-        list_add_tail(&handler->results, &handler_result->entry);
+-        LeaveCriticalSection(&handler->cs);
+-    }
+-    else
+-    {
+-        if (object)
+-            IUnknown_Release(object);
+-        hr = E_OUTOFMEMORY;
+-    }
+-
+     IUnknown_Release(&context->IUnknown_iface);
+ 
+-    IMFAsyncResult_SetStatus(caller, hr);
+-    MFInvokeCallback(caller);
++    scheme_handler_complete(handler, caller, hr, obj_type, object);
+ 
+     return S_OK;
+ }
+@@ -452,6 +474,41 @@ static const IMFAsyncCallbackVtbl scheme_handler_callback_vtbl =
+     scheme_handler_callback_Invoke,
+ };
+ 
++static ULONG WINAPI scheme_handler_resolver_callback_AddRef(IMFAsyncCallback *iface)
++{
++    struct scheme_handler *handler = impl_from_resolver_IMFAsyncCallback(iface);
++    return IMFSchemeHandler_AddRef(&handler->IMFSchemeHandler_iface);
++}
++
++static ULONG WINAPI scheme_handler_resolver_callback_Release(IMFAsyncCallback *iface)
++{
++    struct scheme_handler *handler = impl_from_resolver_IMFAsyncCallback(iface);
++    return IMFSchemeHandler_Release(&handler->IMFSchemeHandler_iface);
++}
++
++static HRESULT WINAPI scheme_handler_resolver_callback_Invoke(IMFAsyncCallback *iface, IMFAsyncResult *result)
++{
++    struct scheme_handler *handler = impl_from_resolver_IMFAsyncCallback(iface);
++    IMFAsyncResult *caller = (IMFAsyncResult *)IMFAsyncResult_GetStateNoAddRef(result);
++    MF_OBJECT_TYPE obj_type = MF_OBJECT_INVALID;
++    IUnknown *object = NULL;
++    HRESULT hr;
++
++    hr = IMFSourceResolver_EndCreateObjectFromByteStream(handler->resolver, result, &obj_type, &object);
++    scheme_handler_complete(handler, caller, hr, obj_type, object);
++
++    return S_OK;
++}
++
++static const IMFAsyncCallbackVtbl scheme_handler_resolver_callback_vtbl =
++{
++    scheme_handler_callback_QueryInterface,
++    scheme_handler_resolver_callback_AddRef,
++    scheme_handler_resolver_callback_Release,
++    scheme_handler_callback_GetParameters,
++    scheme_handler_resolver_callback_Invoke,
++};
++
+ static HRESULT file_stream_create(const WCHAR *url, DWORD flags, IMFByteStream **out)
+ {
+     if (!wcsnicmp(url, L"file://", 7))
+@@ -472,6 +529,7 @@ HRESULT file_scheme_handler_construct(REFIID riid, void **obj)
+ 
+     handler->IMFSchemeHandler_iface.lpVtbl = &scheme_handler_vtbl;
+     handler->IMFAsyncCallback_iface.lpVtbl = &scheme_handler_callback_vtbl;
++    handler->resolver_callback_iface.lpVtbl = &scheme_handler_resolver_callback_vtbl;
+     handler->refcount = 1;
+     list_init(&handler->results);
+     InitializeCriticalSection(&handler->cs);
+@@ -523,6 +581,7 @@ HRESULT urlmon_scheme_handler_construct(REFIID riid, void **obj)
+ 
+     handler->IMFSchemeHandler_iface.lpVtbl = &scheme_handler_vtbl;
+     handler->IMFAsyncCallback_iface.lpVtbl = &scheme_handler_callback_vtbl;
++    handler->resolver_callback_iface.lpVtbl = &scheme_handler_resolver_callback_vtbl;
+     handler->refcount = 1;
+     list_init(&handler->results);
+     InitializeCriticalSection(&handler->cs);
+diff --git a/dlls/mfplat/tests/mfplat.c b/dlls/mfplat/tests/mfplat.c
+index bf02c26..78f7431 100644
+--- a/dlls/mfplat/tests/mfplat.c
++++ b/dlls/mfplat/tests/mfplat.c
+@@ -6446,6 +6446,7 @@ static struct
+     HANDLE request_sem, done_sem;
+     IMFAsyncResult *pending[16];
+     unsigned int pending_count;
++    BOOL from_url;
+ } async_handler;
+ 
+ static HRESULT WINAPI async_handler_QueryInterface(IMFByteStreamHandler *iface, REFIID riid, void **obj)
+@@ -6482,6 +6483,9 @@ static HRESULT WINAPI async_handler_BeginCreateObject(IMFByteStreamHandler *ifac
+     if (cancel_cookie)
+         *cancel_cookie = NULL;
+ 
++    if (url && wcsstr(url, L"begin_fail"))
++        return HRESULT_FROM_WIN32(ERROR_BAD_FORMAT);
++
+     hr = MFCreateAttributes(&attributes, 0);
+     ok(hr == S_OK, "Unexpected hr %#lx.\n", hr);
+     hr = MFCreateAsyncResult((IUnknown *)attributes, callback, state, &result);
+@@ -6554,7 +6558,10 @@ static HRESULT WINAPI async_resolve_callback_Invoke(IMFAsyncCallback *iface, IMF
+ 
+     hr = IMFAsyncResult_GetStatus(result);
+     ok(hr == expected_hr, "Unexpected status %#lx.\n", hr);
+-    hr = IMFSourceResolver_EndCreateObjectFromByteStream(resolver, result, &obj_type, &object);
++    if (async_handler.from_url)
++        hr = IMFSourceResolver_EndCreateObjectFromURL(resolver, result, &obj_type, &object);
++    else
++        hr = IMFSourceResolver_EndCreateObjectFromByteStream(resolver, result, &obj_type, &object);
+     ok(hr == expected_hr, "Unexpected hr %#lx.\n", hr);
+     if (SUCCEEDED(hr))
+         ok(obj_type == MF_OBJECT_MEDIASOURCE && object, "Unexpected type %d, object %p.\n", obj_type, object);
+@@ -6631,10 +6638,13 @@ static void test_source_resolver_async(void)
+     static IMFActivate activate = { &activate_vtbl };
+     struct test_callback *callback, *fail_callbacks[ARRAY_SIZE(fail_hr)];
+     IMFAsyncResult *pending[ARRAY_SIZE(fail_hr)];
++    WCHAR dir[MAX_PATH], path[MAX_PATH], fail_path[MAX_PATH];
+     IMFSourceResolver *resolver;
+     IMFByteStream *stream;
+     unsigned int i, count;
++    HANDLE file;
+     HRESULT hr;
++    BOOL ret;
+ 
+     if (!pMFRegisterLocalByteStreamHandler)
+     {
+@@ -6697,6 +6707,66 @@ static void test_source_resolver_async(void)
+     count = complete_async_handler_requests(1, S_OK);
+     ok(count == 1, "Got %u callbacks.\n", count);
+ 
++    /* The file scheme handler creates the media source without blocking a work queue thread, so more
++       requests than the IO queue has threads all reach the byte stream handler. */
++    GetTempPathW(ARRAY_SIZE(path), path);
++    ret = GetTempFileNameW(path, L"mfp", 0, dir);
++    ok(ret, "Failed to get a temporary name, error %lu.\n", GetLastError());
++    if (!ret)
++        goto done;
++    ret = DeleteFileW(dir) && CreateDirectoryW(dir, NULL);
++    ok(ret, "Failed to create directory, error %lu.\n", GetLastError());
++    if (!ret)
++        goto done;
++    lstrcpyW(path, dir);
++    lstrcatW(path, L"\\mfplat_async.mftest");
++    lstrcpyW(fail_path, dir);
++    lstrcatW(fail_path, L"\\mfplat_begin_fail.mftest");
++    file = CreateFileW(path, GENERIC_WRITE, 0, NULL, CREATE_NEW, 0, NULL);
++    ok(file != INVALID_HANDLE_VALUE, "Failed to create file, error %lu.\n", GetLastError());
++    if (file != INVALID_HANDLE_VALUE)
++    {
++        CloseHandle(file);
++        file = CreateFileW(fail_path, GENERIC_WRITE, 0, NULL, CREATE_NEW, 0, NULL);
++        ok(file != INVALID_HANDLE_VALUE, "Failed to create file, error %lu.\n", GetLastError());
++    }
++    if (file == INVALID_HANDLE_VALUE)
++        goto cleanup;
++    CloseHandle(file);
++
++    async_handler.from_url = TRUE;
++    for (i = 0; i < 6; ++i)
++    {
++        hr = IMFSourceResolver_BeginCreateObjectFromURL(resolver, path, MF_RESOLUTION_MEDIASOURCE, NULL, NULL,
++                &callback->IMFAsyncCallback_iface, (IUnknown *)resolver);
++        ok(hr == S_OK, "Unexpected hr %#lx.\n", hr);
++    }
++    count = wait_async_handler_requests(6);
++    ok(count == 6, "Got %u requests.\n", count);
++    count = complete_async_handler_requests(6, S_OK);
++    ok(count == 6, "Got %u callbacks.\n", count);
++
++    callback->param = HRESULT_FROM_WIN32(ERROR_INVALID_DATA);
++    hr = IMFSourceResolver_BeginCreateObjectFromURL(resolver, path, MF_RESOLUTION_MEDIASOURCE, NULL, NULL,
++            &callback->IMFAsyncCallback_iface, (IUnknown *)resolver);
++    ok(hr == S_OK, "Unexpected hr %#lx.\n", hr);
++    count = complete_async_handler_requests(1, callback->param);
++    ok(count == 1, "Got %u callbacks.\n", count);
++
++    /* The byte stream handler's BeginCreateObject() fails without calling back. */
++    callback->param = HRESULT_FROM_WIN32(ERROR_BAD_FORMAT);
++    hr = IMFSourceResolver_BeginCreateObjectFromURL(resolver, fail_path, MF_RESOLUTION_MEDIASOURCE, NULL, NULL,
++            &callback->IMFAsyncCallback_iface, (IUnknown *)resolver);
++    ok(hr == S_OK, "Unexpected hr %#lx.\n", hr);
++    count = complete_async_handler_requests(1, S_OK);
++    ok(count == 1, "Got %u callbacks.\n", count);
++
++cleanup:
++    DeleteFileW(path);
++    DeleteFileW(fail_path);
++    RemoveDirectoryW(dir);
++
++done:
+     IMFByteStream_Release(stream);
+     IMFSourceResolver_Release(resolver);
+     IMFAsyncCallback_Release(&callback->IMFAsyncCallback_iface);

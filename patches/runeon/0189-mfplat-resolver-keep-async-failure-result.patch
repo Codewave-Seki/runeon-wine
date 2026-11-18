@@ -1,0 +1,423 @@
+From: Runeon Contributors <dev@runeon.com>
+Subject: [PATCH] mfplat: Return the handler's result from an asynchronous resolver request.
+
+When a byte stream or scheme handler completes an asynchronous
+resolver request, the resolver queues the handler's result and invokes
+the caller's callback with a new async result holding the created
+object. End*() found the queued entry by that object: it started with
+IRtwqAsyncResult_GetObject(), which returns E_POINTER when the handler
+failed and created nothing. End*() then returned E_POINTER instead of
+the handler's error, and the entry stayed queued until the resolver
+was destroyed.
+
+The queued entry now keeps the async result End*() is called with:
+the request's own result for the synchronous Create*() calls, as
+before, and the result passed to the caller's callback for Begin*().
+End*() matches that pointer and the origin only, so each request finds
+its own entry also when several fail at the same time, and returns the
+handler's HRESULT. The callback's result also carries that status, and
+entries left at destruction release their result.
+
+The cancellation logic is unchanged.
+
+The test registers a local byte stream handler that completes
+requests from the test thread with a timeout, so it cannot hang. Two
+concurrent requests fail with different errors, completed in reverse
+order, and each must get its own error back.
+
+diff --git a/dlls/mfplat/main.c b/dlls/mfplat/main.c
+index d231c4c..4d49b93 100644
+--- a/dlls/mfplat/main.c
++++ b/dlls/mfplat/main.c
+@@ -5846,7 +5846,7 @@ struct resolver_queued_result
+     IUnknown *object;
+     MF_OBJECT_TYPE obj_type;
+     HRESULT hr;
+-    IRtwqAsyncResult *inner_result;
++    IRtwqAsyncResult *result;
+     enum resolved_object_origin origin;
+ };
+ 
+@@ -5895,6 +5895,7 @@ static HRESULT resolver_handler_end_create(struct source_resolver *resolver, enu
+     IRtwqAsyncResult *inner_result = (IRtwqAsyncResult *)IRtwqAsyncResult_GetStateNoAddRef(result);
+     RTWQASYNCRESULT *data = (RTWQASYNCRESULT *)inner_result;
+     struct resolver_queued_result *queued_result;
++    IRtwqAsyncResult *caller_result = NULL;
+     union
+     {
+         IUnknown *handler;
+@@ -5927,8 +5928,26 @@ static HRESULT resolver_handler_end_create(struct source_resolver *resolver, enu
+ 
+     if (data->hEvent)
+     {
+-        queued_result->inner_result = inner_result;
+-        IRtwqAsyncResult_AddRef(queued_result->inner_result);
++        queued_result->result = inner_result;
++        IRtwqAsyncResult_AddRef(queued_result->result);
++    }
++    else
++    {
++        IUnknown *caller_state = IRtwqAsyncResult_GetStateNoAddRef(inner_result);
++        HRESULT hr;
++
++        /* End*() is called with the result passed to the caller's callback. It identifies the request
++           even when the handler failed and no object was created. */
++        if (FAILED(hr = RtwqCreateAsyncResult(queued_result->object, data->pCallback, caller_state, &caller_result)))
++        {
++            if (queued_result->object)
++                IUnknown_Release(queued_result->object);
++            free(queued_result);
++            return hr;
++        }
++        IRtwqAsyncResult_SetStatus(caller_result, queued_result->hr);
++        queued_result->result = caller_result;
++        IRtwqAsyncResult_AddRef(queued_result->result);
+     }
+ 
+     /* Push resolved object type and created object, so we don't have to guess on End*() call. */
+@@ -5940,14 +5959,8 @@ static HRESULT resolver_handler_end_create(struct source_resolver *resolver, enu
+         SetEvent(data->hEvent);
+     else
+     {
+-        IUnknown *caller_state = IRtwqAsyncResult_GetStateNoAddRef(inner_result);
+-        IRtwqAsyncResult *caller_result;
+-
+-        if (SUCCEEDED(RtwqCreateAsyncResult(queued_result->object, data->pCallback, caller_state, &caller_result)))
+-        {
+-            RtwqInvokeCallback(caller_result);
+-            IRtwqAsyncResult_Release(caller_result);
+-        }
++        RtwqInvokeCallback(caller_result);
++        IRtwqAsyncResult_Release(caller_result);
+     }
+ 
+     return S_OK;
+@@ -6469,17 +6482,13 @@ static HRESULT resolver_end_create_object(struct source_resolver *resolver, enum
+         IRtwqAsyncResult *result, MF_OBJECT_TYPE *obj_type, IUnknown **out)
+ {
+     struct resolver_queued_result *queued_result = NULL, *iter;
+-    IUnknown *object;
+     HRESULT hr;
+ 
+-    if (FAILED(hr = IRtwqAsyncResult_GetObject(result, &object)))
+-        return hr;
+-
+     EnterCriticalSection(&resolver->cs);
+ 
+     LIST_FOR_EACH_ENTRY(iter, &resolver->pending, struct resolver_queued_result, entry)
+     {
+-        if (iter->inner_result == result || (iter->object == object && iter->origin == origin))
++        if (iter->result == result && iter->origin == origin)
+         {
+             list_remove(&iter->entry);
+             queued_result = iter;
+@@ -6489,15 +6498,12 @@ static HRESULT resolver_end_create_object(struct source_resolver *resolver, enum
+ 
+     LeaveCriticalSection(&resolver->cs);
+ 
+-    IUnknown_Release(object);
+-
+     if (queued_result)
+     {
+         *out = queued_result->object;
+         *obj_type = queued_result->obj_type;
+         hr = queued_result->hr;
+-        if (queued_result->inner_result)
+-            IRtwqAsyncResult_Release(queued_result->inner_result);
++        IRtwqAsyncResult_Release(queued_result->result);
+         free(queued_result);
+     }
+     else
+@@ -6552,6 +6558,7 @@ static ULONG WINAPI source_resolver_Release(IMFSourceResolver *iface)
+         {
+             if (result->object)
+                 IUnknown_Release(result->object);
++            IRtwqAsyncResult_Release(result->result);
+             list_remove(&result->entry);
+             free(result);
+         }
+diff --git a/dlls/mfplat/tests/mfplat.c b/dlls/mfplat/tests/mfplat.c
+index 759ffe0..bf02c26 100644
+--- a/dlls/mfplat/tests/mfplat.c
++++ b/dlls/mfplat/tests/mfplat.c
+@@ -6439,6 +6439,272 @@ static void test_local_handlers(void)
+     ok(hr == S_OK, "Failed to shut down, hr %#lx.\n", hr);
+ }
+ 
++static struct
++{
++    IMFByteStreamHandler IMFByteStreamHandler_iface;
++    CRITICAL_SECTION cs;
++    HANDLE request_sem, done_sem;
++    IMFAsyncResult *pending[16];
++    unsigned int pending_count;
++} async_handler;
++
++static HRESULT WINAPI async_handler_QueryInterface(IMFByteStreamHandler *iface, REFIID riid, void **obj)
++{
++    if (IsEqualIID(riid, &IID_IMFByteStreamHandler) || IsEqualIID(riid, &IID_IUnknown))
++    {
++        *obj = iface;
++        return S_OK;
++    }
++
++    *obj = NULL;
++    return E_NOINTERFACE;
++}
++
++static ULONG WINAPI async_handler_AddRef(IMFByteStreamHandler *iface)
++{
++    return 2;
++}
++
++static ULONG WINAPI async_handler_Release(IMFByteStreamHandler *iface)
++{
++    return 1;
++}
++
++/* Requests stay pending until the test thread completes them. */
++static HRESULT WINAPI async_handler_BeginCreateObject(IMFByteStreamHandler *iface, IMFByteStream *stream,
++        const WCHAR *url, DWORD flags, IPropertyStore *props, IUnknown **cancel_cookie, IMFAsyncCallback *callback,
++        IUnknown *state)
++{
++    IMFAttributes *attributes;
++    IMFAsyncResult *result;
++    HRESULT hr;
++
++    if (cancel_cookie)
++        *cancel_cookie = NULL;
++
++    hr = MFCreateAttributes(&attributes, 0);
++    ok(hr == S_OK, "Unexpected hr %#lx.\n", hr);
++    hr = MFCreateAsyncResult((IUnknown *)attributes, callback, state, &result);
++    ok(hr == S_OK, "Unexpected hr %#lx.\n", hr);
++    IMFAttributes_Release(attributes);
++
++    EnterCriticalSection(&async_handler.cs);
++    if (async_handler.pending_count < ARRAY_SIZE(async_handler.pending))
++        async_handler.pending[async_handler.pending_count++] = result;
++    else
++    {
++        ok(0, "Too many pending requests.\n");
++        IMFAsyncResult_Release(result);
++    }
++    LeaveCriticalSection(&async_handler.cs);
++
++    ReleaseSemaphore(async_handler.request_sem, 1, NULL);
++
++    return S_OK;
++}
++
++static HRESULT WINAPI async_handler_EndCreateObject(IMFByteStreamHandler *iface, IMFAsyncResult *result,
++        MF_OBJECT_TYPE *obj_type, IUnknown **object)
++{
++    HRESULT hr = IMFAsyncResult_GetStatus(result);
++
++    *obj_type = MF_OBJECT_INVALID;
++    *object = NULL;
++    if (SUCCEEDED(hr) && SUCCEEDED(hr = IMFAsyncResult_GetObject(result, object)))
++        *obj_type = MF_OBJECT_MEDIASOURCE;
++
++    return hr;
++}
++
++static HRESULT WINAPI async_handler_CancelObjectCreation(IMFByteStreamHandler *iface, IUnknown *cancel_cookie)
++{
++    return E_NOTIMPL;
++}
++
++static HRESULT WINAPI async_handler_GetMaxNumberOfBytesRequiredForResolution(IMFByteStreamHandler *iface,
++        QWORD *bytes)
++{
++    return E_NOTIMPL;
++}
++
++static const IMFByteStreamHandlerVtbl async_handler_vtbl =
++{
++    async_handler_QueryInterface,
++    async_handler_AddRef,
++    async_handler_Release,
++    async_handler_BeginCreateObject,
++    async_handler_EndCreateObject,
++    async_handler_CancelObjectCreation,
++    async_handler_GetMaxNumberOfBytesRequiredForResolution,
++};
++
++static HRESULT WINAPI async_handler_activate_ActivateObject(IMFActivate *iface, REFIID riid, void **obj)
++{
++    return IMFByteStreamHandler_QueryInterface(&async_handler.IMFByteStreamHandler_iface, riid, obj);
++}
++
++/* The callback's param holds the HRESULT its request is expected to end with. */
++static HRESULT WINAPI async_resolve_callback_Invoke(IMFAsyncCallback *iface, IMFAsyncResult *result)
++{
++    IMFSourceResolver *resolver = (IMFSourceResolver *)IMFAsyncResult_GetStateNoAddRef(result);
++    HRESULT expected_hr = impl_from_IMFAsyncCallback(iface)->param;
++    MF_OBJECT_TYPE obj_type;
++    IUnknown *object = NULL;
++    HRESULT hr;
++
++    hr = IMFAsyncResult_GetStatus(result);
++    ok(hr == expected_hr, "Unexpected status %#lx.\n", hr);
++    hr = IMFSourceResolver_EndCreateObjectFromByteStream(resolver, result, &obj_type, &object);
++    ok(hr == expected_hr, "Unexpected hr %#lx.\n", hr);
++    if (SUCCEEDED(hr))
++        ok(obj_type == MF_OBJECT_MEDIASOURCE && object, "Unexpected type %d, object %p.\n", obj_type, object);
++    else
++        ok(!object, "Unexpected object %p.\n", object);
++    if (object)
++        IUnknown_Release(object);
++
++    ReleaseSemaphore(async_handler.done_sem, 1, NULL);
++
++    return S_OK;
++}
++
++static const IMFAsyncCallbackVtbl async_resolve_callback_vtbl =
++{
++    testcallback_QueryInterface,
++    testcallback_AddRef,
++    testcallback_Release,
++    testcallback_GetParameters,
++    async_resolve_callback_Invoke,
++};
++
++static unsigned int wait_async_handler_requests(unsigned int count)
++{
++    unsigned int i;
++
++    for (i = 0; i < count; ++i)
++    {
++        if (WaitForSingleObject(async_handler.request_sem, 5000))
++            break;
++    }
++
++    return i;
++}
++
++/* Completes requests from this thread as they arrive, until "count" callbacks ran or nothing happens for
++   five seconds, so that a blocked work queue cannot hang the test. */
++static unsigned int complete_async_handler_requests(unsigned int count, HRESULT hr)
++{
++    HANDLE handles[2] = { async_handler.done_sem, async_handler.request_sem };
++    IMFAsyncResult *pending[ARRAY_SIZE(async_handler.pending)];
++    unsigned int i, pending_count, done = 0;
++    DWORD ret;
++
++    while (done < count)
++    {
++        EnterCriticalSection(&async_handler.cs);
++        pending_count = async_handler.pending_count;
++        memcpy(pending, async_handler.pending, pending_count * sizeof(*pending));
++        async_handler.pending_count = 0;
++        LeaveCriticalSection(&async_handler.cs);
++
++        for (i = 0; i < pending_count; ++i)
++        {
++            IMFAsyncResult_SetStatus(pending[i], hr);
++            MFInvokeCallback(pending[i]);
++            IMFAsyncResult_Release(pending[i]);
++        }
++
++        ret = WaitForMultipleObjects(ARRAY_SIZE(handles), handles, FALSE, 5000);
++        if (ret == WAIT_OBJECT_0)
++            ++done;
++        else if (ret != WAIT_OBJECT_0 + 1)
++            break;
++    }
++
++    return done;
++}
++
++static void test_source_resolver_async(void)
++{
++    const HRESULT fail_hr[] = { HRESULT_FROM_WIN32(ERROR_INVALID_DATA), HRESULT_FROM_WIN32(ERROR_BAD_FORMAT) };
++    static IMFActivateVtbl activate_vtbl;
++    static IMFActivate activate = { &activate_vtbl };
++    struct test_callback *callback, *fail_callbacks[ARRAY_SIZE(fail_hr)];
++    IMFAsyncResult *pending[ARRAY_SIZE(fail_hr)];
++    IMFSourceResolver *resolver;
++    IMFByteStream *stream;
++    unsigned int i, count;
++    HRESULT hr;
++
++    if (!pMFRegisterLocalByteStreamHandler)
++    {
++        win_skip("Local handlers are not supported.\n");
++        return;
++    }
++
++    hr = MFStartup(MF_VERSION, MFSTARTUP_FULL);
++    ok(hr == S_OK, "Failed to start up, hr %#lx.\n", hr);
++
++    /* The handler stays registered for the rest of the process. */
++    async_handler.IMFByteStreamHandler_iface.lpVtbl = &async_handler_vtbl;
++    InitializeCriticalSection(&async_handler.cs);
++    async_handler.request_sem = CreateSemaphoreW(NULL, 0, LONG_MAX, NULL);
++    async_handler.done_sem = CreateSemaphoreW(NULL, 0, LONG_MAX, NULL);
++    activate_vtbl = activate_object_vtbl;
++    activate_vtbl.ActivateObject = async_handler_activate_ActivateObject;
++    hr = pMFRegisterLocalByteStreamHandler(L".mftest", NULL, &activate);
++    ok(hr == S_OK, "Failed to register stream handler, hr %#lx.\n", hr);
++
++    callback = create_test_callback(&async_resolve_callback_vtbl);
++    hr = pMFCreateSourceResolver(&resolver);
++    ok(hr == S_OK, "Unexpected hr %#lx.\n", hr);
++    hr = MFCreateTempFile(MF_ACCESSMODE_READ | MF_ACCESSMODE_WRITE, MF_OPENMODE_FAIL_IF_EXIST, MF_FILEFLAGS_NONE, &stream);
++    ok(hr == S_OK, "Unexpected hr %#lx.\n", hr);
++
++    /* Concurrent requests failing asynchronously, completed in reverse order, each get their own result
++       from End*(). Begin*() calls the handler on this thread, so pending[i] is request i. */
++    for (i = 0; i < ARRAY_SIZE(fail_hr); ++i)
++    {
++        fail_callbacks[i] = create_test_callback(&async_resolve_callback_vtbl);
++        fail_callbacks[i]->param = fail_hr[i];
++        hr = IMFSourceResolver_BeginCreateObjectFromByteStream(resolver, stream, L"test.mftest", MF_RESOLUTION_MEDIASOURCE,
++                NULL, NULL, &fail_callbacks[i]->IMFAsyncCallback_iface, (IUnknown *)resolver);
++        ok(hr == S_OK, "Unexpected hr %#lx.\n", hr);
++    }
++    count = wait_async_handler_requests(ARRAY_SIZE(fail_hr));
++    ok(count == ARRAY_SIZE(fail_hr), "Got %u requests.\n", count);
++
++    EnterCriticalSection(&async_handler.cs);
++    count = async_handler.pending_count;
++    memcpy(pending, async_handler.pending, count * sizeof(*pending));
++    async_handler.pending_count = 0;
++    LeaveCriticalSection(&async_handler.cs);
++    for (i = count; i-- > 0;)
++    {
++        IMFAsyncResult_SetStatus(pending[i], fail_hr[i]);
++        MFInvokeCallback(pending[i]);
++        IMFAsyncResult_Release(pending[i]);
++    }
++    for (i = 0; i < count; ++i)
++        ok(!WaitForSingleObject(async_handler.done_sem, 5000), "Callback %u did not run.\n", i);
++    for (i = 0; i < ARRAY_SIZE(fail_hr); ++i)
++        IMFAsyncCallback_Release(&fail_callbacks[i]->IMFAsyncCallback_iface);
++
++    callback->param = S_OK;
++    hr = IMFSourceResolver_BeginCreateObjectFromByteStream(resolver, stream, L"test.mftest", MF_RESOLUTION_MEDIASOURCE,
++            NULL, NULL, &callback->IMFAsyncCallback_iface, (IUnknown *)resolver);
++    ok(hr == S_OK, "Unexpected hr %#lx.\n", hr);
++    count = complete_async_handler_requests(1, S_OK);
++    ok(count == 1, "Got %u callbacks.\n", count);
++
++    IMFByteStream_Release(stream);
++    IMFSourceResolver_Release(resolver);
++    IMFAsyncCallback_Release(&callback->IMFAsyncCallback_iface);
++
++    hr = MFShutdown();
++    ok(hr == S_OK, "Failed to shut down, hr %#lx.\n", hr);
++}
++
+ static void test_create_property_store(void)
+ {
+     static const PROPERTYKEY test_pkey = {{0x12345678}, 9};
+@@ -13913,6 +14179,7 @@ START_TEST(mfplat)
+     test_MFCreateWaveFormatExFromMFMediaType();
+     test_async_create_file();
+     test_local_handlers();
++    test_source_resolver_async();
+     test_create_property_store();
+     test_dxgi_device_manager();
+     test_MFCreateTransformActivate();

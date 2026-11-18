@@ -1,0 +1,29 @@
+From: Brendan McGrath <bmcgrath@codeweavers.com>
+Subject: [PATCH] mf: Don't async notify a sink that is also the time source.
+
+Backport of WineHQ d6adaa2e59689edf0fbb3d8d6094014c442bd05c (wine-11.4).
+
+Prerequisite of 0194: once the streaming audio renderer is the
+presentation time source it is also one of the clock's state sinks,
+and clock_change_state() would notify it twice, synchronously as the
+time source and again asynchronously as a sink, so it would queue a
+second MEStreamSinkStarted and preroll again.
+
+Runeon adaptation: the test hunk is omitted; it removes a todo from
+a test (7bff59d57c) that the base does not have. Production code is
+unchanged.
+
+diff --git a/dlls/mf/clock.c b/dlls/mf/clock.c
+--- a/dlls/mf/clock.c
++++ b/dlls/mf/clock.c
+@@ -642,7 +642,9 @@ static HRESULT clock_change_state(struct presentation_clock *clock, enum clock_c
+ 
+     LIST_FOR_EACH_ENTRY(sink, &clock->sinks, struct clock_sink, entry)
+     {
+-        clock_notify_async_sink(clock, system_time, param, notification, sink->state_sink);
++        /* Don't notify a sink that is also the time source */
++        if (clock->time_source_sink != sink->state_sink)
++            clock_notify_async_sink(clock, system_time, param, notification, sink->state_sink);
+     }
+ 
+     return S_OK;

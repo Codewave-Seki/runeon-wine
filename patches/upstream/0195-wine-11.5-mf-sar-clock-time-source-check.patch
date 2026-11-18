@@ -1,0 +1,49 @@
+From: Brendan McGrath <bmcgrath@codeweavers.com>
+Subject: [PATCH] mf: Check provided presentation clock has a time source.
+
+Backport of WineHQ d93ccd72218fb83d69d0e5659e35b2bc643854df (wine-11.5).
+
+Follow-up of 0194: SetPresentationClock() now fails with
+MF_E_CLOCK_NO_TIME_SOURCE for a clock without a time source, as on
+Windows.
+
+Runeon adaptation: only the test hunk that removes the todo in
+test_sar() applies; the other two change a test the base does not
+have. Production code is unchanged.
+
+diff --git a/dlls/mf/sar.c b/dlls/mf/sar.c
+--- a/dlls/mf/sar.c
++++ b/dlls/mf/sar.c
+@@ -419,6 +419,7 @@ static void audio_renderer_set_presentation_clock(struct audio_renderer *rendere
+ static HRESULT WINAPI audio_renderer_sink_SetPresentationClock(IMFMediaSink *iface, IMFPresentationClock *clock)
+ {
+     struct audio_renderer *renderer = impl_from_IMFMediaSink(iface);
++    IMFPresentationTimeSource *time_source = NULL;
+     HRESULT hr = S_OK;
+ 
+     TRACE("%p, %p.\n", iface, clock);
+@@ -427,8 +428,12 @@ static HRESULT WINAPI audio_renderer_sink_SetPresentationClock(IMFMediaSink *ifa
+ 
+     if (renderer->flags & SAR_SHUT_DOWN)
+         hr = MF_E_SHUTDOWN;
+-    else
++    else if (!clock || SUCCEEDED(hr = IMFPresentationClock_GetTimeSource(clock, &time_source)))
++    {
++        if (time_source)
++            IMFPresentationTimeSource_Release(time_source);
+         audio_renderer_set_presentation_clock(renderer, clock);
++    }
+ 
+     LeaveCriticalSection(&renderer->cs);
+ 
+diff --git a/dlls/mf/tests/mf.c b/dlls/mf/tests/mf.c
+--- a/dlls/mf/tests/mf.c
++++ b/dlls/mf/tests/mf.c
+@@ -4862,7 +4862,6 @@ if (SUCCEEDED(hr))
+     ok(hr == S_OK, "Unexpected hr %#lx.\n", hr);
+ 
+     hr = IMFMediaSink_SetPresentationClock(sink, present_clock);
+-    todo_wine
+     ok(hr == MF_E_CLOCK_NO_TIME_SOURCE, "Unexpected hr %#lx.\n", hr);
+ 
+     hr = MFCreateSystemTimeSource(&time_source);

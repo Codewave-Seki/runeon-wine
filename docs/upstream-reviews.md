@@ -1371,3 +1371,64 @@ The 28 master commits after `wine-11.22` up to `433ffc868d` were checked for mac
 Unchanged in the base and not addressed here: `pdb_reader_TPI_fillin_enumlist()` also reads `cv_field->generic.id` after freeing the record that holds it, on its unexpected-field path; upstream master has the same code.
 
 `upstreamAuditThrough` stays at `wine-11.15`. The base manifest records `upstreamSweepThrough: wine-11.22`.
+
+<a id="sar-time-source"></a>
+
+## Streaming audio renderer time source
+
+Patch set `cx26.3-wine11.0-runeon.39` adds `patches/upstream/0192`–`0199` after `0191`, one patch per WineHQ commit, in upstream order. In wine-11.0 the streaming audio renderer (`dlls/mf/sar.c`) does not implement `IMFPresentationTimeSource`, so the media session clocks playback from the system clock. In a reproduced case (a game playing video through `IMFMediaEngine`), audio decoding was starved at video start, audio fell 2 to 6 seconds behind the video and never recovered. The session already prefers a sink's time source, so a renderer time source lets audio drive the clock. Upstream added it in wine-11.5.
+
+The series is a feature by §3, so it is carried as an exception; the maintainer approved it individually on 2026-11-19, together with `0189`–`0191` and `0200`. Only the time source, the prerequisites it depends on and its follow-up fixes are taken.
+
+### Review
+
+- Every master commit touching `dlls/mf/sar.c` after wine-11.0 was reviewed, together with `dlls/mf/clock.c`, `session.c` and the tests, up to `433ffc868d`. Commit messages were searched for each candidate's short hash; none is named by a later commit.
+- CrossOver keeps `sar.c`, `clock.c` and `session.c` identical to wine-11.0. The base's `sar.c` differs only by `53b5345251` and `37fd158bfc`, carried in `0079`. `87ced958e9` and `57dbc339bd` are in wine-10.7, so the base already has them.
+- After `0199`, `sar.c` is identical to upstream master.
+
+### Taken
+
+| Patch | Commit | Release | Why |
+|---|---|---|---|
+| `0192` | `d6adaa2e59` clock: don't async notify a sink that is also the time source | 11.4 | Prerequisite. Once the renderer is the time source, it is also a clock sink. It would get each state change twice and queue a second `MEStreamSinkStarted`. `601c15ae64`, the `AddClockStateSink()` half, is already carried in `0064`. |
+| `0193` | `de4fad27c3` replace state variable with `clock_state` | 11.5 | Prerequisite refactor. `0194` reports this field from `GetState()`. |
+| `0194` | `77132db1ce` implement presentation time source for SAR | 11.5 | Core fix. |
+| `0195` | `d93ccd7221` check the provided clock has a time source | 11.5 | Follow-up. Same series; matches Windows. |
+| `0196` | `324a7da836` scrubbing in SAR | 11.5 | Follow-up. As the time source, the renderer gets the clock's rate changes. `OnClockSetRate()` returned `E_NOTIMPL`, which made every clock rate change fail. |
+| `0197` | `3863fd3711` discard samples before the seek time | 11.5 | Follow-up. Without it, a start with a position derives the time from earlier samples. |
+| `0198` | `512f5ddaab` report the seek time until rendering passes it | 11.5 | Follow-up. It also reads the audio clock under the renderer lock, which closes a race in `0194` with the audio client being released. |
+| `0199` | `72c0c8f1a7` handle the end-of-segment marker in SAR | 11.5 | Follow-up. Silence keeps the audio clock, and so the presentation clock, running after the audio stream ends. |
+
+### Adaptations
+
+- `0194`: the position and timestamp reset in `audio_renderer_stream_Flush()` is placed inside the block that `0079` moved it into, as in upstream master.
+- Test hunks: only the removals of the todo markers on the interface query and on `SetPresentationClock()` in the base's `test_sar()` are kept. The base's older `test_sar()` also has a todo on the same interface query, which is removed. The other test hunks change SAR tests added after wine-11.0 (`6ef0acb4b6`, `19ec23aa96`, `d2e018b832`, `38172b1262`, `7bff59d57c` and their helpers), which do not apply without about 20 earlier test-only commits. So no carried test fails before and passes after.
+- The `.39` manifest now anchors `0079`'s `sar.c` change on the moved `queued_frames` reset, because `0194` rewrites the line it used to anchor on. The patch file is unchanged.
+- The `.39` manifest anchors `0195` on its `GetTimeSource()` call alone, because `0200` rewrites the `else if` line around it. The patch file is unchanged.
+
+### Left out
+
+| Commit | Reason |
+|---|---|
+| `53b5345251`, `37fd158bfc` | Already carried in `0079`. |
+| `739ca45017` clock: `IMFTimer` using a periodic callback | Timer rework, not needed for the time source. The base timer still converts each request to a system-time delay when it is scheduled. |
+| `c71658f9c0`, `c771f1735c` | Fix code added by `739ca45017`, which the base does not have. |
+| `21794b4f2e` | Moves clock callbacks to the multithreaded queue; performance change. |
+| `7458d10132` session: no preroll while scrubbing | Session scrubbing behaviour, independent of the time source. |
+| `5451a96017`, `5dc2b18d2a`, `c183a48528` | Clock timer fixes (`SetTimer()` without a time source, timer order) unrelated to the time source; left to a regular sweep. |
+| SAR test-only commits | See Adaptations. |
+
+### Lock order, fixed by `0200`
+
+The clock calls `GetCorrelatedTime()`, and the time source's state sink, while holding its own lock, and `0198` makes the renderer take its lock there. The renderer's `Shutdown()` and `SetPresentationClock()` held the renderer lock while they called `GetTimeSource()`, `AddClockStateSink()` and `RemoveClockStateSink()`, so reading the clock time while the renderer shut down or changed its clock could deadlock. Upstream master has the same order; `c771f1735c` fixed it only in the periodic timer callback. It was found in review, not observed.
+
+`patches/runeon/0200` (order 230, downstream, approved by the maintainer on 2026-11-19) makes both methods swap the clock pointer under the renderer lock and call the clock outside it. A bind lock taken only by these two methods keeps binding and unbinding serialized. Lock order: bind lock, clock lock, renderer lock. Its test checks from another thread that the time source answers while the renderer is inside each clock call.
+
+### Validation
+
+- `scripts/static-check.sh` and `scripts/integration-check.sh` pass for `.39`.
+- The complete i386/x86_64 WoW64 build succeeds.
+- Wine's `mf` (`mf`, `topology`, `transform`), `mfplat` and `mfmediaengine` tests were run on both architectures against the `.39` build without `0192`–`0199`, in fresh prefixes. There are no new failures. The `transform` failure sets are identical (89 on x86_64, 83 on i386). The `mf` test runs 23 more checks because the `test_sar()` time-source block now runs, and it passes.
+- `0200`: on the complete build, `mf`, `mfplat` and `mfmediaengine` show no new failures, and both new tests pass 20 of 20 runs per architecture without a skip. Against `mf.dll` built without `0200`, `test_sar_clock_calls_unlocked()` fails four checks (each call blocks for the timeout); against `mf.dll` built without `0199`, `test_sar_end_of_segment_clock()` also fails (the clock stops at 20 ms).
+- In the affected title (DXMT), video plays in sync and without distortion after `0192`–`0200` (maintainer's local test).
+- Not verified: a run on Windows.

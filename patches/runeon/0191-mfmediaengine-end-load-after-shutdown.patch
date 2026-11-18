@@ -1,0 +1,697 @@
+From: Runeon Contributors <dev@runeon.com>
+Subject: [PATCH] mfmediaengine: End a source load that completes after shutdown.
+
+The load callback returned at once when the engine had been shut down,
+without calling IMFSourceResolver::End*(). The resolver keeps a
+completed request until End*() is called, and the result it keeps
+holds the engine's load callback and with it the engine, which holds
+the resolver: closing a video while it is still loading leaked the
+engine. A source created for that load was never shut down either,
+and a media source is not freed before it is shut down; the
+application that creates a source through the resolver has to shut
+it down.
+
+The callback now calls End*() first, with the same byte stream or URL
+selection as before. After shutdown it then releases the engine lock
+and shuts the source down, as media_engine_clear_presentation() does
+outside the lock, and returns without creating a topology or sending
+events. A failed request is just ended. Loads that complete before
+shutdown behave as before.
+
+The test registers a local byte stream handler, shuts the engine down
+while the load is pending and then completes it, from a URL and from a
+byte stream, with a source and with an error; the source must be shut
+down and the engine must release its callback. Waits are bounded.
+
+diff --git a/dlls/mfmediaengine/main.c b/dlls/mfmediaengine/main.c
+index 0be7183..61abbb2 100644
+--- a/dlls/mfmediaengine/main.c
++++ b/dlls/mfmediaengine/main.c
+@@ -1550,9 +1550,31 @@ static HRESULT WINAPI media_engine_load_handler_Invoke(IMFAsyncCallback *iface,
+ 
+     EnterCriticalSection(&engine->cs);
+ 
++    /* End the request also after shutdown: until then the resolver keeps this result, which holds a
++       reference to the engine. */
++    if (SUCCEEDED(IMFAsyncResult_GetState(result, &state)))
++    {
++        hr = IMFSourceResolver_EndCreateObjectFromByteStream(engine->resolver, result, &obj_type, &object);
++        IUnknown_Release(state);
++    }
++    else
++        hr = IMFSourceResolver_EndCreateObjectFromURL(engine->resolver, result, &obj_type, &object);
++
+     if (engine->flags & FLAGS_ENGINE_SHUT_DOWN)
+     {
+         media_engine_unlock(engine);
++
++        /* Nobody else will shut the abandoned source down, and a source is not freed before that. The
++           engine lock is not held, as in media_engine_clear_presentation(). */
++        if (object)
++        {
++            if (SUCCEEDED(IUnknown_QueryInterface(object, &IID_IMFMediaSource, (void **)&source)))
++            {
++                IMFMediaSource_Shutdown(source);
++                IMFMediaSource_Release(source);
++            }
++            IUnknown_Release(object);
++        }
+         return S_OK;
+     }
+ 
+@@ -1562,14 +1584,6 @@ static HRESULT WINAPI media_engine_load_handler_Invoke(IMFAsyncCallback *iface,
+     start_playback = engine->flags & FLAGS_ENGINE_PLAY_PENDING;
+     media_engine_set_flag(engine, FLAGS_ENGINE_SOURCE_PENDING | FLAGS_ENGINE_PLAY_PENDING, FALSE);
+ 
+-    if (SUCCEEDED(IMFAsyncResult_GetState(result, &state)))
+-    {
+-        hr = IMFSourceResolver_EndCreateObjectFromByteStream(engine->resolver, result, &obj_type, &object);
+-        IUnknown_Release(state);
+-    }
+-    else
+-        hr = IMFSourceResolver_EndCreateObjectFromURL(engine->resolver, result, &obj_type, &object);
+-
+     if (FAILED(hr))
+         WARN("Failed to create source object, hr %#lx.\n", hr);
+ 
+diff --git a/dlls/mfmediaengine/tests/mfmediaengine.c b/dlls/mfmediaengine/tests/mfmediaengine.c
+index bf07752..160245c 100644
+--- a/dlls/mfmediaengine/tests/mfmediaengine.c
++++ b/dlls/mfmediaengine/tests/mfmediaengine.c
+@@ -40,6 +40,8 @@
+ #include "wine/test.h"
+ 
+ static HRESULT (WINAPI *pMFCreateDXGIDeviceManager)(UINT *token, IMFDXGIDeviceManager **manager);
++static HRESULT (WINAPI *pMFRegisterLocalByteStreamHandler)(const WCHAR *extension, const WCHAR *mime,
++        IMFActivate *activate);
+ static HRESULT (WINAPI *pD3D11CreateDevice)(IDXGIAdapter *adapter, D3D_DRIVER_TYPE driver_type, HMODULE swrast, UINT flags,
+         const D3D_FEATURE_LEVEL *feature_levels, UINT levels, UINT sdk_version, ID3D11Device **device_out,
+         D3D_FEATURE_LEVEL *obtained_feature_level, ID3D11DeviceContext **immediate_context);
+@@ -175,6 +177,7 @@ static void init_functions(void)
+     if ((mod = GetModuleHandleA("mfplat.dll")))
+     {
+         X(MFCreateDXGIDeviceManager);
++        X(MFRegisterLocalByteStreamHandler);
+     }
+ 
+     if ((mod = LoadLibraryA("d3d11.dll")))
+@@ -2922,6 +2925,591 @@ done:
+     IMFByteStream_Release(stream);
+ }
+ 
++struct test_source
++{
++    IMFMediaSource IMFMediaSource_iface;
++    LONG refcount;
++    HANDLE shutdown_event;
++};
++
++static struct test_source *impl_from_IMFMediaSource(IMFMediaSource *iface)
++{
++    return CONTAINING_RECORD(iface, struct test_source, IMFMediaSource_iface);
++}
++
++static HRESULT WINAPI test_source_QueryInterface(IMFMediaSource *iface, REFIID riid, void **obj)
++{
++    if (IsEqualIID(riid, &IID_IMFMediaSource) ||
++            IsEqualIID(riid, &IID_IMFMediaEventGenerator) ||
++            IsEqualIID(riid, &IID_IUnknown))
++    {
++        *obj = iface;
++        IMFMediaSource_AddRef(iface);
++        return S_OK;
++    }
++
++    *obj = NULL;
++    return E_NOINTERFACE;
++}
++
++static ULONG WINAPI test_source_AddRef(IMFMediaSource *iface)
++{
++    struct test_source *source = impl_from_IMFMediaSource(iface);
++    return InterlockedIncrement(&source->refcount);
++}
++
++static ULONG WINAPI test_source_Release(IMFMediaSource *iface)
++{
++    struct test_source *source = impl_from_IMFMediaSource(iface);
++    ULONG refcount = InterlockedDecrement(&source->refcount);
++
++    if (!refcount)
++    {
++        CloseHandle(source->shutdown_event);
++        free(source);
++    }
++
++    return refcount;
++}
++
++static HRESULT WINAPI test_source_GetEvent(IMFMediaSource *iface, DWORD flags, IMFMediaEvent **event)
++{
++    return E_NOTIMPL;
++}
++
++static HRESULT WINAPI test_source_BeginGetEvent(IMFMediaSource *iface, IMFAsyncCallback *callback, IUnknown *state)
++{
++    return E_NOTIMPL;
++}
++
++static HRESULT WINAPI test_source_EndGetEvent(IMFMediaSource *iface, IMFAsyncResult *result, IMFMediaEvent **event)
++{
++    return E_NOTIMPL;
++}
++
++static HRESULT WINAPI test_source_QueueEvent(IMFMediaSource *iface, MediaEventType type, REFGUID ext_type,
++        HRESULT hr, const PROPVARIANT *value)
++{
++    return E_NOTIMPL;
++}
++
++static HRESULT WINAPI test_source_GetCharacteristics(IMFMediaSource *iface, DWORD *flags)
++{
++    return E_NOTIMPL;
++}
++
++static HRESULT WINAPI test_source_CreatePresentationDescriptor(IMFMediaSource *iface, IMFPresentationDescriptor **pd)
++{
++    return E_NOTIMPL;
++}
++
++static HRESULT WINAPI test_source_Start(IMFMediaSource *iface, IMFPresentationDescriptor *pd, const GUID *time_format,
++        const PROPVARIANT *start_position)
++{
++    return E_NOTIMPL;
++}
++
++static HRESULT WINAPI test_source_Stop(IMFMediaSource *iface)
++{
++    return E_NOTIMPL;
++}
++
++static HRESULT WINAPI test_source_Pause(IMFMediaSource *iface)
++{
++    return E_NOTIMPL;
++}
++
++static HRESULT WINAPI test_source_Shutdown(IMFMediaSource *iface)
++{
++    struct test_source *source = impl_from_IMFMediaSource(iface);
++
++    SetEvent(source->shutdown_event);
++    return S_OK;
++}
++
++static const IMFMediaSourceVtbl test_source_vtbl =
++{
++    test_source_QueryInterface,
++    test_source_AddRef,
++    test_source_Release,
++    test_source_GetEvent,
++    test_source_BeginGetEvent,
++    test_source_EndGetEvent,
++    test_source_QueueEvent,
++    test_source_GetCharacteristics,
++    test_source_CreatePresentationDescriptor,
++    test_source_Start,
++    test_source_Stop,
++    test_source_Pause,
++    test_source_Shutdown,
++};
++
++/* Keeps one request pending until the test thread completes it. */
++static struct
++{
++    IMFByteStreamHandler IMFByteStreamHandler_iface;
++    HANDLE request_event;
++    IMFAsyncCallback *callback;
++    IUnknown *state;
++} test_handler;
++
++static HRESULT WINAPI test_handler_QueryInterface(IMFByteStreamHandler *iface, REFIID riid, void **obj)
++{
++    if (IsEqualIID(riid, &IID_IMFByteStreamHandler) || IsEqualIID(riid, &IID_IUnknown))
++    {
++        *obj = iface;
++        return S_OK;
++    }
++
++    *obj = NULL;
++    return E_NOINTERFACE;
++}
++
++static ULONG WINAPI test_handler_AddRef(IMFByteStreamHandler *iface)
++{
++    return 2;
++}
++
++static ULONG WINAPI test_handler_Release(IMFByteStreamHandler *iface)
++{
++    return 1;
++}
++
++static HRESULT WINAPI test_handler_BeginCreateObject(IMFByteStreamHandler *iface, IMFByteStream *stream,
++        const WCHAR *url, DWORD flags, IPropertyStore *props, IUnknown **cancel_cookie, IMFAsyncCallback *callback,
++        IUnknown *state)
++{
++    if (cancel_cookie)
++        *cancel_cookie = NULL;
++
++    ok(!test_handler.callback, "Unexpected request.\n");
++    test_handler.callback = callback;
++    IMFAsyncCallback_AddRef(callback);
++    if ((test_handler.state = state))
++        IUnknown_AddRef(state);
++    SetEvent(test_handler.request_event);
++
++    return S_OK;
++}
++
++static HRESULT WINAPI test_handler_EndCreateObject(IMFByteStreamHandler *iface, IMFAsyncResult *result,
++        MF_OBJECT_TYPE *obj_type, IUnknown **object)
++{
++    HRESULT hr = IMFAsyncResult_GetStatus(result);
++
++    *obj_type = MF_OBJECT_INVALID;
++    *object = NULL;
++    if (SUCCEEDED(hr) && SUCCEEDED(hr = IMFAsyncResult_GetObject(result, object)))
++        *obj_type = MF_OBJECT_MEDIASOURCE;
++
++    return hr;
++}
++
++static HRESULT WINAPI test_handler_CancelObjectCreation(IMFByteStreamHandler *iface, IUnknown *cancel_cookie)
++{
++    return E_NOTIMPL;
++}
++
++static HRESULT WINAPI test_handler_GetMaxNumberOfBytesRequiredForResolution(IMFByteStreamHandler *iface,
++        QWORD *bytes)
++{
++    return E_NOTIMPL;
++}
++
++static const IMFByteStreamHandlerVtbl test_handler_vtbl =
++{
++    test_handler_QueryInterface,
++    test_handler_AddRef,
++    test_handler_Release,
++    test_handler_BeginCreateObject,
++    test_handler_EndCreateObject,
++    test_handler_CancelObjectCreation,
++    test_handler_GetMaxNumberOfBytesRequiredForResolution,
++};
++
++static void complete_test_request(IUnknown *object, HRESULT status)
++{
++    IMFAsyncResult *result;
++    HRESULT hr;
++
++    if (!test_handler.callback)
++        return;
++
++    hr = MFCreateAsyncResult(object, test_handler.callback, test_handler.state, &result);
++    ok(hr == S_OK, "Unexpected hr %#lx.\n", hr);
++    IMFAsyncResult_SetStatus(result, status);
++    hr = MFInvokeCallback(result);
++    ok(hr == S_OK, "Unexpected hr %#lx.\n", hr);
++    IMFAsyncResult_Release(result);
++
++    IMFAsyncCallback_Release(test_handler.callback);
++    test_handler.callback = NULL;
++    if (test_handler.state)
++        IUnknown_Release(test_handler.state);
++    test_handler.state = NULL;
++}
++
++static HRESULT WINAPI test_activate_QueryInterface(IMFActivate *iface, REFIID riid, void **obj)
++{
++    if (IsEqualIID(riid, &IID_IMFActivate) ||
++            IsEqualIID(riid, &IID_IMFAttributes) ||
++            IsEqualIID(riid, &IID_IUnknown))
++    {
++        *obj = iface;
++        IMFActivate_AddRef(iface);
++        return S_OK;
++    }
++
++    *obj = NULL;
++    return E_NOINTERFACE;
++}
++
++static ULONG WINAPI test_activate_AddRef(IMFActivate *iface)
++{
++    return 2;
++}
++
++static ULONG WINAPI test_activate_Release(IMFActivate *iface)
++{
++    return 1;
++}
++
++static HRESULT WINAPI test_activate_GetItem(IMFActivate *iface, REFGUID key, PROPVARIANT *value)
++{
++    return E_NOTIMPL;
++}
++
++static HRESULT WINAPI test_activate_GetItemType(IMFActivate *iface, REFGUID key, MF_ATTRIBUTE_TYPE *type)
++{
++    return E_NOTIMPL;
++}
++
++static HRESULT WINAPI test_activate_CompareItem(IMFActivate *iface, REFGUID key, REFPROPVARIANT value, BOOL *result)
++{
++    return E_NOTIMPL;
++}
++
++static HRESULT WINAPI test_activate_Compare(IMFActivate *iface, IMFAttributes *theirs, MF_ATTRIBUTES_MATCH_TYPE type,
++        BOOL *result)
++{
++    return E_NOTIMPL;
++}
++
++static HRESULT WINAPI test_activate_GetUINT32(IMFActivate *iface, REFGUID key, UINT32 *value)
++{
++    return E_NOTIMPL;
++}
++
++static HRESULT WINAPI test_activate_GetUINT64(IMFActivate *iface, REFGUID key, UINT64 *value)
++{
++    return E_NOTIMPL;
++}
++
++static HRESULT WINAPI test_activate_GetDouble(IMFActivate *iface, REFGUID key, double *value)
++{
++    return E_NOTIMPL;
++}
++
++static HRESULT WINAPI test_activate_GetGUID(IMFActivate *iface, REFGUID key, GUID *value)
++{
++    return E_NOTIMPL;
++}
++
++static HRESULT WINAPI test_activate_GetStringLength(IMFActivate *iface, REFGUID key, UINT32 *length)
++{
++    return E_NOTIMPL;
++}
++
++static HRESULT WINAPI test_activate_GetString(IMFActivate *iface, REFGUID key, WCHAR *value,
++        UINT32 size, UINT32 *length)
++{
++    return E_NOTIMPL;
++}
++
++static HRESULT WINAPI test_activate_GetAllocatedString(IMFActivate *iface, REFGUID key,
++        WCHAR **value, UINT32 *length)
++{
++    return E_NOTIMPL;
++}
++
++static HRESULT WINAPI test_activate_GetBlobSize(IMFActivate *iface, REFGUID key, UINT32 *size)
++{
++    return E_NOTIMPL;
++}
++
++static HRESULT WINAPI test_activate_GetBlob(IMFActivate *iface, REFGUID key, UINT8 *buf,
++        UINT32 bufsize, UINT32 *blobsize)
++{
++    return E_NOTIMPL;
++}
++
++static HRESULT WINAPI test_activate_GetAllocatedBlob(IMFActivate *iface, REFGUID key, UINT8 **buf, UINT32 *size)
++{
++    return E_NOTIMPL;
++}
++
++static HRESULT WINAPI test_activate_GetUnknown(IMFActivate *iface, REFGUID key, REFIID riid, void **ppv)
++{
++    return E_NOTIMPL;
++}
++
++static HRESULT WINAPI test_activate_SetItem(IMFActivate *iface, REFGUID key, REFPROPVARIANT value)
++{
++    return E_NOTIMPL;
++}
++
++static HRESULT WINAPI test_activate_DeleteItem(IMFActivate *iface, REFGUID key)
++{
++    return E_NOTIMPL;
++}
++
++static HRESULT WINAPI test_activate_DeleteAllItems(IMFActivate *iface)
++{
++    return E_NOTIMPL;
++}
++
++static HRESULT WINAPI test_activate_SetUINT32(IMFActivate *iface, REFGUID key, UINT32 value)
++{
++    return E_NOTIMPL;
++}
++
++static HRESULT WINAPI test_activate_SetUINT64(IMFActivate *iface, REFGUID key, UINT64 value)
++{
++    return E_NOTIMPL;
++}
++
++static HRESULT WINAPI test_activate_SetDouble(IMFActivate *iface, REFGUID key, double value)
++{
++    return E_NOTIMPL;
++}
++
++static HRESULT WINAPI test_activate_SetGUID(IMFActivate *iface, REFGUID key, REFGUID value)
++{
++    return E_NOTIMPL;
++}
++
++static HRESULT WINAPI test_activate_SetString(IMFActivate *iface, REFGUID key, const WCHAR *value)
++{
++    return E_NOTIMPL;
++}
++
++static HRESULT WINAPI test_activate_SetBlob(IMFActivate *iface, REFGUID key, const UINT8 *buf, UINT32 size)
++{
++    return E_NOTIMPL;
++}
++
++static HRESULT WINAPI test_activate_SetUnknown(IMFActivate *iface, REFGUID key, IUnknown *unknown)
++{
++    return E_NOTIMPL;
++}
++
++static HRESULT WINAPI test_activate_LockStore(IMFActivate *iface)
++{
++    return E_NOTIMPL;
++}
++
++static HRESULT WINAPI test_activate_UnlockStore(IMFActivate *iface)
++{
++    return E_NOTIMPL;
++}
++
++static HRESULT WINAPI test_activate_GetCount(IMFActivate *iface, UINT32 *count)
++{
++    return E_NOTIMPL;
++}
++
++static HRESULT WINAPI test_activate_GetItemByIndex(IMFActivate *iface, UINT32 index, GUID *key, PROPVARIANT *value)
++{
++    return E_NOTIMPL;
++}
++
++static HRESULT WINAPI test_activate_CopyAllItems(IMFActivate *iface, IMFAttributes *dest)
++{
++    return E_NOTIMPL;
++}
++
++static HRESULT WINAPI test_activate_ActivateObject(IMFActivate *iface, REFIID riid, void **obj)
++{
++    return IMFByteStreamHandler_QueryInterface(&test_handler.IMFByteStreamHandler_iface, riid, obj);
++}
++
++static HRESULT WINAPI test_activate_ShutdownObject(IMFActivate *iface)
++{
++    return E_NOTIMPL;
++}
++
++static HRESULT WINAPI test_activate_DetachObject(IMFActivate *iface)
++{
++    return E_NOTIMPL;
++}
++
++static const IMFActivateVtbl test_activate_vtbl =
++{
++    test_activate_QueryInterface,
++    test_activate_AddRef,
++    test_activate_Release,
++    test_activate_GetItem,
++    test_activate_GetItemType,
++    test_activate_CompareItem,
++    test_activate_Compare,
++    test_activate_GetUINT32,
++    test_activate_GetUINT64,
++    test_activate_GetDouble,
++    test_activate_GetGUID,
++    test_activate_GetStringLength,
++    test_activate_GetString,
++    test_activate_GetAllocatedString,
++    test_activate_GetBlobSize,
++    test_activate_GetBlob,
++    test_activate_GetAllocatedBlob,
++    test_activate_GetUnknown,
++    test_activate_SetItem,
++    test_activate_DeleteItem,
++    test_activate_DeleteAllItems,
++    test_activate_SetUINT32,
++    test_activate_SetUINT64,
++    test_activate_SetDouble,
++    test_activate_SetGUID,
++    test_activate_SetString,
++    test_activate_SetBlob,
++    test_activate_SetUnknown,
++    test_activate_LockStore,
++    test_activate_UnlockStore,
++    test_activate_GetCount,
++    test_activate_GetItemByIndex,
++    test_activate_CopyAllItems,
++    test_activate_ActivateObject,
++    test_activate_ShutdownObject,
++    test_activate_DetachObject,
++};
++
++/* Wait for objects released on MF threads; an engine kept alive by a reference cycle never gets there. */
++static LONG wait_refcount(LONG *refcount, LONG expected)
++{
++    unsigned int i;
++
++    for (i = 0; i < 50 && *refcount != expected; ++i)
++        Sleep(100);
++
++    return *refcount;
++}
++
++static void test_shutdown_during_load(void)
++{
++    static IMFActivate activate = { &test_activate_vtbl };
++    WCHAR dir[MAX_PATH], path[MAX_PATH];
++    struct media_engine_notify *notify;
++    IMFMediaEngineEx *media_engine;
++    struct test_source *source;
++    IMFByteStream *stream;
++    unsigned int i;
++    LONG refcount;
++    HANDLE file;
++    HRESULT hr;
++    DWORD res;
++    BOOL ret;
++    BSTR url;
++
++    if (!pMFRegisterLocalByteStreamHandler)
++    {
++        win_skip("Local handlers are not supported.\n");
++        return;
++    }
++
++    /* The handler stays registered for the rest of the process. */
++    test_handler.IMFByteStreamHandler_iface.lpVtbl = &test_handler_vtbl;
++    test_handler.request_event = CreateEventW(NULL, FALSE, FALSE, NULL);
++    hr = pMFRegisterLocalByteStreamHandler(L".mftest", NULL, &activate);
++    ok(hr == S_OK, "Unexpected hr %#lx.\n", hr);
++
++    GetTempPathW(ARRAY_SIZE(path), path);
++    ret = GetTempFileNameW(path, L"mfe", 0, dir);
++    ok(ret, "Failed to get a temporary name, error %lu.\n", GetLastError());
++    if (!ret)
++        return;
++    ret = DeleteFileW(dir) && CreateDirectoryW(dir, NULL);
++    ok(ret, "Failed to create directory, error %lu.\n", GetLastError());
++    if (!ret)
++        return;
++    lstrcpyW(path, dir);
++    lstrcatW(path, L"\\test.mftest");
++    file = CreateFileW(path, GENERIC_WRITE, 0, NULL, CREATE_NEW, 0, NULL);
++    ok(file != INVALID_HANDLE_VALUE, "Failed to create file, error %lu.\n", GetLastError());
++    if (file == INVALID_HANDLE_VALUE)
++        goto cleanup;
++    CloseHandle(file);
++
++    hr = MFCreateTempFile(MF_ACCESSMODE_READ | MF_ACCESSMODE_WRITE, MF_OPENMODE_FAIL_IF_EXIST, MF_FILEFLAGS_NONE, &stream);
++    ok(hr == S_OK, "Unexpected hr %#lx.\n", hr);
++
++    /* The load completes after Shutdown(): 0 from a URL, 1 from a URL with an error, 2 from a byte stream. */
++    for (i = 0; i < 3; ++i)
++    {
++        winetest_push_context("%u", i);
++
++        notify = create_callback();
++        hr = create_media_engine(&notify->IMFMediaEngineNotify_iface, NULL, DXGI_FORMAT_UNKNOWN,
++                &IID_IMFMediaEngineEx, (void **)&media_engine);
++        if (FAILED(hr))
++        {
++            win_skip("IMFMediaEngineEx is not supported.\n");
++            IMFMediaEngineNotify_Release(&notify->IMFMediaEngineNotify_iface);
++            winetest_pop_context();
++            break;
++        }
++
++        url = SysAllocString(i == 2 ? L"test.mftest" : path);
++        if (i == 2)
++            hr = IMFMediaEngineEx_SetSourceFromByteStream(media_engine, stream, url);
++        else
++            hr = IMFMediaEngineEx_SetSource(media_engine, url);
++        ok(hr == S_OK, "Unexpected hr %#lx.\n", hr);
++        SysFreeString(url);
++        res = WaitForSingleObject(test_handler.request_event, 5000);
++        ok(!res, "Unexpected res %#lx.\n", res);
++
++        hr = IMFMediaEngineEx_Shutdown(media_engine);
++        ok(hr == S_OK, "Unexpected hr %#lx.\n", hr);
++
++        source = NULL;
++        if (i != 1)
++        {
++            source = calloc(1, sizeof(*source));
++            source->IMFMediaSource_iface.lpVtbl = &test_source_vtbl;
++            source->refcount = 1;
++            source->shutdown_event = CreateEventW(NULL, TRUE, FALSE, NULL);
++        }
++        complete_test_request(source ? (IUnknown *)&source->IMFMediaSource_iface : NULL,
++                source ? S_OK : HRESULT_FROM_WIN32(ERROR_INVALID_DATA));
++
++        if (source)
++        {
++            res = WaitForSingleObject(source->shutdown_event, 5000);
++            ok(!res, "Source was not shut down, res %#lx.\n", res);
++        }
++
++        IMFMediaEngineEx_Release(media_engine);
++        refcount = wait_refcount(&notify->refcount, 1);
++        ok(refcount == 1, "Unexpected refcount %ld.\n", refcount);
++        IMFMediaEngineNotify_Release(&notify->IMFMediaEngineNotify_iface);
++
++        if (source)
++        {
++            wait_refcount(&source->refcount, 1);
++            refcount = IMFMediaSource_Release(&source->IMFMediaSource_iface);
++            ok(!refcount, "Unexpected refcount %ld.\n", refcount);
++        }
++
++        winetest_pop_context();
++    }
++
++    IMFByteStream_Release(stream);
++
++cleanup:
++    DeleteFileW(path);
++    RemoveDirectoryW(dir);
++}
++
+ START_TEST(mfmediaengine)
+ {
+     HRESULT hr;
+@@ -2959,6 +3547,7 @@ START_TEST(mfmediaengine)
+     test_GetSeekable();
+     test_media_extension();
+     test_SetCurrentTime();
++    test_shutdown_during_load();
+ 
+     IMFMediaEngineClassFactory_Release(factory);
+ 

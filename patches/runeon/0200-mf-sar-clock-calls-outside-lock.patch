@@ -1,0 +1,533 @@
+From: Runeon Contributors <dev@runeon.com>
+Subject: [PATCH] mf: Call the presentation clock outside the audio renderer lock.
+
+The presentation clock calls its time source, and the time source's
+state sink, with its own lock held. Once the streaming audio renderer
+is the time source, those calls take the renderer lock (the time
+source has read the audio clock under it since 512f5ddaab). The
+renderer's SetPresentationClock() and Shutdown() called
+IMFPresentationClock::GetTimeSource(), AddClockStateSink() and
+RemoveClockStateSink() with the renderer lock held, so a thread reading
+the clock time while another shut the renderer down or changed its
+clock could deadlock. WineHQ master has the same lock order.
+
+SetPresentationClock() and Shutdown() now only check the shutdown
+state and swap the clock pointer under the renderer lock, and call the
+clock outside it. A separate lock, taken only by these two methods and
+never by the clock callbacks, keeps binding and unbinding serialized,
+so Shutdown() cannot run while another thread registers the sink, and
+no sink is registered after shutdown. Return values are unchanged:
+MF_E_SHUTDOWN after shutdown, and the time source error for a clock
+without one.
+
+The first test binds the renderer to a test clock whose methods query
+the renderer's time source from another thread and require it to
+return within two seconds. The second plays two 10 ms samples through
+a presentation clock driven by the renderer, places an end-of-segment
+marker and checks that the clock passes 30 ms. Both skip without an
+audio device; all waits are bounded.
+
+diff --git a/dlls/mf/sar.c b/dlls/mf/sar.c
+index e2fab61..1599e95 100644
+--- a/dlls/mf/sar.c
++++ b/dlls/mf/sar.c
+@@ -104,6 +104,10 @@ struct audio_renderer
+     struct list queue;
+     unsigned int flags;
+     CRITICAL_SECTION cs;
++    /* Serializes clock binding in SetPresentationClock() and Shutdown(). The clock calls the time
++       source and state sink with its lock held, and those take cs, so clock methods are called with
++       only this lock held. Lock order: bind_cs, clock lock, cs. */
++    CRITICAL_SECTION bind_cs;
+ 
+     MFCLOCK_STATE clock_state;
+     DWORD sample_rate;
+@@ -300,6 +304,7 @@ static ULONG WINAPI audio_renderer_sink_Release(IMFMediaSink *iface)
+         audio_renderer_release_audio_client(renderer);
+         CloseHandle(renderer->buffer_ready_event);
+         DeleteCriticalSection(&renderer->cs);
++        DeleteCriticalSection(&renderer->bind_cs);
+         free(renderer);
+     }
+ 
+@@ -406,41 +411,51 @@ static HRESULT WINAPI audio_renderer_sink_GetStreamSinkById(IMFMediaSink *iface,
+     return hr;
+ }
+ 
+-static void audio_renderer_set_presentation_clock(struct audio_renderer *renderer, IMFPresentationClock *clock)
++/* Called with bind_cs held and cs not held. Takes over the reference to old_clock. */
++static void audio_renderer_set_presentation_clock(struct audio_renderer *renderer, IMFPresentationClock *old_clock,
++        IMFPresentationClock *clock)
+ {
+-    if (renderer->clock)
++    if (old_clock)
+     {
+-        IMFPresentationClock_RemoveClockStateSink(renderer->clock, &renderer->IMFClockStateSink_iface);
+-        IMFPresentationClock_Release(renderer->clock);
+-    }
+-    renderer->clock = clock;
+-    if (renderer->clock)
+-    {
+-        IMFPresentationClock_AddRef(renderer->clock);
+-        IMFPresentationClock_AddClockStateSink(renderer->clock, &renderer->IMFClockStateSink_iface);
++        IMFPresentationClock_RemoveClockStateSink(old_clock, &renderer->IMFClockStateSink_iface);
++        IMFPresentationClock_Release(old_clock);
+     }
++    if (clock)
++        IMFPresentationClock_AddClockStateSink(clock, &renderer->IMFClockStateSink_iface);
+ }
+ 
+ static HRESULT WINAPI audio_renderer_sink_SetPresentationClock(IMFMediaSink *iface, IMFPresentationClock *clock)
+ {
+     struct audio_renderer *renderer = impl_from_IMFMediaSink(iface);
+     IMFPresentationTimeSource *time_source = NULL;
++    IMFPresentationClock *old_clock;
+     HRESULT hr = S_OK;
+ 
+     TRACE("%p, %p.\n", iface, clock);
+ 
+-    EnterCriticalSection(&renderer->cs);
++    EnterCriticalSection(&renderer->bind_cs);
+ 
++    /* Shutdown() also takes bind_cs, so SAR_SHUT_DOWN cannot change before the clock is swapped below. */
++    EnterCriticalSection(&renderer->cs);
+     if (renderer->flags & SAR_SHUT_DOWN)
+         hr = MF_E_SHUTDOWN;
+-    else if (!clock || SUCCEEDED(hr = IMFPresentationClock_GetTimeSource(clock, &time_source)))
++    LeaveCriticalSection(&renderer->cs);
++
++    if (SUCCEEDED(hr) && clock && SUCCEEDED(hr = IMFPresentationClock_GetTimeSource(clock, &time_source)))
++        IMFPresentationTimeSource_Release(time_source);
++
++    if (SUCCEEDED(hr))
+     {
+-        if (time_source)
+-            IMFPresentationTimeSource_Release(time_source);
+-        audio_renderer_set_presentation_clock(renderer, clock);
++        EnterCriticalSection(&renderer->cs);
++        old_clock = renderer->clock;
++        if ((renderer->clock = clock))
++            IMFPresentationClock_AddRef(renderer->clock);
++        LeaveCriticalSection(&renderer->cs);
++
++        audio_renderer_set_presentation_clock(renderer, old_clock, clock);
+     }
+ 
+-    LeaveCriticalSection(&renderer->cs);
++    LeaveCriticalSection(&renderer->bind_cs);
+ 
+     return hr;
+ }
+@@ -475,10 +490,12 @@ static HRESULT WINAPI audio_renderer_sink_GetPresentationClock(IMFMediaSink *ifa
+ static HRESULT WINAPI audio_renderer_sink_Shutdown(IMFMediaSink *iface)
+ {
+     struct audio_renderer *renderer = impl_from_IMFMediaSink(iface);
++    IMFPresentationClock *clock = NULL;
+     HRESULT hr = S_OK;
+ 
+     TRACE("%p.\n", iface);
+ 
++    EnterCriticalSection(&renderer->bind_cs);
+     EnterCriticalSection(&renderer->cs);
+ 
+     if (renderer->flags & SAR_SHUT_DOWN)
+@@ -488,12 +505,17 @@ static HRESULT WINAPI audio_renderer_sink_Shutdown(IMFMediaSink *iface)
+         renderer->flags |= SAR_SHUT_DOWN;
+         IMFMediaEventQueue_Shutdown(renderer->event_queue);
+         IMFMediaEventQueue_Shutdown(renderer->stream_event_queue);
+-        audio_renderer_set_presentation_clock(renderer, NULL);
++        clock = renderer->clock;
++        renderer->clock = NULL;
+         audio_renderer_release_audio_client(renderer);
+     }
+ 
+     LeaveCriticalSection(&renderer->cs);
+ 
++    audio_renderer_set_presentation_clock(renderer, clock, NULL);
++
++    LeaveCriticalSection(&renderer->bind_cs);
++
+     return hr;
+ }
+ 
+@@ -2208,6 +2230,7 @@ static HRESULT sar_create_object(IMFAttributes *attributes, void *user_context,
+     renderer->rate = 1.0f;
+     renderer->refcount = 1;
+     InitializeCriticalSection(&renderer->cs);
++    InitializeCriticalSection(&renderer->bind_cs);
+     renderer->buffer_ready_event = CreateEventW(NULL, FALSE, FALSE, NULL);
+     list_init(&renderer->queue);
+ 
+diff --git a/dlls/mf/tests/mf.c b/dlls/mf/tests/mf.c
+index a25f5c8..f19160d 100644
+--- a/dlls/mf/tests/mf.c
++++ b/dlls/mf/tests/mf.c
+@@ -5284,6 +5284,359 @@ if (SUCCEEDED(hr))
+     CoUninitialize();
+ }
+ 
++struct sar_test_clock
++{
++    IMFPresentationClock IMFPresentationClock_iface;
++    LONG refcount;
++    IMFPresentationTimeSource *time_source;
++    IMFClockStateSink *state_sink;
++    HANDLE query_thread;
++};
++
++static struct sar_test_clock *impl_from_sar_test_clock(IMFPresentationClock *iface)
++{
++    return CONTAINING_RECORD(iface, struct sar_test_clock, IMFPresentationClock_iface);
++}
++
++static DWORD CALLBACK sar_time_query_thread(void *arg)
++{
++    IMFPresentationTimeSource *time_source = arg;
++    MFTIME time, system_time;
++
++    IMFPresentationTimeSource_GetCorrelatedTime(time_source, 0, &time, &system_time);
++    return 0;
++}
++
++/* A presentation clock calls its time source with the clock lock held, so the renderer must not
++   hold a lock that its time source takes while it calls the clock, or the two can deadlock. */
++static void sar_test_clock_check_unlocked(struct sar_test_clock *clock, const char *method)
++{
++    DWORD ret;
++
++    /* A query blocked in an earlier method of the same call has already failed. */
++    if (clock->query_thread)
++        return;
++
++    clock->query_thread = CreateThread(NULL, 0, sar_time_query_thread, clock->time_source, 0, NULL);
++    ok(!!clock->query_thread, "Failed to create thread.\n");
++    ret = WaitForSingleObject(clock->query_thread, 2000);
++    ok(ret == WAIT_OBJECT_0, "%s: time source call blocked, ret %#lx.\n", method, ret);
++    if (ret == WAIT_OBJECT_0)
++    {
++        CloseHandle(clock->query_thread);
++        clock->query_thread = NULL;
++    }
++}
++
++static void sar_test_clock_join(struct sar_test_clock *clock)
++{
++    DWORD ret;
++
++    if (!clock->query_thread)
++        return;
++    ret = WaitForSingleObject(clock->query_thread, 5000);
++    ok(ret == WAIT_OBJECT_0, "Time source call did not complete, ret %#lx.\n", ret);
++    CloseHandle(clock->query_thread);
++    clock->query_thread = NULL;
++}
++
++static HRESULT WINAPI sar_test_clock_QueryInterface(IMFPresentationClock *iface, REFIID riid, void **obj)
++{
++    if (IsEqualIID(riid, &IID_IMFPresentationClock) || IsEqualIID(riid, &IID_IMFClock)
++            || IsEqualIID(riid, &IID_IUnknown))
++    {
++        *obj = iface;
++        IMFPresentationClock_AddRef(iface);
++        return S_OK;
++    }
++
++    *obj = NULL;
++    return E_NOINTERFACE;
++}
++
++static ULONG WINAPI sar_test_clock_AddRef(IMFPresentationClock *iface)
++{
++    return InterlockedIncrement(&impl_from_sar_test_clock(iface)->refcount);
++}
++
++static ULONG WINAPI sar_test_clock_Release(IMFPresentationClock *iface)
++{
++    return InterlockedDecrement(&impl_from_sar_test_clock(iface)->refcount);
++}
++
++static HRESULT WINAPI sar_test_clock_GetClockCharacteristics(IMFPresentationClock *iface, DWORD *flags)
++{
++    return E_NOTIMPL;
++}
++
++static HRESULT WINAPI sar_test_clock_GetCorrelatedTime(IMFPresentationClock *iface, DWORD reserved,
++        LONGLONG *clock_time, MFTIME *system_time)
++{
++    return E_NOTIMPL;
++}
++
++static HRESULT WINAPI sar_test_clock_GetContinuityKey(IMFPresentationClock *iface, DWORD *key)
++{
++    return E_NOTIMPL;
++}
++
++static HRESULT WINAPI sar_test_clock_GetState(IMFPresentationClock *iface, DWORD reserved, MFCLOCK_STATE *state)
++{
++    return E_NOTIMPL;
++}
++
++static HRESULT WINAPI sar_test_clock_GetProperties(IMFPresentationClock *iface, MFCLOCK_PROPERTIES *props)
++{
++    return E_NOTIMPL;
++}
++
++static HRESULT WINAPI sar_test_clock_SetTimeSource(IMFPresentationClock *iface, IMFPresentationTimeSource *time_source)
++{
++    return E_NOTIMPL;
++}
++
++static HRESULT WINAPI sar_test_clock_GetTimeSource(IMFPresentationClock *iface, IMFPresentationTimeSource **time_source)
++{
++    struct sar_test_clock *clock = impl_from_sar_test_clock(iface);
++
++    sar_test_clock_check_unlocked(clock, "GetTimeSource");
++    *time_source = clock->time_source;
++    IMFPresentationTimeSource_AddRef(*time_source);
++    return S_OK;
++}
++
++static HRESULT WINAPI sar_test_clock_GetTime(IMFPresentationClock *iface, MFTIME *time)
++{
++    return E_NOTIMPL;
++}
++
++static HRESULT WINAPI sar_test_clock_AddClockStateSink(IMFPresentationClock *iface, IMFClockStateSink *state_sink)
++{
++    struct sar_test_clock *clock = impl_from_sar_test_clock(iface);
++
++    sar_test_clock_check_unlocked(clock, "AddClockStateSink");
++    if (clock->state_sink)
++        IMFClockStateSink_Release(clock->state_sink);
++    clock->state_sink = state_sink;
++    IMFClockStateSink_AddRef(state_sink);
++    return S_OK;
++}
++
++static HRESULT WINAPI sar_test_clock_RemoveClockStateSink(IMFPresentationClock *iface, IMFClockStateSink *state_sink)
++{
++    struct sar_test_clock *clock = impl_from_sar_test_clock(iface);
++
++    sar_test_clock_check_unlocked(clock, "RemoveClockStateSink");
++    if (clock->state_sink == state_sink)
++    {
++        IMFClockStateSink_Release(state_sink);
++        clock->state_sink = NULL;
++    }
++    return S_OK;
++}
++
++static HRESULT WINAPI sar_test_clock_Start(IMFPresentationClock *iface, LONGLONG start_offset)
++{
++    return E_NOTIMPL;
++}
++
++static HRESULT WINAPI sar_test_clock_Stop(IMFPresentationClock *iface)
++{
++    return E_NOTIMPL;
++}
++
++static HRESULT WINAPI sar_test_clock_Pause(IMFPresentationClock *iface)
++{
++    return E_NOTIMPL;
++}
++
++static const IMFPresentationClockVtbl sar_test_clock_vtbl =
++{
++    sar_test_clock_QueryInterface,
++    sar_test_clock_AddRef,
++    sar_test_clock_Release,
++    sar_test_clock_GetClockCharacteristics,
++    sar_test_clock_GetCorrelatedTime,
++    sar_test_clock_GetContinuityKey,
++    sar_test_clock_GetState,
++    sar_test_clock_GetProperties,
++    sar_test_clock_SetTimeSource,
++    sar_test_clock_GetTimeSource,
++    sar_test_clock_GetTime,
++    sar_test_clock_AddClockStateSink,
++    sar_test_clock_RemoveClockStateSink,
++    sar_test_clock_Start,
++    sar_test_clock_Stop,
++    sar_test_clock_Pause,
++};
++
++static void test_sar_clock_calls_unlocked(void)
++{
++    struct sar_test_clock clock = {{&sar_test_clock_vtbl}, 1};
++    IMFMediaSink *sink;
++    HRESULT hr;
++    LONG ref;
++
++    hr = MFStartup(MF_VERSION, MFSTARTUP_FULL);
++    ok(hr == S_OK, "Startup failure, hr %#lx.\n", hr);
++
++    hr = MFCreateAudioRenderer(NULL, &sink);
++    if (hr == MF_E_NO_AUDIO_PLAYBACK_DEVICE)
++    {
++        skip("No audio playback device available.\n");
++        MFShutdown();
++        return;
++    }
++    ok(hr == S_OK, "Failed to create renderer, hr %#lx.\n", hr);
++
++    hr = IMFMediaSink_QueryInterface(sink, &IID_IMFPresentationTimeSource, (void **)&clock.time_source);
++    ok(hr == S_OK, "Failed to get time source interface, hr %#lx.\n", hr);
++
++    hr = IMFMediaSink_SetPresentationClock(sink, &clock.IMFPresentationClock_iface);
++    ok(hr == S_OK, "Unexpected hr %#lx.\n", hr);
++    sar_test_clock_join(&clock);
++    ok(!!clock.state_sink, "Clock state sink was not added.\n");
++
++    hr = IMFMediaSink_SetPresentationClock(sink, NULL);
++    ok(hr == S_OK, "Unexpected hr %#lx.\n", hr);
++    sar_test_clock_join(&clock);
++
++    hr = IMFMediaSink_SetPresentationClock(sink, &clock.IMFPresentationClock_iface);
++    ok(hr == S_OK, "Unexpected hr %#lx.\n", hr);
++    sar_test_clock_join(&clock);
++
++    hr = IMFMediaSink_Shutdown(sink);
++    ok(hr == S_OK, "Failed to shut down, hr %#lx.\n", hr);
++    sar_test_clock_join(&clock);
++    ok(!clock.state_sink, "Clock state sink was not removed.\n");
++    ok(clock.refcount == 1, "Unexpected clock refcount %ld.\n", clock.refcount);
++
++    IMFPresentationTimeSource_Release(clock.time_source);
++    ref = IMFMediaSink_Release(sink);
++    ok(ref == 0, "Release returned %ld\n", ref);
++
++    MFShutdown();
++}
++
++static void test_sar_end_of_segment_clock(void)
++{
++    IMFPresentationTimeSource *time_source;
++    IMFMediaTypeHandler *handler;
++    IMFPresentationClock *clock;
++    IMFAsyncCallback *callback;
++    UINT32 samples_per_second = 0;
++    IMFMediaType *media_type;
++    IMFStreamSink *stream;
++    PROPVARIANT propvar;
++    BYTE *silence = NULL;
++    IMFMediaSink *sink;
++    IMFSample *sample;
++    MFTIME time = 0;
++    unsigned int i;
++    DWORD size;
++    HRESULT hr;
++
++    hr = MFStartup(MF_VERSION, MFSTARTUP_FULL);
++    ok(hr == S_OK, "Startup failure, hr %#lx.\n", hr);
++
++    hr = MFCreateAudioRenderer(NULL, &sink);
++    if (hr == MF_E_NO_AUDIO_PLAYBACK_DEVICE)
++    {
++        skip("No audio playback device available.\n");
++        MFShutdown();
++        return;
++    }
++    ok(hr == S_OK, "Failed to create renderer, hr %#lx.\n", hr);
++
++    hr = IMFMediaSink_QueryInterface(sink, &IID_IMFPresentationTimeSource, (void **)&time_source);
++    ok(hr == S_OK, "Failed to get time source interface, hr %#lx.\n", hr);
++    hr = MFCreatePresentationClock(&clock);
++    ok(hr == S_OK, "Failed to create presentation clock, hr %#lx.\n", hr);
++    hr = IMFPresentationClock_SetTimeSource(clock, time_source);
++    ok(hr == S_OK, "Failed to set time source, hr %#lx.\n", hr);
++    IMFPresentationTimeSource_Release(time_source);
++    hr = IMFMediaSink_SetPresentationClock(sink, clock);
++    ok(hr == S_OK, "Unexpected hr %#lx.\n", hr);
++
++    hr = IMFMediaSink_GetStreamSinkByIndex(sink, 0, &stream);
++    ok(hr == S_OK, "Unexpected hr %#lx.\n", hr);
++    hr = IMFStreamSink_GetMediaTypeHandler(stream, &handler);
++    ok(hr == S_OK, "Unexpected hr %#lx.\n", hr);
++    hr = IMFMediaTypeHandler_GetMediaTypeByIndex(handler, 0, &media_type);
++    ok(hr == S_OK, "Unexpected hr %#lx.\n", hr);
++    /* The first media type only sets the rate; without the format attributes no audio is played. */
++    hr = IMFMediaType_GetUINT32(media_type, &MF_MT_AUDIO_SAMPLES_PER_SECOND, &samples_per_second);
++    ok(hr == S_OK, "Unexpected hr %#lx.\n", hr);
++    ok(samples_per_second, "Unexpected rate %u.\n", samples_per_second);
++    /* 10 ms of stereo float silence at the device rate, shared by both samples. */
++    size = samples_per_second / 100 * 2 * sizeof(float);
++    if (FAILED(hr) || !size || !(silence = calloc(1, size)))
++    {
++        ok(!size, "Failed to allocate %lu bytes.\n", size);
++        IMFMediaType_Release(media_type);
++        IMFMediaTypeHandler_Release(handler);
++        goto done;
++    }
++    IMFMediaType_SetUINT32(media_type, &MF_MT_AUDIO_NUM_CHANNELS, 2);
++    IMFMediaType_SetUINT32(media_type, &MF_MT_AUDIO_BITS_PER_SAMPLE, sizeof(float) * 8);
++    IMFMediaType_SetUINT32(media_type, &MF_MT_AUDIO_BLOCK_ALIGNMENT, 2 * sizeof(float));
++    IMFMediaType_SetUINT32(media_type, &MF_MT_AUDIO_AVG_BYTES_PER_SECOND, samples_per_second * 2 * sizeof(float));
++    hr = IMFMediaTypeHandler_SetCurrentMediaType(handler, media_type);
++    ok(hr == S_OK, "Unexpected hr %#lx.\n", hr);
++    IMFMediaType_Release(media_type);
++    IMFMediaTypeHandler_Release(handler);
++
++    callback = create_test_callback(TRUE);
++    PropVariantInit(&propvar);
++
++    hr = IMFPresentationClock_Start(clock, 0);
++    ok(hr == S_OK, "Unexpected hr %#lx.\n", hr);
++
++    /* Two 10 ms samples. */
++    for (i = 0; i < 2; i++)
++    {
++        hr = gen_wait_media_event_until_blocking((IMFMediaEventGenerator *)stream, callback, MEStreamSinkRequestSample, 1000, &propvar);
++        ok(hr == S_OK, "Unexpected hr %#lx.\n", hr);
++        PropVariantClear(&propvar);
++
++        sample = create_sample(silence, size);
++        hr = IMFSample_SetSampleTime(sample, i * 100000);
++        ok(hr == S_OK, "Unexpected hr %#lx.\n", hr);
++        hr = IMFStreamSink_ProcessSample(stream, sample);
++        ok(hr == S_OK, "Unexpected hr %#lx.\n", hr);
++        IMFSample_Release(sample);
++    }
++
++    hr = IMFStreamSink_PlaceMarker(stream, MFSTREAMSINK_MARKER_ENDOFSEGMENT, NULL, NULL);
++    ok(hr == S_OK, "Unexpected hr %#lx.\n", hr);
++    hr = gen_wait_media_event_until_blocking((IMFMediaEventGenerator *)stream, callback, MEStreamSinkMarker, 2000, &propvar);
++    ok(hr == S_OK, "Unexpected hr %#lx.\n", hr);
++    PropVariantClear(&propvar);
++
++    /* After the end of the segment the renderer plays silence, so the clock passes the 20 ms of samples. */
++    for (i = 0; i < 100 && time <= 300000; i++)
++    {
++        hr = IMFPresentationClock_GetTime(clock, &time);
++        ok(hr == S_OK, "Unexpected hr %#lx.\n", hr);
++        Sleep(50);
++    }
++    ok(time > 300000, "Unexpected time %I64d.\n", time);
++
++    hr = IMFPresentationClock_Stop(clock);
++    ok(hr == S_OK, "Unexpected hr %#lx.\n", hr);
++
++    IMFAsyncCallback_Release(callback);
++done:
++    free(silence);
++    IMFStreamSink_Release(stream);
++    hr = IMFMediaSink_Shutdown(sink);
++    ok(hr == S_OK, "Failed to shut down, hr %#lx.\n", hr);
++    IMFPresentationClock_Release(clock);
++    IMFMediaSink_Release(sink);
++
++    MFShutdown();
++}
++
+ static void test_evr(void)
+ {
+     static const float supported_rates[] =
+@@ -8457,6 +8810,8 @@ START_TEST(mf)
+     test_sample_grabber_orientation(MFVideoFormat_NV12);
+     test_quality_manager();
+     test_sar();
++    test_sar_clock_calls_unlocked();
++    test_sar_end_of_segment_clock();
+     test_evr();
+     test_MFCreateSimpleTypeHandler();
+     test_MFGetSupportedMimeTypes();
