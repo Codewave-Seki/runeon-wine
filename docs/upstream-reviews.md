@@ -1432,3 +1432,76 @@ The clock calls `GetCorrelatedTime()`, and the time source's state sink, while h
 - `0200`: on the complete build, `mf`, `mfplat` and `mfmediaengine` show no new failures, and both new tests pass 20 of 20 runs per architecture without a skip. Against `mf.dll` built without `0200`, `test_sar_clock_calls_unlocked()` fails four checks (each call blocks for the timeout); against `mf.dll` built without `0199`, `test_sar_end_of_segment_clock()` also fails (the clock stops at 20 ms).
 - In the affected title (DXMT), video plays in sync and without distortion after `0192`–`0200` (maintainer's local test).
 - Not verified: a run on Windows.
+
+<a id="mf-converter-upstream-attributes"></a>
+
+## Topology loader: converter output types inherit upstream attributes
+
+Patch set `cx26.3-wine11.0-runeon.40` adds `patches/upstream/0201` (WineHQ `8db38ea190`, wine-11.7, adapted) and its test `patches/runeon/0202` after `0200`, and the downstream audio renderer fix `patches/runeon/0203` for the same title (see the last subsection). Status: the maintainer approved each individually on 2026-11-20. `mf` is not in the module lists that allow behaviour fixes without one, and these are playback failures, not crashes, leaks or hangs.
+
+### Defect
+
+- A WMV file (WMV3 video, WMA Lossless audio) has no native ASF demuxer in the base, so the GStreamer fallback source exposes already decoded I420 video.
+- The EVR mixer does not accept I420, so the topology loader inserts the video processor. With no type offered by the EVR, it enumerates the processor's output types, which carry only major type, subtype and frame size.
+- Without `MF_MT_ALL_SAMPLES_INDEPENDENT` the EVR mixer treats each type as compressed (as documented for Windows) and rejects it. No decoder takes I420, so the session fails with `MF_E_TOPO_CODEC_NOT_FOUND`: black screen, no audio.
+- `update_media_type_from_upstream()` already fills these attributes for the type the loader sets on a transform, but `topology_branch_foreach_up_types()` did not call it for enumerated types. The EVR check and `IsCompressedFormat()` are left as they are.
+- Evidence: a `+mfplat,+evr` trace of the failing title on this base. With `0201` the cutscene plays to its end (maintainer's local test).
+
+### Review
+
+- Every master commit touching `dlls/mf/topology_loader.c` after wine-11.0 was reviewed, up to `e3c3d34867`. Commit messages were searched for `8db38ea190`, `6817fb42a2` and `f0223546ac`; none is named by a later commit.
+- `8db38ea190` sits on about 20 wine-11.6/11.7 refactors of the resolver (cached handlers on branches, dynamic indirect branches, the `connect_method` enum). They do not apply to the base and are not needed for this fix.
+- `9ab1b050c5` and `281e7a82ef` (wine-11.19) are already carried in `0079`.
+
+### Taken
+
+| Patch | Commit | Release | Why |
+|---|---|---|---|
+| `0201` | `8db38ea190` update media types while enumerating up types | 11.7 | Core fix: each enumerated output type is copied and receives the upstream attributes it lacks. |
+| `0201` | `f0223546ac` (helper only) | 11.7 | `clone_media_type()`, verbatim. |
+| `0201` | `6817fb42a2` (helper only) | 11.7 | `media_type_handler_get_type()`, verbatim. The copy keeps the transform's own types unchanged; many MFTs return internal references. |
+| `0202` | downstream test | — | The upstream commit has no test. |
+
+### Adaptations
+
+- The `upstream` type is added as a parameter next to the base's `enumerate_source_types` flag. `topology_branch_connect_indirect()` passes its `up_type`, and `topology_loader_resolve_branches()` passes `NULL`, as upstream does.
+- The upstream hunk for the non-enumerating path, with `media_type_handler_get_current()`, is left out. That path is only reached when the downstream node offered a type, which the base already sets on the transform with the upstream attributes. The hunk only matters when the transform rejects that type.
+- TRACE changes are left out; the base has no `debugstr_media_type()`.
+
+### Left out
+
+| Commit | Reason |
+|---|---|
+| Rest of `6817fb42a2` (`topology_branch_find_best_type()`) and of `f0223546ac` | Best-type selection for converters and decoders; needs the cached branch handlers. Not needed here. |
+| `774bbd4153` | Switches video conversion to the color converter by default; behaviour change, not a fix for this defect. |
+| `622651f7ee` | Asynchronous transforms in the session; feature. |
+| `b2047ce19f` and the wine-11.8/11.9 walk rewrite (`82284afdc7`, `addbf54365`, `d94e691eca`, `c883ea1fca`, `6e30b14f5e`, `66db696e4f`, `ac01bc4f7d`, `1f160bc170`, `98b76f8831`) | Resolver rewrite and optional-node handling; refactors that depend on the 11.6/11.7 restructuring. |
+| `6bd21dffdd`, `bb6deef75b`, `68bfdd0889`, `fcd684a325`, `1d17bcf4e0`, `96a563a061`, `cb8e94c735`, `828d9de10f`, `6c5ab878cf`, `114f0eb9a4`, `5f6a89848f` | wine-11.7 resolver restructuring and type-selection changes around `8db38ea190`; not required by the fix. |
+| `7e07ee63bd`, `010f4ab9cc`, `18e19a7903`, `a3f64a3d89`, `8e9b6204e3`, `cd1207601b` | wine-11.5/11.6 clean-ups, tracing and decoder node attributes. |
+
+### Effect on other paths
+
+- Only branches from a converter or decoder that the loader inserts, and whose downstream node offered no type, are affected (the EVR in this base). Their enumerated types gain missing attributes; present attributes are kept.
+- Upstream copies the same attribute list, including `MF_MT_DEFAULT_STRIDE`, also when the subtype changes, and copies audio block alignment and average byte rate from a compressed type into decoder output types that lack them. The video processor in this base uses only the sign of the stride.
+- `IMFMediaEngine` is not affected: its video frame sink reports a current type, so the loader takes the non-enumerating path. The source reader has its own pipeline.
+
+### Validation
+
+- `scripts/static-check.sh` and `scripts/integration-check.sh` pass for `.40`.
+- The complete i386/x86_64 WoW64 build of `.40` succeeds.
+- `test_topology_loader_converter_attributes()`, from one test build, fails with `mf.dll` built without `0201` (`topology.c:3140: Test failed: got hr 0xc00d5212`, `MF_E_TOPO_CODEC_NOT_FOUND`) and passes with `0201`, on both architectures.
+- Wine's `mf` (`mf`, `topology`, `transform`), `mfplat`, `mfreadwrite`, `mfmediaengine` and `evr` tests, run with the same test programs on `.39` and `.40`, both architectures, fresh prefixes: no new failure. The only difference is the `0202` check above, which fails on `.39`. The `transform` failures (89 on x86_64, 83 on i386) are identical on both, and an intermittent crash in `transform` occurs on both.
+- In the affected title the cutscene plays to its end and the story continues (maintainer's local test). Not verified: a run on Windows.
+
+### Streaming audio renderer subtype check (`0203`)
+
+- Defect: the same file's WMA Lossless 24-bit audio is decoded by the GStreamer fallback to 32-bit integer PCM, 48 kHz, stereo. The device mix format is 32-bit float, 48 kHz, stereo.
+- Wine's renderer always initializes its audio client with the mix format and copies samples into it unchanged. `check_media_type()` compared only rate, channels, bits per sample, block alignment and byte rate, so the integer type was accepted, no converter was inserted, and the samples were played as float: loud noise.
+- Windows' renderer supports both PCM and float formats. Wine's must reject an input whose subtype differs from its type, or is missing, so that the loader inserts a converter. The existing test already expected a type without `MF_MT_SUBTYPE` to be rejected (marked todo).
+- Evidence: a trace of the failing title on this base shows GStreamer delivering 32-bit integer PCM and a 32-bit float device format. That the renderer accepts the integer type is shown by the test below, not by the trace. WineHQ master (`76f8e94795`) has the same check.
+- Change: `MF_MT_SUBTYPE` is added to the compared attributes, against the renderer's own type, not a fixed subtype. Both `IsMediaTypeSupported()` and `SetCurrentMediaType()` use it. No upstream commit exists, so this is a downstream patch.
+- Test: the two todo marks are removed, and a new check copies the renderer's supported type, switches only its subtype between PCM and float, and expects both methods to return `MF_E_INVALIDMEDIATYPE`, while the original type is still accepted. It skips without an audio device.
+- Effect: inputs with a missing or different subtype and otherwise matching attributes now go through a converter. Types that matched before (same subtype as the mix format) are unaffected.
+- Validation: with one test build, `test_sar()` fails against `mf.dll` built without `0203` (`mf.c:4932: "MF_MT_SUBTYPE": IsMediaTypeSupported returned 0`, `mf.c:4978` and `mf.c:4980: Unexpected hr 0`, plus a leaked sink reference at `mf.c:5218`) and passes with it, on both architectures, with an audio device present (no skip).
+- Wine's `mf` tests (`mf`, `topology`, `transform`) on a complete build with `0203`, both architectures: no new failure compared with `.40` without it.
+- In the affected title the audio goes through the resampler into the float mix format and sounds correct, in sync with the video; a second title playing float audio through the media engine is unchanged (maintainer's local tests). Not verified: a run on Windows (in particular that the native renderer rejects the switched subtype rather than converting).

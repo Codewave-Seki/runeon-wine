@@ -1,0 +1,84 @@
+From: Runeon Contributors <dev@runeon.com>
+Subject: [PATCH] mf/sar: Reject input types whose subtype differs from the renderer's type.
+
+Windows' streaming audio renderer supports both PCM and float formats.
+Wine's renderer always initializes its audio client with the device
+mix format and copies samples into it unchanged, but
+check_media_type() compared only the sample rate, channel count, bits
+per sample, block alignment and average byte rate with that format. An
+input type with a missing or different subtype and otherwise matching
+attributes, such as 32-bit integer PCM against a 32-bit float mix
+format, was accepted. No converter was inserted, and the integer
+samples were played as float: loud noise. WineHQ master has the same
+check.
+
+Compare MF_MT_SUBTYPE with the renderer's type as well, so the
+topology loader inserts a converter. This applies to both
+IsMediaTypeSupported() and SetCurrentMediaType().
+
+The existing test already expected a type without MF_MT_SUBTYPE to be
+rejected (marked todo). A new check copies the renderer's supported
+type, switches only its subtype between PCM and float, and expects
+both methods to reject it, while the original type is still accepted.
+The test skips without an audio device.
+
+diff --git a/dlls/mf/sar.c b/dlls/mf/sar.c
+index 1599e95..a6b47ca 100644
+--- a/dlls/mf/sar.c
++++ b/dlls/mf/sar.c
+@@ -1743,6 +1743,7 @@ static HRESULT check_media_type(IMFMediaType *type, IMFMediaType *current)
+ {
+     static const GUID *required_attrs[] =
+     {
++        &MF_MT_SUBTYPE,
+         &MF_MT_AUDIO_SAMPLES_PER_SECOND,
+         &MF_MT_AUDIO_NUM_CHANNELS,
+         &MF_MT_AUDIO_BITS_PER_SAMPLE,
+diff --git a/dlls/mf/tests/mf.c b/dlls/mf/tests/mf.c
+index f19160d..a08cbd5 100644
+--- a/dlls/mf/tests/mf.c
++++ b/dlls/mf/tests/mf.c
+@@ -4714,7 +4714,7 @@ static void test_sar(void)
+     static const struct attribute_desc input_type_desc_48000[] =
+     {
+         ATTR_GUID(MF_MT_MAJOR_TYPE, MFMediaType_Audio, .required = TRUE),
+-        ATTR_GUID(MF_MT_SUBTYPE, MFAudioFormat_Float, .required = TRUE, .todo = TRUE),
++        ATTR_GUID(MF_MT_SUBTYPE, MFAudioFormat_Float, .required = TRUE),
+         ATTR_UINT32(MF_MT_AUDIO_NUM_CHANNELS, 2, .required = TRUE),
+         ATTR_UINT32(MF_MT_AUDIO_BITS_PER_SAMPLE, 32, .required = TRUE),
+         ATTR_UINT32(MF_MT_AUDIO_SAMPLES_PER_SECOND, 48000, .required = TRUE),
+@@ -4725,7 +4725,7 @@ static void test_sar(void)
+     static const struct attribute_desc input_type_desc_44100[] =
+     {
+         ATTR_GUID(MF_MT_MAJOR_TYPE, MFMediaType_Audio, .required = TRUE),
+-        ATTR_GUID(MF_MT_SUBTYPE, MFAudioFormat_Float, .required = TRUE, .todo = TRUE),
++        ATTR_GUID(MF_MT_SUBTYPE, MFAudioFormat_Float, .required = TRUE),
+         ATTR_UINT32(MF_MT_AUDIO_NUM_CHANNELS, 2, .required = TRUE),
+         ATTR_UINT32(MF_MT_AUDIO_BITS_PER_SAMPLE, 32, .required = TRUE),
+         ATTR_UINT32(MF_MT_AUDIO_SAMPLES_PER_SECOND, 44100, .required = TRUE),
+@@ -4964,6 +4964,25 @@ if (SUCCEEDED(hr))
+     hr = IMFMediaTypeHandler_IsMediaTypeSupported(handler, mediatype2, NULL);
+     ok(hr == S_OK, "Unexpected hr %#lx.\n", hr);
+ 
++    /* Same format attributes, other subtype. Change a copy, the returned type is the renderer's own. */
++    hr = MFCreateMediaType(&mediatype3);
++    ok(hr == S_OK, "Failed to create media type, hr %#lx.\n", hr);
++    hr = IMFMediaType_CopyAllItems(mediatype2, (IMFAttributes *)mediatype3);
++    ok(hr == S_OK, "Unexpected hr %#lx.\n", hr);
++    hr = IMFMediaType_GetGUID(mediatype3, &MF_MT_SUBTYPE, &guid);
++    ok(hr == S_OK, "Unexpected hr %#lx.\n", hr);
++    hr = IMFMediaType_SetGUID(mediatype3, &MF_MT_SUBTYPE,
++            IsEqualGUID(&guid, &MFAudioFormat_Float) ? &MFAudioFormat_PCM : &MFAudioFormat_Float);
++    ok(hr == S_OK, "Unexpected hr %#lx.\n", hr);
++    hr = IMFMediaTypeHandler_IsMediaTypeSupported(handler, mediatype3, NULL);
++    ok(hr == MF_E_INVALIDMEDIATYPE, "Unexpected hr %#lx.\n", hr);
++    hr = IMFMediaTypeHandler_SetCurrentMediaType(handler, mediatype3);
++    ok(hr == MF_E_INVALIDMEDIATYPE, "Unexpected hr %#lx.\n", hr);
++    IMFMediaType_Release(mediatype3);
++
++    hr = IMFMediaTypeHandler_IsMediaTypeSupported(handler, mediatype2, NULL);
++    ok(hr == S_OK, "Unexpected hr %#lx.\n", hr);
++
+     IMFMediaType_Release(mediatype);
+ 
+     check_sar_rate_support(sink);
