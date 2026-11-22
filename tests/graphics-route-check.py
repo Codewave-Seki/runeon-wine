@@ -5,9 +5,14 @@ Checks how init_graphics_route() in dlls/ntdll/unix/loadorder.c reads and parses
 the route table: value type, length and terminator checks, per-entry validation,
 directory boundaries, overlap handling, buffer growth and the size limit. When
 the source carries the mesagl backend, it also checks that route, that it alone
-enables the table, and that it falls back to plain Wine without a directory. It does
-not start Wine, load any module or touch a prefix. Temporary C source and
-executable are removed when the check finishes.
+enables the table, and that it falls back to plain Wine without a directory. When
+it carries the d3dmetal-metalfx backend, it checks the extra directory, load order
+and D3DM_ variables of that route, the fallback to plain d3dmetal for every missing
+or invalid input, and that processes outside the route drop the variables only
+while RUNEON_GFX_DIR_METALFX is set. Without that backend, it checks that the id is
+skipped as malformed. It does not start Wine, load any module, check that D3DMetal
+honours the variables, or touch a prefix. Temporary C source and executable are
+removed when the check finishes.
 
 usage: graphics-route-check.py SOURCE_ROOT
 """
@@ -27,6 +32,9 @@ typedef uint16_t WCHAR;
 typedef uint32_t DWORD;
 typedef uint32_t NTSTATUS;
 typedef void *HANDLE;
+typedef int BOOL;
+#define TRUE 1
+#define FALSE 0
 typedef struct { uint16_t Length, MaximumLength; WCHAR *Buffer; } UNICODE_STRING;
 typedef struct { DWORD TitleIndex, Type, DataLength; unsigned char Data[1]; } KEY_VALUE_PARTIAL_INFORMATION;
 #define STATUS_SUCCESS 0
@@ -52,9 +60,11 @@ static void init_unicode_string(UNICODE_STRING *s, const WCHAR *d)
     unsigned int n = 0; while (d[n]) n++;
     s->Length = n * 2; s->MaximumLength = s->Length + 2; s->Buffer = (WCHAR *)d;
 }
-static const char *prepended;
+static const char *prepended, *prepended_second;
+static const WCHAR *override_set;
 static int queries, opens;
-static void prepend_dll_path(const char *p) { prepended = p; }
+static void prepend_dll_path(const char *p) { if (prepended) prepended_second = p; else prepended = p; }
+static void add_load_order_override(const WCHAR *entry) { override_set = entry; }
 static int has_value, value_type;
 static unsigned char value[2 * 1024 * 1024 + 64];
 static DWORD value_len;
@@ -97,7 +107,8 @@ static void check(const char *name, const char *exe, const char *want)
     for (const char *p = exe; *p; p++) path[n++] = (unsigned char)*p;
     path[n] = 0;
     image.Length = n * 2; image.MaximumLength = image.Length + 2; image.Buffer = path;
-    prepended = NULL;
+    prepended = prepended_second = NULL;
+    override_set = NULL;
     init_graphics_route(&image);
     const char *got = prepended ? prepended : "none";
     if (strcmp(got, want)) { printf("FAIL %s: want %s got %s\n", name, want, got); failures++; }
@@ -146,6 +157,11 @@ int main(void)
     setenv("RUNEON_GFX_DIR_DXMT", "", 1);
     check("empty backend directory prepends nothing", exe, "none");
     setenv("RUNEON_GFX_DIR_DXMT", "dxmt", 1);
+    /* an older build skips the id as malformed; without its variables a newer one
+     * behaves as the d3dmetal route */
+    set_table("C:\\Game=d3dmetal-metalfx");
+    check("metalfx id without its variables -> d3dmetal", exe, "apple");
+    if (prepended_second || override_set) { printf("FAIL metalfx id without its variables added more\n"); failures++; }
 
     /* ~9 KB table: needs the buffer to grow past its first size */
     {
@@ -213,6 +229,114 @@ int main(void)
     check("mesagl dir alone enables the table", exe, "mesa");
     if (!opens) { printf("FAIL mesagl dir alone did not read the registry\n"); failures++; }
 #endif
+#ifdef HAS_METALFX
+    {
+        static const char * const vars[] = { "D3DM_ENABLE_METALFX", "D3DM_SUPPORT_DXR", "D3DM_NVNGX_PATH" };
+        char ngx129[130], ngx130[131];
+        unsigned int i;
+#define INHERIT() do { setenv(vars[0], "1", 1); setenv(vars[1], "0", 1); setenv(vars[2], "C:\\x\\y", 1); } while (0)
+#define VARS_ARE(name, a, b, c) do { const char *want[3] = { a, b, c }; \
+        for (i = 0; i < 3; i++) { const char *got = getenv(vars[i]); \
+            if (want[i] ? !got || strcmp(got, want[i]) : got != NULL) \
+            { printf("FAIL %s: %s is %s\n", name, vars[i], got ? got : "unset"); failures++; } } } while (0)
+#define PLAIN(name) do { if (prepended_second || override_set) \
+        { printf("FAIL %s: metalfx additions applied\n", name); failures++; } } while (0)
+
+        setenv("RUNEON_GFX_DIR_D3DMETAL", "apple", 1);
+        setenv("RUNEON_GFX_DIR_DXMT", "dxmt", 1);
+        unsetenv("RUNEON_GFX_DIR_MESAGL");
+        setenv("RUNEON_GFX_DIR_METALFX", "/fx", 1);
+        setenv("RUNEON_METALFX_NGX_PATH", "C:\\runeon\\ngx", 1);
+        set_table("C:\\Game=d3dmetal-metalfx");
+        unsetenv(vars[0]); unsetenv(vars[1]); unsetenv(vars[2]);
+        check("metalfx route loads d3dmetal", exe, "apple");
+        if (!prepended_second || strcmp(prepended_second, "/fx"))
+        { printf("FAIL metalfx alias directory not prepended\n"); failures++; }
+        {
+            char o[64] = ""; unsigned int n = 0;
+            if (override_set) for (; override_set[n] && n < sizeof(o) - 1; n++) o[n] = (char)override_set[n];
+            o[n] = 0;
+            if (strcmp(o, "nvngx,nvapi64=n,b")) { printf("FAIL metalfx load order is '%s'\n", o); failures++; }
+        }
+        VARS_ARE("metalfx route sets the variables", "1", "0", "C:\\runeon\\ngx");
+        check("metalfx route outside the directory", "C:\\Game2\\game.exe", "apple");
+        PLAIN("metalfx route outside the directory");
+        VARS_ARE("process outside the route drops inherited variables", NULL, NULL, NULL);
+
+        memset(ngx129, 'a', sizeof(ngx129)); memcpy(ngx129, "C:\\", 3); ngx129[129] = 0;
+        setenv("RUNEON_METALFX_NGX_PATH", ngx129, 1);
+        check("129-character NGX path is used", exe, "apple");
+        VARS_ARE("129-character NGX path is used", "1", "0", ngx129);
+
+        {
+            static const char * const bad[] = { "C:\\runeon\\ngx\\", "C:/runeon/ngx", "C:\\runeon/ngx",
+                "runeon\\ngx", "\\\\?\\C:\\ngx", "C:\\", "1:\\ngx", "C:\\r\xc3\xa9", "C:\\a\tb", "" };
+            memset(ngx130, 'a', sizeof(ngx130)); memcpy(ngx130, "C:\\", 3); ngx130[130] = 0;
+            for (unsigned int b = 0; b <= ARRAY_SIZE(bad); b++)
+            {
+                setenv("RUNEON_METALFX_NGX_PATH", b < ARRAY_SIZE(bad) ? bad[b] : ngx130, 1);
+                INHERIT();
+                check("invalid NGX path -> d3dmetal", exe, "apple");
+                PLAIN("invalid NGX path");
+                VARS_ARE("invalid NGX path drops inherited variables", NULL, NULL, NULL);
+            }
+        }
+        unsetenv("RUNEON_METALFX_NGX_PATH");
+        INHERIT();
+        check("missing NGX path -> d3dmetal", exe, "apple");
+        PLAIN("missing NGX path");
+        VARS_ARE("missing NGX path drops inherited variables", NULL, NULL, NULL);
+        setenv("RUNEON_METALFX_NGX_PATH", "C:\\runeon\\ngx", 1);
+
+        setenv("RUNEON_GFX_DIR_METALFX", "fx", 1);
+        INHERIT();
+        check("relative metalfx directory -> d3dmetal", exe, "apple");
+        PLAIN("relative metalfx directory");
+        VARS_ARE("relative metalfx directory drops inherited variables", NULL, NULL, NULL);
+        setenv("RUNEON_GFX_DIR_METALFX", "", 1);
+        check("empty metalfx directory -> d3dmetal", exe, "apple");
+        PLAIN("empty metalfx directory");
+
+        /* manual testing: without the launcher's directory nothing is touched */
+        unsetenv("RUNEON_GFX_DIR_METALFX");
+        INHERIT();
+        check("no metalfx directory -> d3dmetal", exe, "apple");
+        PLAIN("no metalfx directory");
+        VARS_ARE("no metalfx directory keeps the caller's variables", "1", "0", "C:\\x\\y");
+        set_table("C:\\Game=dxmt");
+        check("no metalfx directory, other route", exe, "dxmt");
+        VARS_ARE("no metalfx directory, other route keeps the variables", "1", "0", "C:\\x\\y");
+        setenv("RUNEON_GFX_DIR_METALFX", "/fx", 1);
+        check("dxmt route in a managed launch", exe, "dxmt");
+        VARS_ARE("dxmt route drops inherited variables", NULL, NULL, NULL);
+
+        set_table("C:\\Game=d3dmetal-metalfx");
+        unsetenv("RUNEON_GFX_DIR_D3DMETAL");
+        INHERIT();
+        check("metalfx route without d3dmetal dir loads plain Wine", exe, "none");
+        PLAIN("metalfx route without d3dmetal dir");
+        VARS_ARE("metalfx route without d3dmetal dir drops inherited variables", NULL, NULL, NULL);
+        setenv("RUNEON_GFX_DIR_D3DMETAL", "apple", 1);
+
+        set_table("C:\\Game=d3dmetal-metalfx|C:\\Game\\Sub=dxmt");
+        INHERIT();
+        check("metalfx overlap -> default", exe, "apple");
+        PLAIN("metalfx overlap");
+        VARS_ARE("metalfx overlap drops inherited variables", NULL, NULL, NULL);
+        set_table("C:\\Game=D3DMETAL-METALFX|C:\\Game=d3dmetal-metalf|C:\\Game=d3dmetal-metalfx |C:\\Game=d3dmetalmetalfx");
+        check("malformed metalfx ids are skipped", exe, "apple");
+        PLAIN("malformed metalfx ids");
+
+        unsetenv("RUNEON_GFX_DIR_D3DMETAL");
+        unsetenv("RUNEON_GFX_DIR_DXMT");
+        set_table("C:\\Other=dxmt");
+        INHERIT();
+        opens = 0;
+        check("metalfx dir alone enables the table", exe, "none");
+        if (!opens) { printf("FAIL metalfx dir alone did not read the registry\n"); failures++; }
+        VARS_ARE("metalfx dir alone drops inherited variables", NULL, NULL, NULL);
+    }
+#endif
     return failures != 0;
 }
 '''
@@ -224,6 +348,10 @@ def extract(source):
     if ('#define GRAPHICS_ROUTES_PROTOCOL "runeon-graphics-routes-protocol-1"' not in source
             or 'TRACE( GRAPHICS_ROUTES_PROTOCOL ": ' not in source):
         raise SystemExit('graphics route protocol marker missing')
+    if 'GRAPHICS_D3DMETAL_METALFX' in source and (
+            '#define GRAPHICS_ROUTES_METALFX "runeon-graphics-routes-metalfx-1"' not in source
+            or 'TRACE( GRAPHICS_ROUTES_METALFX ": ' not in source):
+        raise SystemExit('graphics route metalfx marker missing')
     start = source.index('/* Runeon graphics backend ids;')
     end = source.index('/***************************************************************************\n *\tget_load_order ', start)
     return source[start:end]
@@ -234,7 +362,9 @@ def main():
         raise SystemExit(f'usage: {sys.argv[0]} SOURCE_ROOT')
     path = Path(sys.argv[1]).resolve(strict=True) / 'dlls/ntdll/unix/loadorder.c'
     source = extract(path.read_text())
-    code = ('#define HAS_MESAGL 1\n' if 'GRAPHICS_MESAGL' in source else '') + HARNESS + source + MAIN
+    code = (('#define HAS_MESAGL 1\n' if 'GRAPHICS_MESAGL' in source else '')
+            + ('#define HAS_METALFX 1\n' if 'GRAPHICS_D3DMETAL_METALFX' in source else '')
+            + HARNESS + source + MAIN)
     with tempfile.TemporaryDirectory(prefix='graphics-route-check-') as tmp:
         c = Path(tmp) / 'check.c'
         binary = Path(tmp) / 'check'

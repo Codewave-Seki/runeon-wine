@@ -1505,3 +1505,32 @@ Patch set `cx26.3-wine11.0-runeon.40` adds `patches/upstream/0201` (WineHQ `8db3
 - Validation: with one test build, `test_sar()` fails against `mf.dll` built without `0203` (`mf.c:4932: "MF_MT_SUBTYPE": IsMediaTypeSupported returned 0`, `mf.c:4978` and `mf.c:4980: Unexpected hr 0`, plus a leaked sink reference at `mf.c:5218`) and passes with it, on both architectures, with an audio device present (no skip).
 - Wine's `mf` tests (`mf`, `topology`, `transform`) on a complete build with `0203`, both architectures: no new failure compared with `.40` without it.
 - In the affected title the audio goes through the resampler into the float mix format and sounds correct, in sync with the video; a second title playing float audio through the media engine is unchanged (maintainer's local tests). Not verified: a run on Windows (in particular that the native renderer rejects the switched subtype rather than converting).
+
+<a id="graphics-route-d3dmetal-metalfx"></a>
+
+## Graphics route for D3DMetal with MetalFX
+
+Patch set `cx26.3-wine11.0-runeon.41` adds `patches/runeon/0204` after `0203`. Status: the maintainer approved it individually on 2026-11-22 as an extension of the per-process graphics route (`0109`, `0113`). It is an ABI-sensitive `ntdll` change, opt-in through the route table and the launcher's variables.
+
+### Need
+
+- D3DMetal's NGX bridge runs DLSS super resolution on MetalFX. It needs `D3DM_ENABLE_METALFX`, `D3DM_NVNGX_PATH`, the bridge reachable as `nvngx` and `_nvngx` (PE and Unix library), and `nvngx`/`nvapi64` loaded native first.
+- Setting these for a whole launcher session reaches every process, not one program, and `SetEnvironmentVariable()` cannot reach them.
+- Reader: of the D3DMetal 4.0 beta 3 files, only the Unix-side `D3DMetal.framework` binary contains the three names and imports `getenv`. Its PE modules (`d3d10`, `d3d11`, `d3d12`, `dxgi`, `nvapi64`, `nvngx-on-metalfx`) contain none of them, as ASCII or UTF-16. So only the Unix environment is set.
+- Builtin lookup: a builtin-marked native file is resolved again by its export name, `nvngx.dll` for the bridge, and its Unix library is taken from the same directory under that name. The alias directory therefore needs `nvngx` as well as `_nvngx`, in both forms.
+- DXR: in a local run with MetalFX on, an Unreal Engine program queried NVAPI ray-tracing caps and D3DMetal aborted on opacity-micromap geometry (`Unknown geometry type 2`). With `D3DM_SUPPORT_DXR=0` added, nothing else changed, the abort was gone and DLSS could be selected. So the route turns DXR off with MetalFX.
+
+### Design
+
+- New backend id `d3dmetal-metalfx`. It loads D3DMetal from `RUNEON_GFX_DIR_D3DMETAL`, as the `d3dmetal` route does.
+- In addition: `RUNEON_GFX_DIR_METALFX` is prepended to the builtin search path, `nvngx,nvapi64=n,b` is added with the existing `add_load_order_override()`, and the three `D3DM_` variables are set before any module loads.
+- Inputs: `RUNEON_GFX_DIR_METALFX` must be absolute. `RUNEON_METALFX_NGX_PATH` must be a drive path of at most 129 printable ASCII characters, D3DMetal's limit, without a trailing separator. Otherwise, or without a D3DMetal directory, the process behaves as on the `d3dmetal` route.
+- Inheritance: a child inherits the Unix environment. While `RUNEON_GFX_DIR_METALFX` is set, every process not given MetalFX drops the three variables. Without it nothing is touched, so a caller's own variables keep working.
+- Older builds skip the unknown id as a malformed entry; the program gets the `d3dmetal` default.
+- Capability marker: `runeon-graphics-routes-metalfx-1`, kept in a TRACE format string like `runeon-graphics-routes-protocol-1`.
+- Nothing is keyed on a program; the launcher chooses the directories.
+
+### Validation
+
+- `tests/graphics-route-check.py` compiles the patched route code. It checks the route, load order and variables, the fallback for each invalid or missing input, overlap, malformed ids, the strip only while `RUNEON_GFX_DIR_METALFX` is set, and the marker. Against `.40` it checks that the id is skipped.
+- Not yet verified: a complete i386/x86_64 WoW64 build, and a run with the route of a DLSS program next to a second program without it in the same session. Both are required before tagging.
