@@ -1,0 +1,226 @@
+From: Runeon Contributors <dev@runeon.com>
+Subject: [PATCH] ntdll: Add a dxmt-metalfx graphics route.
+
+DXMT's NVIDIA extension (DXMT_ENABLE_NVEXT) lets a program reach DLSS
+super resolution through DXMT's nvngx, which converts the calls to
+MetalFX. NGX finds its core through the registry value FullPath, so the
+extension also needs a directory that holds a signed nvngx and _nvngx,
+and nvngx and nvapi64 loaded native first. Turning the extension on for
+a whole launcher session would report an NVIDIA adapter to every
+process, not one program.
+
+Add a "dxmt-metalfx" backend id to the per-process route table. A
+process whose own image is inside exactly one directory routed to it
+loads DXMT from RUNEON_GFX_DIR_DXMT as the dxmt route does, and
+additionally:
+
+- nvngx and nvapi64 get the load order native,builtin;
+- DXMT_ENABLE_NVEXT=1 and DXMT_NVEXT_NGX_PATH set to
+  RUNEON_DXMT_NGX_PATH are set in its Unix environment before any
+  module loads. DXMT from its 0.80-runeon.9 patch set reads both there
+  through its winemetal Unix library and points FullPath at that path.
+
+RUNEON_DXMT_NGX_PATH is checked by the same rule as the d3dmetal-metalfx
+route's NGX path, now one shared helper: a drive path of at most 129
+printable ASCII characters without a trailing separator. If it is
+missing or invalid, or DXMT has no directory, the process behaves
+exactly as on the dxmt route and nothing more is set.
+
+Children inherit the Unix environment. So that a program's request does
+not reach processes outside the route, every process that is not given
+the route drops the two DXMT_ variables when RUNEON_DXMT_NGX_PATH is
+set; without it, a caller's own variables stay untouched. The
+d3dmetal-metalfx strip is unchanged except that it now also runs in a
+process given the dxmt-metalfx route. Nothing is keyed on a program:
+the launcher chooses the directories. Older builds skip the unknown id
+as a malformed entry, so a routed program falls back to the d3dmetal
+default there; a launcher checks the marker first.
+
+The string "runeon-graphics-routes-dxmt-metalfx-1" is kept in the built
+module so a launcher can tell that this route is understood before
+publishing it.
+
+--- a/dlls/ntdll/unix/loadorder.c
++++ b/dlls/ntdll/unix/loadorder.c
+@@ -388,7 +388,7 @@
+ 
+ /* Runeon graphics backend ids; the launcher supplies each directory. */
+ enum graphics_backend { GRAPHICS_DEFAULT, GRAPHICS_D3DMETAL, GRAPHICS_DXMT, GRAPHICS_WINE, GRAPHICS_MESAGL,
+-                        GRAPHICS_D3DMETAL_METALFX };
++                        GRAPHICS_D3DMETAL_METALFX, GRAPHICS_DXMT_METALFX };
+ 
+ /* One route table is at most a few hundred games; a value whose query buffer
+  * would exceed this is not ours. */
+@@ -403,10 +403,21 @@
+  * tell that this ntdll understands the d3dmetal-metalfx route. */
+ #define GRAPHICS_ROUTES_METALFX "runeon-graphics-routes-metalfx-1"
+ 
++/* Likewise for the dxmt-metalfx route. */
++#define GRAPHICS_ROUTES_DXMT_METALFX "runeon-graphics-routes-dxmt-metalfx-1"
++
+ /* D3DMetal reads these with getenv() on the Unix side when it initialises; its
+  * PE modules do not read them, so the Windows environment does not matter. */
+ static const char * const metalfx_vars[] = { "D3DM_ENABLE_METALFX", "D3DM_SUPPORT_DXR", "D3DM_NVNGX_PATH" };
++
++/* DXMT from its 0.80-runeon.9 patch set reads these from the Unix environment
++ * through its winemetal Unix library, so they too stay out of the Windows
++ * environment. */
++static const char * const dxmt_metalfx_vars[] = { "DXMT_ENABLE_NVEXT", "DXMT_NVEXT_NGX_PATH" };
+ 
++/* Both NGX routes load the NGX core found through the registry, not a builtin. */
++static const WCHAR ngx_overridesW[] = {'n','v','n','g','x',',','n','v','a','p','i','6','4','=','n',',','b',0};
++
+ /***************************************************************************
+  *	parse_graphics_route
+  *
+@@ -422,6 +433,7 @@
+     static const WCHAR wineW[] = {'w','i','n','e'};
+     static const WCHAR mesaglW[] = {'m','e','s','a','g','l'};
+     static const WCHAR metalfxW[] = {'d','3','d','m','e','t','a','l','-','m','e','t','a','l','f','x'};
++    static const WCHAR dxmt_metalfxW[] = {'d','x','m','t','-','m','e','t','a','l','f','x'};
+     unsigned int i, sep = 0, id_len;
+     const WCHAR *id;
+ 
+@@ -449,7 +461,32 @@
+     if (id_len == ARRAY_SIZE(mesaglW) && !memcmp( id, mesaglW, sizeof(mesaglW) )) return GRAPHICS_MESAGL;
+     if (id_len == ARRAY_SIZE(metalfxW) && !memcmp( id, metalfxW, sizeof(metalfxW) ))
+         return GRAPHICS_D3DMETAL_METALFX;
++    if (id_len == ARRAY_SIZE(dxmt_metalfxW) && !memcmp( id, dxmt_metalfxW, sizeof(dxmt_metalfxW) ))
++        return GRAPHICS_DXMT_METALFX;
+     return GRAPHICS_DEFAULT;
++}
++
++
++/***************************************************************************
++ *	is_ngx_path
++ *
++ * Runeon: an NGX core directory from the launcher. D3DMetal takes at most 129
++ * characters; a drive path without a trailing separator, as the route
++ * directories are.
++ */
++static BOOL is_ngx_path( const char *ngx )
++{
++    size_t i, len;
++
++    if (!ngx) return FALSE;
++    len = strlen( ngx );
++    if (len < 4 || len > 129 ||
++        !((ngx[0] >= 'A' && ngx[0] <= 'Z') || (ngx[0] >= 'a' && ngx[0] <= 'z')) ||
++        ngx[1] != ':' || ngx[2] != '\\' || ngx[len - 1] == '\\')
++        return FALSE;
++    for (i = 3; i < len; i++)
++        if ((unsigned char)ngx[i] < 0x20 || (unsigned char)ngx[i] > 0x7e || ngx[i] == '/') return FALSE;
++    return TRUE;
+ }
+ 
+ 
+@@ -466,24 +503,13 @@
+  */
+ static BOOL init_metalfx_route(void)
+ {
+-    static const WCHAR overridesW[] = {'n','v','n','g','x',',','n','v','a','p','i','6','4','=','n',',','b',0};
+     const char *alias = getenv( "RUNEON_GFX_DIR_METALFX" );
+     const char *ngx = getenv( "RUNEON_METALFX_NGX_PATH" );
+-    size_t i, len;
+ 
+-    if (!alias || alias[0] != '/' || !ngx) return FALSE;
+-    /* D3DMetal takes at most 129 characters; a drive path without a trailing
+-     * separator, as the route directories are */
+-    len = strlen( ngx );
+-    if (len < 4 || len > 129 ||
+-        !((ngx[0] >= 'A' && ngx[0] <= 'Z') || (ngx[0] >= 'a' && ngx[0] <= 'z')) ||
+-        ngx[1] != ':' || ngx[2] != '\\' || ngx[len - 1] == '\\')
+-        return FALSE;
+-    for (i = 3; i < len; i++)
+-        if ((unsigned char)ngx[i] < 0x20 || (unsigned char)ngx[i] > 0x7e || ngx[i] == '/') return FALSE;
++    if (!alias || alias[0] != '/' || !is_ngx_path( ngx )) return FALSE;
+ 
+     prepend_dll_path( alias );
+-    add_load_order_override( overridesW );
++    add_load_order_override( ngx_overridesW );
+     setenv( metalfx_vars[0], "1", 1 );
+     setenv( metalfx_vars[1], "0", 1 );
+     setenv( metalfx_vars[2], ngx, 1 );
+@@ -493,6 +519,28 @@
+ 
+ 
+ /***************************************************************************
++ *	init_dxmt_metalfx_route
++ *
++ * Runeon: on top of DXMT's directory, load nvngx and nvapi64 native first and
++ * ask DXMT for its NVIDIA extension with the NGX core directory
++ * RUNEON_DXMT_NGX_PATH, where the launcher keeps DXMT's signed nvngx. Changes
++ * nothing and returns FALSE when the variable is missing or invalid.
++ */
++static BOOL init_dxmt_metalfx_route(void)
++{
++    const char *ngx = getenv( "RUNEON_DXMT_NGX_PATH" );
++
++    if (!is_ngx_path( ngx )) return FALSE;
++
++    add_load_order_override( ngx_overridesW );
++    setenv( dxmt_metalfx_vars[0], "1", 1 );
++    setenv( dxmt_metalfx_vars[1], ngx, 1 );
++    TRACE( GRAPHICS_ROUTES_DXMT_METALFX ": ngx %s\n", debugstr_a(ngx) );
++    return TRUE;
++}
++
++
++/***************************************************************************
+  *	init_graphics_route
+  *
+  * Runeon: choose exactly one graphics backend directory for this process
+@@ -522,7 +570,8 @@
+     HANDLE key;
+ 
+     if (!getenv( "RUNEON_GFX_DIR_D3DMETAL" ) && !getenv( "RUNEON_GFX_DIR_DXMT" ) &&
+-        !getenv( "RUNEON_GFX_DIR_MESAGL" ) && !getenv( "RUNEON_GFX_DIR_METALFX" )) return;
++        !getenv( "RUNEON_GFX_DIR_MESAGL" ) && !getenv( "RUNEON_GFX_DIR_METALFX" ) &&
++        !getenv( "RUNEON_DXMT_NGX_PATH" )) return;
+ 
+     if (!open_hkcu_key( "Software\\Runeon\\GraphicsRoutes", &key ))
+     {
+@@ -583,28 +632,36 @@
+     {
+     case GRAPHICS_D3DMETAL:
+     case GRAPHICS_D3DMETAL_METALFX: dir = getenv( "RUNEON_GFX_DIR_D3DMETAL" ); break;
+-    case GRAPHICS_DXMT: dir = getenv( "RUNEON_GFX_DIR_DXMT" ); break;
++    case GRAPHICS_DXMT:
++    case GRAPHICS_DXMT_METALFX: dir = getenv( "RUNEON_GFX_DIR_DXMT" ); break;
+     /* Mesa replaces opengl32 only; Direct3D modules stay with plain Wine. */
+     case GRAPHICS_MESAGL: dir = getenv( "RUNEON_GFX_DIR_MESAGL" ); break;
+     default: break;
+     }
+     /* a routed backend without a directory loads plain Wine, never another backend */
+-    if ((chosen == GRAPHICS_DXMT || chosen == GRAPHICS_MESAGL) && !dir)
++    if ((chosen == GRAPHICS_DXMT || chosen == GRAPHICS_DXMT_METALFX || chosen == GRAPHICS_MESAGL) && !dir)
+         WARN( "no directory for graphics backend %u, using plain Wine\n", chosen );
+     TRACE( GRAPHICS_ROUTES_PROTOCOL ": graphics backend %u dir %s for %s\n",
+            chosen, debugstr_a(dir), debugstr_us(image) );
+     if (dir && *dir) prepend_dll_path( dir );
+ 
+-    if (chosen == GRAPHICS_D3DMETAL_METALFX)
++    if (chosen == GRAPHICS_D3DMETAL_METALFX && !(dir && *dir && init_metalfx_route()))
+     {
+-        if (dir && *dir && init_metalfx_route()) return;
+         WARN( "no valid MetalFX configuration, using d3dmetal\n" );
++        chosen = GRAPHICS_D3DMETAL;
+     }
+-    /* A child inherits the Unix environment, so a process outside the route
++    if (chosen == GRAPHICS_DXMT_METALFX && !(dir && *dir && init_dxmt_metalfx_route()))
++    {
++        WARN( "no valid DXMT MetalFX configuration, using dxmt\n" );
++        chosen = GRAPHICS_DXMT;
++    }
++    /* A child inherits the Unix environment, so a process outside a route
+      * must not keep its parent's MetalFX request. Without the launcher's
+-     * directory the variables belong to the caller and stay. */
+-    if (getenv( "RUNEON_GFX_DIR_METALFX" ))
++     * directory or NGX path, the variables belong to the caller and stay. */
++    if (chosen != GRAPHICS_D3DMETAL_METALFX && getenv( "RUNEON_GFX_DIR_METALFX" ))
+         for (i = 0; i < ARRAY_SIZE(metalfx_vars); i++) unsetenv( metalfx_vars[i] );
++    if (chosen != GRAPHICS_DXMT_METALFX && getenv( "RUNEON_DXMT_NGX_PATH" ))
++        for (i = 0; i < ARRAY_SIZE(dxmt_metalfx_vars); i++) unsetenv( dxmt_metalfx_vars[i] );
+ }
+ 
+ 

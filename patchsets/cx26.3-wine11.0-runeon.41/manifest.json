@@ -4714,6 +4714,30 @@
           "contains": "    case GRAPHICS_D3DMETAL_METALFX: dir = getenv( \"RUNEON_GFX_DIR_D3DMETAL\" ); break;"
         }
       ]
+    },
+    {
+      "order": 235,
+      "path": "patches/runeon/0205-ntdll-graphics-route-dxmt-metalfx.patch",
+      "sha256": "09fb768c3231cfcfb0aacc0103e4947cbecfe037d89265c64f94f4a0ae9be71d",
+      "kind": "runeon-product",
+      "status": "active",
+      "risk": "medium",
+      "summary": "Adds a dxmt-metalfx backend id to the per-process graphics route table. A process whose own image is inside exactly one directory routed to it loads DXMT from RUNEON_GFX_DIR_DXMT as the dxmt route does, and additionally gets the load order nvngx,nvapi64=native,builtin and DXMT_ENABLE_NVEXT=1 and DXMT_NVEXT_NGX_PATH=<RUNEON_DXMT_NGX_PATH> in its Unix environment before any module loads; DXMT from its 0.80-runeon.9 patch set reads both through its winemetal Unix library and points the NGX core path at that directory. RUNEON_DXMT_NGX_PATH is checked by the rule the d3dmetal-metalfx route uses, now one shared helper: a drive path of at most 129 printable ASCII characters without a trailing separator; if it is missing or invalid, or DXMT has no directory, the process behaves exactly as on the dxmt route. While RUNEON_DXMT_NGX_PATH is set, every process not given the route drops the two DXMT_ variables, so a child outside the route does not inherit them; without it nothing is touched. Older builds skip the unknown id, so the program gets the d3dmetal default. The string runeon-graphics-routes-dxmt-metalfx-1 stays in the built module as the capability marker. Never keyed on a program. ABI-sensitive ntdll change, opt-in through the route table and the launcher's variables; approved individually by the maintainer on 2026-11-22, see docs/upstream-reviews.md#graphics-route-dxmt-metalfx.",
+      "testStrategy": "tests/graphics-route-check.py compiles the patched route code and, when the dxmt-metalfx id is present, checks the routed directory, load order and the two variables, each invalid or missing input falling back to plain dxmt, overlap, the strip in processes outside the route only while RUNEON_DXMT_NGX_PATH is set, that each MetalFX route drops the other's variables, and the capability marker; against .40 it checks that the id is skipped. A complete i386/x86_64 WoW64 build and a run of a DLSS program on DXMT with the route, plus a second program without it in the same session, are still required before tagging.",
+      "verification": [
+        {
+          "path": "dlls/ntdll/unix/loadorder.c",
+          "contains": "#define GRAPHICS_ROUTES_DXMT_METALFX \"runeon-graphics-routes-dxmt-metalfx-1\""
+        },
+        {
+          "path": "dlls/ntdll/unix/loadorder.c",
+          "contains": "static BOOL init_dxmt_metalfx_route(void)"
+        },
+        {
+          "path": "dlls/ntdll/unix/loadorder.c",
+          "contains": "    case GRAPHICS_DXMT_METALFX: dir = getenv( \"RUNEON_GFX_DIR_DXMT\" ); break;"
+        }
+      ]
     }
   ],
   "targetedReview": {

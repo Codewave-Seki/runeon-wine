@@ -1534,3 +1534,35 @@ Patch set `cx26.3-wine11.0-runeon.41` adds `patches/runeon/0204` after `0203`. S
 
 - `tests/graphics-route-check.py` compiles the patched route code. It checks the route, load order and variables, the fallback for each invalid or missing input, overlap, malformed ids, the strip only while `RUNEON_GFX_DIR_METALFX` is set, and the marker. Against `.40` it checks that the id is skipped.
 - Not yet verified: a complete i386/x86_64 WoW64 build, and a run with the route of a DLSS program next to a second program without it in the same session. Both are required before tagging.
+
+<a id="graphics-route-dxmt-metalfx"></a>
+
+## Graphics route for DXMT with MetalFX
+
+Patch set `cx26.3-wine11.0-runeon.41` adds `patches/runeon/0205` after `0204`. Status: the maintainer approved it individually on 2026-11-22 as an extension of `0204`. It is an ABI-sensitive `ntdll` change, opt-in through the route table and the launcher's variable.
+
+### Need
+
+- DXMT's nvngx converts DLSS super resolution calls to MetalFX. It takes effect only with `DXMT_ENABLE_NVEXT=1`, an NGX core directory holding a signed `nvngx` and `_nvngx`, and `nvngx`/`nvapi64` loaded native first.
+- `DXMT_ENABLE_NVEXT` makes DXMT report an NVIDIA adapter. Set for a whole launcher session it reaches every process, not one program.
+
+### Environment delivery
+
+- Upstream DXMT reads its variables with `GetEnvironmentVariableW()`. A Wine child process takes its Windows environment from its parent's startup info, so a Unix `setenv()` as in `0204` does not reach it.
+- Writing the Windows environment from `ntdll` was considered and not taken. By the time the route is known, `init_startup_info()` has built the process parameters with the environment inside the same allocation, and `init_peb()` has copied them for a WoW64 process into a second block below 2 GB. Changing the environment would mean rebuilding both blocks in the Unix part of `ntdll` before the PE loader copies them.
+- Taken instead: the route sets two Unix variables, exactly as `0204` does, and DXMT from its `0.80-runeon.9` patch set reads them through its own `winemetal` Unix library. Wine's change stays in `loadorder.c`, with no change to process parameters, unix-call tables or the wineserver protocol.
+
+### Design
+
+- New backend id `dxmt-metalfx`. It loads DXMT from `RUNEON_GFX_DIR_DXMT`, as the `dxmt` route does.
+- In addition: `nvngx,nvapi64=n,b` is added with the existing `add_load_order_override()`, and `DXMT_ENABLE_NVEXT=1` and `DXMT_NVEXT_NGX_PATH=<RUNEON_DXMT_NGX_PATH>` are set in the Unix environment before any module loads.
+- Input: `RUNEON_DXMT_NGX_PATH` follows the `0204` rule for `RUNEON_METALFX_NGX_PATH`, now one helper: a drive path of at most 129 printable ASCII characters without a trailing separator. Otherwise, or without a DXMT directory, the process behaves as on the `dxmt` route.
+- Inheritance: while `RUNEON_DXMT_NGX_PATH` is set, every process not given the route drops the two `DXMT_` variables. Without it nothing is touched. The `0204` strip now also runs in a process given `dxmt-metalfx`, so the two routes never share variables.
+- Older builds skip the unknown id as a malformed entry; the program gets the `d3dmetal` default. A launcher publishes the id only after finding the marker.
+- Capability marker: `runeon-graphics-routes-dxmt-metalfx-1`, kept in a TRACE format string.
+- Nothing is keyed on a program; the launcher chooses the directories. No NVIDIA identity is set here; DXMT reports it only while its extension is on.
+
+### Validation
+
+- `tests/graphics-route-check.py` compiles the patched route code. It checks the route, load order and variables, the fallback for each invalid or missing input, overlap, malformed ids, the strip only while `RUNEON_DXMT_NGX_PATH` is set, that each MetalFX route drops the other's variables, and the marker. Against `.40` it checks that the id is skipped. Removing the strip or the fallback makes it fail.
+- Not yet verified: a complete i386/x86_64 WoW64 build, that DXMT reads the variables (it needs its `0.80-runeon.9` component), and a run with the route of a DLSS program next to a second program without it in the same session. All are required before tagging.
