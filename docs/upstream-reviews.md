@@ -1571,7 +1571,7 @@ Patch set `cx26.3-wine11.0-runeon.41` adds `patches/runeon/0205` after `0204`. S
 
 ## NGX file isolation for graphics routes
 
-Patch set `cx26.3-wine11.0-runeon.41` adds `patches/runeon/0206` after `0205`. It extends the two MetalFX routes the maintainer approved on 2026-11-22. It is an ABI-sensitive `ntdll` change, opt-in through the launcher's variables.
+Patch set `cx26.3-wine11.0-runeon.41` adds `patches/runeon/0206` after `0205`. Status: the maintainer approved it individually for `ntdll` on 2026-11-24, for this patch only; it is not a precedent. It is an ABI-sensitive `ntdll` change, opt-in through the launcher's variables.
 
 ### Need
 
@@ -1586,7 +1586,7 @@ Patch set `cx26.3-wine11.0-runeon.41` adds `patches/runeon/0206` after `0205`. I
 - Each directory passes the existing NGX path rule. One containing a space, comma or equals sign is ignored, because `add_load_order_set()` would split it into rules for other modules.
 - `get_load_order()` tries the full path before any basename, ignoring case and the NT prefix. `load_builtin()` refuses a disabled module before mapping it, for native and builtin images.
 - Unchanged: processes on a MetalFX route, basename rules for `nvngx` and `nvapi64`, a program's own copies, the System32 placeholder and launches without the variables. The registry is not read or written.
-- Limit: the rule matches the path as opened. The same file reached through another name, such as a `Z:` path or an 8.3 short name, is not covered; `FullPath` holds the drive path the rule matches.
+- Limit: the rule covers loads by these four full paths only. The same file reached through another name, such as a `Z:` path or an 8.3 short name, is not covered; `FullPath` holds the drive path the rule matches. A process on a plain `dxmt` route that resolves `nvngx` by basename, including through the System32 placeholder, can still get the same file from the DXMT component directory. That path predates this patch and is left alone because a basename rule would change the `nvngx` load order for programs' own copies.
 
 ### Validation
 
