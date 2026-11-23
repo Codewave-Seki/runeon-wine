@@ -12,8 +12,9 @@ or invalid input, and that processes outside the route drop the variables only
 while RUNEON_GFX_DIR_METALFX is set. When it carries the dxmt-metalfx backend, it
 checks the load order and DXMT_ variables of that route, the fallback to plain dxmt,
 that processes outside the route drop the variables only while RUNEON_DXMT_NGX_PATH
-is set, and that each MetalFX route drops the other's variables. Without a backend,
-it checks that its id is skipped as malformed. It does not start Wine, load any
+is set, and that each MetalFX route drops the other's variables. When it carries the
+NGX file isolation, it checks which exact-path disable rules each route outcome adds.
+Without a backend, it checks that its id is skipped as malformed. It does not start Wine, load any
 module, check that D3DMetal or DXMT honours the variables, or touch a prefix. Temporary C source and executable are
 removed when the check finishes.
 
@@ -67,7 +68,20 @@ static const char *prepended, *prepended_second;
 static const WCHAR *override_set;
 static int queries, opens;
 static void prepend_dll_path(const char *p) { if (prepended) prepended_second = p; else prepended = p; }
-static void add_load_order_override(const WCHAR *entry) { override_set = entry; }
+/* A drive path is an NGX file rule; anything else is the route's module override. */
+static char disabled[8][160];
+static int disabled_count;
+static void add_load_order_override(const WCHAR *entry)
+{
+    unsigned int n = 0;
+    if (entry[1] != ':') { override_set = entry; return; }
+    if (disabled_count < 8)
+    {
+        for (; entry[n] && n < sizeof(disabled[0]) - 1; n++) disabled[disabled_count][n] = (char)entry[n];
+        disabled[disabled_count][n] = 0;
+    }
+    disabled_count++;
+}
 static int has_value, value_type;
 static unsigned char value[2 * 1024 * 1024 + 64];
 static DWORD value_len;
@@ -112,11 +126,25 @@ static void check(const char *name, const char *exe, const char *want)
     image.Length = n * 2; image.MaximumLength = image.Length + 2; image.Buffer = path;
     prepended = prepended_second = NULL;
     override_set = NULL;
+    disabled_count = 0;
     init_graphics_route(&image);
     const char *got = prepended ? prepended : "none";
     if (strcmp(got, want)) { printf("FAIL %s: want %s got %s\n", name, want, got); failures++; }
     else printf("pass %s\n", name);
 }
+#ifdef HAS_NGX_ISOLATION
+static void expect_disabled(const char *name, int count, const char *dir_a, const char *dir_b)
+{
+    char want[4][160];
+    int n = 0;
+    if (dir_a) { snprintf(want[n++], 160, "%s\\nvngx=", dir_a); snprintf(want[n++], 160, "%s\\_nvngx=", dir_a); }
+    if (dir_b) { snprintf(want[n++], 160, "%s\\nvngx=", dir_b); snprintf(want[n++], 160, "%s\\_nvngx=", dir_b); }
+    if (disabled_count != count || n != count)
+    { printf("FAIL %s: %d disable rules, want %d\n", name, disabled_count, count); failures++; return; }
+    for (int i = 0; i < n; i++)
+        if (strcmp(disabled[i], want[i])) { printf("FAIL %s: rule %s\n", name, disabled[i]); failures++; }
+}
+#endif
 int main(void)
 {
     const char *exe = "C:\\Game\\Sub\\game.exe";
@@ -465,6 +493,67 @@ int main(void)
         DVARS_ARE("DXMT NGX path alone drops inherited variables", NULL, NULL);
     }
 #endif
+#ifdef HAS_NGX_ISOLATION
+    {
+        static const char * const unsafe[] = { "C:\\a b", "C:\\a,b", "C:\\a=b", "C:\\a d3d11 b" };
+        const char *fx = "C:\\runeon\\ngx", *dx = "C:\\runeon\\ngx-dxmt";
+        setenv("RUNEON_GFX_DIR_D3DMETAL", "apple", 1);
+        setenv("RUNEON_GFX_DIR_DXMT", "dxmt", 1);
+        unsetenv("RUNEON_GFX_DIR_MESAGL");
+        setenv("RUNEON_GFX_DIR_METALFX", "/fx", 1);
+        setenv("RUNEON_METALFX_NGX_PATH", fx, 1);
+        setenv("RUNEON_DXMT_NGX_PATH", dx, 1);
+
+        set_table("C:\\Game=dxmt");
+        check("isolation: plain route", exe, "dxmt");
+        expect_disabled("plain route disables both directories", 4, fx, dx);
+        check("isolation: outside any route", "C:\\Other\\app.exe", "apple");
+        expect_disabled("unrouted process disables both directories", 4, fx, dx);
+        set_table("C:\\Game=d3dmetal-metalfx");
+        check("isolation: d3dmetal-metalfx", exe, "apple");
+        expect_disabled("d3dmetal-metalfx adds no rule", 0, NULL, NULL);
+        set_table("C:\\Game=dxmt-metalfx");
+        check("isolation: dxmt-metalfx", exe, "dxmt");
+        expect_disabled("dxmt-metalfx adds no rule", 0, NULL, NULL);
+
+        /* a MetalFX route that fell back is not on it */
+        set_table("C:\\Game=d3dmetal-metalfx");
+        setenv("RUNEON_GFX_DIR_METALFX", "relative", 1);
+        check("isolation: invalid metalfx configuration", exe, "apple");
+        expect_disabled("fallback from d3dmetal-metalfx disables both", 4, fx, dx);
+        setenv("RUNEON_GFX_DIR_METALFX", "/fx", 1);
+        set_table("C:\\Game=dxmt-metalfx");
+        setenv("RUNEON_GFX_DIR_DXMT", "", 1);
+        check("isolation: dxmt-metalfx without a directory", exe, "none");
+        expect_disabled("fallback from dxmt-metalfx disables both", 4, fx, dx);
+        setenv("RUNEON_GFX_DIR_DXMT", "dxmt", 1);
+        setenv("RUNEON_DXMT_NGX_PATH", "C:\\bad\\", 1);
+        check("isolation: invalid DXMT NGX path", exe, "dxmt");
+        expect_disabled("invalid path gets no rule", 2, fx, NULL);
+        setenv("RUNEON_DXMT_NGX_PATH", dx, 1);
+
+        /* the load order parser must not see these as several modules */
+        set_table("C:\\Game=dxmt");
+        for (unsigned int u = 0; u < ARRAY_SIZE(unsafe); u++)
+        {
+            setenv("RUNEON_METALFX_NGX_PATH", unsafe[u], 1);
+            check("isolation: separator in NGX path", exe, "dxmt");
+            expect_disabled("separator in NGX path gets no rule", 2, dx, NULL);
+        }
+        setenv("RUNEON_METALFX_NGX_PATH", fx, 1);
+
+        /* the NGX path alone is not the launcher's D3DMetal MetalFX setup */
+        unsetenv("RUNEON_GFX_DIR_METALFX");
+        unsetenv("RUNEON_DXMT_NGX_PATH");
+        check("isolation: NGX path without the launcher directory", exe, "dxmt");
+        expect_disabled("NGX path without the launcher directory", 0, NULL, NULL);
+        unsetenv("RUNEON_METALFX_NGX_PATH");
+        unsetenv("RUNEON_GFX_DIR_D3DMETAL");
+        unsetenv("RUNEON_GFX_DIR_DXMT");
+        check("isolation: unmanaged launch", exe, "none");
+        expect_disabled("unmanaged launch adds no rule", 0, NULL, NULL);
+    }
+#endif
     return failures != 0;
 }
 '''
@@ -497,6 +586,7 @@ def main():
     code = (('#define HAS_MESAGL 1\n' if 'GRAPHICS_MESAGL' in source else '')
             + ('#define HAS_METALFX 1\n' if 'GRAPHICS_D3DMETAL_METALFX' in source else '')
             + ('#define HAS_DXMT_METALFX 1\n' if 'GRAPHICS_DXMT_METALFX' in source else '')
+            + ('#define HAS_NGX_ISOLATION 1\n' if 'disable_ngx_files' in source else '')
             + HARNESS + source + MAIN)
     with tempfile.TemporaryDirectory(prefix='graphics-route-check-') as tmp:
         c = Path(tmp) / 'check.c'

@@ -1,0 +1,76 @@
+From: Runeon Contributors <dev@runeon.com>
+Subject: [PATCH] ntdll: Keep NGX route files out of unrouted processes.
+
+The d3dmetal-metalfx and dxmt-metalfx routes point the machine-wide NGX
+registry value FullPath at a launcher directory. That value outlives
+the routed process, so another process in the same session that looks
+for NGX may read it and load the launcher's nvngx or _nvngx by full
+path, although it was not given a MetalFX route.
+
+After the route is settled, a process that did not end up on a MetalFX
+route gets an exact-path disabled load order for nvngx and _nvngx in
+each directory the launcher named in RUNEON_METALFX_NGX_PATH (only with
+RUNEON_GFX_DIR_METALFX, as that route requires) and
+RUNEON_DXMT_NGX_PATH. A MetalFX route that fell back because its
+configuration is invalid counts as not routed.
+
+Load order lookup tries the full path first, ignoring case and the NT
+prefix, and the loader refuses a disabled module before mapping it. The
+basename rules for nvngx and nvapi64, a program's own copies, the
+System32 placeholder and launches without these variables are not
+affected. The registry is neither read nor written here.
+
+The load order parser splits on spaces and commas and stops at an
+equals sign, so a directory containing one is ignored rather than
+turned into rules for other modules.
+
+--- a/dlls/ntdll/unix/loadorder.c
++++ b/dlls/ntdll/unix/loadorder.c
+@@ -537,6 +537,33 @@
+     setenv( dxmt_metalfx_vars[1], ngx, 1 );
+     TRACE( GRAPHICS_ROUTES_DXMT_METALFX ": ngx %s\n", debugstr_a(ngx) );
+     return TRUE;
++}
++
++
++/***************************************************************************
++ *	disable_ngx_files
++ *
++ * Runeon: refuse to load the launcher's NGX core files from this directory.
++ * Only these exact paths are disabled, so nvngx elsewhere keeps its load order.
++ * A path holding a load order separator could name other modules; it is
++ * ignored, which leaves its files loadable, and a launcher must not use one.
++ */
++static void disable_ngx_files( const char *ngx )
++{
++    static const char * const files[] = { "\\nvngx=", "\\_nvngx=" };
++    WCHAR entry[129 + sizeof("\\_nvngx=")];
++    unsigned int i, len, pos;
++    const char *p;
++
++    if (!is_ngx_path( ngx ) || strpbrk( ngx, " ,=" )) return;
++    for (len = 0; ngx[len]; len++) entry[len] = (unsigned char)ngx[len];
++    for (i = 0; i < ARRAY_SIZE(files); i++)
++    {
++        pos = len;
++        for (p = files[i]; *p; p++) entry[pos++] = *p;
++        entry[pos] = 0;
++        add_load_order_override( entry );
++    }
+ }
+ 
+ 
+@@ -662,6 +689,13 @@
+         for (i = 0; i < ARRAY_SIZE(metalfx_vars); i++) unsetenv( metalfx_vars[i] );
+     if (chosen != GRAPHICS_DXMT_METALFX && getenv( "RUNEON_DXMT_NGX_PATH" ))
+         for (i = 0; i < ARRAY_SIZE(dxmt_metalfx_vars); i++) unsetenv( dxmt_metalfx_vars[i] );
++    /* NGX finds its core through a machine-wide registry value, which a routed
++     * process may have left pointing at the launcher's files. */
++    if (chosen != GRAPHICS_D3DMETAL_METALFX && chosen != GRAPHICS_DXMT_METALFX)
++    {
++        if (getenv( "RUNEON_GFX_DIR_METALFX" )) disable_ngx_files( getenv( "RUNEON_METALFX_NGX_PATH" ) );
++        disable_ngx_files( getenv( "RUNEON_DXMT_NGX_PATH" ) );
++    }
+ }
+ 
+ 

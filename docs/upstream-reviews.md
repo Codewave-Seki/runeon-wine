@@ -1566,3 +1566,29 @@ Patch set `cx26.3-wine11.0-runeon.41` adds `patches/runeon/0205` after `0204`. S
 
 - `tests/graphics-route-check.py` compiles the patched route code. It checks the route, load order and variables, the fallback for each invalid or missing input, overlap, malformed ids, the strip only while `RUNEON_DXMT_NGX_PATH` is set, that each MetalFX route drops the other's variables, and the marker. Against `.40` it checks that the id is skipped. Removing the strip or the fallback makes it fail.
 - Not yet verified: a complete i386/x86_64 WoW64 build, that DXMT reads the variables (it needs its `0.80-runeon.9` component), and a run with the route of a DLSS program next to a second program without it in the same session. All are required before tagging.
+
+<a id="graphics-route-ngx-isolation"></a>
+
+## NGX file isolation for graphics routes
+
+Patch set `cx26.3-wine11.0-runeon.41` adds `patches/runeon/0206` after `0205`. It extends the two MetalFX routes the maintainer approved on 2026-11-22. It is an ABI-sensitive `ntdll` change, opt-in through the launcher's variables.
+
+### Need
+
+- `0204` and `0205` isolate variables and search directories. They do not stop a full-path load.
+- NGX finds its core through the machine-wide registry value `FullPath`. It can outlive the routed process that set it, so another process in the session may read it and load the launcher's `nvngx` or `_nvngx`.
+- Whether a real program reaches this path has not been observed. The fix closes it by construction.
+
+### Design
+
+- After the route is settled, a process not on a MetalFX route gets a disabled load order for `<dir>\nvngx` and `<dir>\_nvngx`. A MetalFX route that fell back for invalid configuration counts as not on it.
+- `<dir>` comes from `RUNEON_METALFX_NGX_PATH` (only while `RUNEON_GFX_DIR_METALFX` is set, as that route requires) and `RUNEON_DXMT_NGX_PATH`. The launcher sets them for the whole session, Wine never strips them, and a child inherits them through the Unix environment.
+- Each directory passes the existing NGX path rule. One containing a space, comma or equals sign is ignored, because `add_load_order_set()` would split it into rules for other modules.
+- `get_load_order()` tries the full path before any basename, ignoring case and the NT prefix. `load_builtin()` refuses a disabled module before mapping it, for native and builtin images.
+- Unchanged: processes on a MetalFX route, basename rules for `nvngx` and `nvapi64`, a program's own copies, the System32 placeholder and launches without the variables. The registry is not read or written.
+- Limit: the rule matches the path as opened. The same file reached through another name, such as a `Z:` path or an 8.3 short name, is not covered; `FullPath` holds the drive path the rule matches.
+
+### Validation
+
+- `tests/graphics-route-check.py` checks the rules added for a plain route, an unrouted process, both MetalFX routes, each invalid-configuration fallback, directories containing separators and unmanaged launches.
+- Not yet verified: a complete i386/x86_64 WoW64 build, and a run in one session of a routed DLSS program next to an unrouted program that reads `FullPath`. Both are required before tagging.

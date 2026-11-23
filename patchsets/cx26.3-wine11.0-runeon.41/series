@@ -188,3 +188,4 @@ patches/runeon/0202-mf-tests-topology-loader-converter-attributes.patch
 patches/runeon/0203-mf-sar-check-media-subtype.patch
 patches/runeon/0204-ntdll-graphics-route-d3dmetal-metalfx.patch
 patches/runeon/0205-ntdll-graphics-route-dxmt-metalfx.patch
+patches/runeon/0206-ntdll-graphics-route-isolate-ngx-files.patch

@@ -4738,6 +4738,26 @@
           "contains": "    case GRAPHICS_DXMT_METALFX: dir = getenv( \"RUNEON_GFX_DIR_DXMT\" ); break;"
         }
       ]
+    },
+    {
+      "order": 236,
+      "path": "patches/runeon/0206-ntdll-graphics-route-isolate-ngx-files.patch",
+      "sha256": "55bb7de2c6658be1d6758dc994c8c03e65d4af4fdd687ab2bfaec00d4b8c7fa0",
+      "kind": "runeon-product",
+      "status": "active",
+      "risk": "medium",
+      "summary": "After the graphics route is settled, a process that did not end up on a d3dmetal-metalfx or dxmt-metalfx route gets an exact-path disabled load order for nvngx and _nvngx in the launcher's NGX directories: RUNEON_METALFX_NGX_PATH while RUNEON_GFX_DIR_METALFX is set, and RUNEON_DXMT_NGX_PATH. The machine-wide NGX registry value FullPath can outlive a routed process, and without this another process in the session could load those files by full path. A MetalFX route that fell back for invalid configuration counts as not routed. Directories are checked by the existing NGX path rule, and one containing a space, comma or equals sign is ignored so the load order parser cannot turn it into rules for other modules. Basename rules for nvngx and nvapi64, a program's own copies, the System32 placeholder and launches without these variables are unaffected; the registry is not read or written. Never keyed on a program. ABI-sensitive ntdll change, opt-in through the launcher's variables; extends the individually approved routes, see docs/upstream-reviews.md#graphics-route-ngx-isolation.",
+      "testStrategy": "tests/graphics-route-check.py checks the rules added for a plain route, an unrouted process, both MetalFX routes, each invalid-configuration fallback, directories containing load order separators and unmanaged launches. A complete i386/x86_64 WoW64 build and a run in one session of a routed DLSS program next to an unrouted program that reads FullPath are still required before tagging.",
+      "verification": [
+        {
+          "path": "dlls/ntdll/unix/loadorder.c",
+          "contains": "static void disable_ngx_files( const char *ngx )"
+        },
+        {
+          "path": "dlls/ntdll/unix/loadorder.c",
+          "contains": "        disable_ngx_files( getenv( \"RUNEON_DXMT_NGX_PATH\" ) );"
+        }
+      ]
     }
   ],
   "targetedReview": {
