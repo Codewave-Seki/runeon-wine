@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "patchSetID": "cx26.3-wine11.0-runeon.41",
+  "commit": "45ef78a33412c75381285726c513695b919a240e",
+  "repository": "Codewave-Seki/runeon-wine",
+  "repositoryVisibility": "public",
+  "availability": "public-release",
+  "releaseURL": "https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.41",
+  "releaseState": "stable",
+  "retention": "permanent",
+  "assets": {
+    "patch-set": {
+      "fileName": "runeon-wine-patchset-cx26.3-wine11.0-runeon.41.tar.gz",
+      "sha256": "dafe0259e43a3d845e9ef8617f6a74c10f232168d2abc2554d8c2be1120b05e7",
+      "sizeBytes": 783587
+    },
+    "corresponding-source": {
+      "fileName": "runeon-wine-source-cx26.3-wine11.0-runeon.41.tar.gz",
+      "sha256": "7873a2d456fe3c5738e23ad4ab263e03a693c19aefd72b4b594f8be38d1c787c",
+      "sizeBytes": 55837453
+    }
+  }
+}
