@@ -1,0 +1,164 @@
+From: Runeon Contributors <dev@runeon.com>
+Subject: [PATCH] ntdll: Log faults in builtin code and protection changes of it.
+
+A crash dump of an execute access violation or an illegal instruction
+inside a Wine builtin DLL keeps neither the faulting page's protection
+nor its bytes, so it cannot tell a page whose protection was changed
+from one whose content changed or a fault in how the code was run.
+
+When an execute access violation or an illegal instruction happens at
+an address inside a builtin module, log before any handler runs: the
+code, module and offset, the exception parameters, the page's
+protection, state and type from NtQueryVirtualMemory, the 16 bytes now
+at the address read with NtReadVirtualMemory, and the thread's name.
+The first four such faults of a process only.
+
+When NtProtectVirtualMemory makes executable pages of a builtin image
+writable or not executable, log the range, the module base and the old
+and new protection. The thread in the line is the one that made the
+change; the caller's address is not recorded. The first sixteen such
+changes of a process only.
+
+Both lines use their own "codepage" debug channel at ERR level, so they
+appear in default logs and do not mix with "seh" or "virtual" errors.
+Logging only: dispatch, handlers and protection changes are unchanged.
+
+diff --git a/dlls/ntdll/exception.c b/dlls/ntdll/exception.c
+--- a/dlls/ntdll/exception.c
++++ b/dlls/ntdll/exception.c
+@@ -37,6 +37,7 @@
+ 
+ WINE_DEFAULT_DEBUG_CHANNEL(seh);
+ WINE_DECLARE_DEBUG_CHANNEL(threadname);
++WINE_DECLARE_DEBUG_CHANNEL(codepage);
+ 
+ typedef struct
+ {
+@@ -229,6 +230,67 @@ static LONG call_vectored_handlers( EXCEPTION_RECORD *rec, CONTEXT *context )
+ }
+ 
+ 
++/*******************************************************************
++ *		log_builtin_code_fault
++ *
++ * Code in a Wine builtin module that will not run: an execute access violation
++ * or an illegal instruction inside the module's image. That code is not written
++ * at run time, so its page changed under it, or what the CPU executed is not
++ * what the image holds. A crash dump does not keep the page, so record its
++ * state, the bytes now there and the thread before any handler runs. Logged
++ * on its own channel and for the first few faults of a process only, since a
++ * program may handle such faults and repeat them.
++ */
++static void log_builtin_code_fault( const EXCEPTION_RECORD *rec )
++{
++    static LONG count;
++    union
++    {
++        THREAD_NAME_INFORMATION info;
++        BYTE buffer[sizeof(THREAD_NAME_INFORMATION) + 64 * sizeof(WCHAR)];
++    } name;
++    MEMORY_BASIC_INFORMATION mbi;
++    LDR_DATA_TABLE_ENTRY *module;
++    BYTE code[16];
++    char hex[sizeof(code) * 2 + 1];
++    SIZE_T size = 0;
++    ULONG_PTR info0 = rec->NumberParameters > 0 ? rec->ExceptionInformation[0] : 0;
++    ULONG_PTR info1 = rec->NumberParameters > 1 ? rec->ExceptionInformation[1] : 0;
++    unsigned int i;
++
++    if (rec->ExceptionCode == EXCEPTION_ACCESS_VIOLATION)
++    {
++        if (rec->NumberParameters < 2 || info0 != EXCEPTION_EXECUTE_FAULT) return;
++    }
++    else if (rec->ExceptionCode != EXCEPTION_ILLEGAL_INSTRUCTION) return;
++    if (LdrFindEntryForAddress( rec->ExceptionAddress, &module ) || !(module->Flags & LDR_WINE_INTERNAL)) return;
++    if (InterlockedIncrement( &count ) > 4) return;
++
++    if (NtQueryVirtualMemory( NtCurrentProcess(), rec->ExceptionAddress, MemoryBasicInformation,
++                              &mbi, sizeof(mbi), NULL ))
++        memset( &mbi, 0, sizeof(mbi) );
++    /* Unlike a plain copy, this fails rather than faults on a page that cannot be read. */
++    if (NtReadVirtualMemory( NtCurrentProcess(), rec->ExceptionAddress, code, sizeof(code), &size ))
++        size = 0;
++    for (i = 0; i < size; i++)
++    {
++        hex[i * 2] = "0123456789abcdef"[code[i] >> 4];
++        hex[i * 2 + 1] = "0123456789abcdef"[code[i] & 0xf];
++    }
++    hex[size * 2] = 0;
++    name.info.ThreadName.Length = 0;
++    if (NtQueryInformationThread( NtCurrentThread(), ThreadNameInformation, &name, sizeof(name), NULL ))
++        name.info.ThreadName.Length = 0;
++
++    /* Kept short: the whole line has to fit a crash report's excerpt. */
++    ERR_(codepage)( "code=%lx at %p (%s+%Ix) info=%Ix,%Ix prot=%lx state=%lx type=%lx base=%p bytes=%s thread=%s\n",
++                    rec->ExceptionCode, rec->ExceptionAddress, debugstr_us( &module->BaseDllName ),
++                    (ULONG_PTR)rec->ExceptionAddress - (ULONG_PTR)module->DllBase, info0, info1,
++                    mbi.Protect, mbi.State, mbi.Type, mbi.AllocationBase, hex,
++                    debugstr_us( &name.info.ThreadName ) );
++}
++
++
+ /*******************************************************************
+  *		dispatch_exception
+  */
+@@ -289,6 +351,8 @@ NTSTATUS WINAPI dispatch_exception( EXCEPTION_RECORD *rec, CONTEXT *context )
+         TRACE( " info[%ld]=%p\n", i, (void *)rec->ExceptionInformation[i] );
+     TRACE_CONTEXT( context );
+ 
++    log_builtin_code_fault( rec );
++
+     if (call_vectored_handlers( rec, context ) == EXCEPTION_CONTINUE_EXECUTION)
+         NtContinue( context, FALSE );
+ 
+diff --git a/dlls/ntdll/unix/virtual.c b/dlls/ntdll/unix/virtual.c
+--- a/dlls/ntdll/unix/virtual.c
++++ b/dlls/ntdll/unix/virtual.c
+@@ -95,6 +95,7 @@
+ WINE_DEFAULT_DEBUG_CHANNEL(virtual);
+ WINE_DECLARE_DEBUG_CHANNEL(module);
+ WINE_DECLARE_DEBUG_CHANNEL(virtual_ranges);
++WINE_DECLARE_DEBUG_CHANNEL(codepage);
+ 
+ struct preload_info
+ {
+@@ -5774,6 +5775,31 @@ NTSTATUS WINAPI NtFreeVirtualMemory( HANDLE process, PVOID *addr_ptr, SIZE_T *si
+ }
+ 
+ 
++/***********************************************************************
++ *           log_builtin_code_protect
++ *
++ * Code of a Wine builtin module made writable or not executable. Its code
++ * pages are not meant to change after loading, so this is usually the program
++ * or a library it loaded patching or guarding that code. Logged so a later
++ * fault in that code (log_builtin_code_fault in ntdll) can be matched with the
++ * change; the line's thread is the one that made it. The caller's address is
++ * not known here. The first few changes of a process only. Called with
++ * virtual_mutex held.
++ */
++static void log_builtin_code_protect( const struct file_view *view, char *base, size_t size,
++                                      DWORD old, ULONG new_prot )
++{
++    static unsigned int count;
++
++    if (!(old & (PAGE_EXECUTE | PAGE_EXECUTE_READ | PAGE_EXECUTE_READWRITE | PAGE_EXECUTE_WRITECOPY))) return;
++    if (new_prot == PAGE_EXECUTE || new_prot == PAGE_EXECUTE_READ) return;
++    if (!(view->protect & SEC_IMAGE) || !find_builtin_unix_module( view->base )) return;
++    if (++count > 16) return;
++    ERR_(codepage)( "%p-%p of module %p: protect %x -> %x\n",
++                    base, base + size, view->base, (unsigned int)old, (unsigned int)new_prot );
++}
++
++
+ /***********************************************************************
+  *             NtProtectVirtualMemory   (NTDLL.@)
+  *             ZwProtectVirtualMemory   (NTDLL.@)
+@@ -5833,6 +5859,7 @@ NTSTATUS WINAPI NtProtectVirtualMemory( HANDLE process, PVOID *addr_ptr, SIZE_T
+         {
+             old = get_win32_prot( vprot, view->protect );
+             status = set_protection( view, base, size, new_prot );
++            if (!status) log_builtin_code_protect( view, base, size, old, new_prot );
+ 
+             if (simulate_writecopy && status == STATUS_SUCCESS
+                 && ((old == PAGE_WRITECOPY || old == PAGE_EXECUTE_WRITECOPY)))

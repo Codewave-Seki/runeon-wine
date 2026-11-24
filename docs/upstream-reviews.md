@@ -1598,3 +1598,29 @@ Patch set `cx26.3-wine11.0-runeon.41` adds `patches/runeon/0206` after `0205`. S
 - A complete i386/x86_64 WoW64 build of `cx26.3-wine11.0-runeon.41` (tag on `45ef78a`) succeeded and ships in seed `2026.11.22`.
 - In one launcher session on macOS 27 (maintainer's local test with load tracing): after routed runs had pointed `FullPath` at the launcher's directories, later runs of a D3D11 and a D3D12 title not on a MetalFX route loaded neither `nvngx` nor `_nvngx` and offered no DLSS; switched back on, both loaded them again.
 - Not verified: whether those unrouted runs attempted the load and were refused, or never tried it; two programs running at the same time; the `Z:` and 8.3 names named under Limit.
+
+<a id="mmdevapi-watch-and-code-faults"></a>
+
+## mmdevapi device watch start and builtin code fault logging
+
+Patch set `cx26.3-wine11.0-runeon.42` adds `patches/runeon/0207` and `0208` after `0206`. Status: the maintainer approved the implementation of both individually on 2026-11-24, `0208` for `ntdll` and both without an opt-in; this is not a precedent. Neither has been built or run; admission to a release waits for a complete build and review.
+
+### Need
+
+- In a maintainer's local run of a game, a crash dump showed an execute access violation in `mmdevapi`, inside `MMDevEnum_GetDefaultAudioEndpoint`, on the thread `wine_mmdevapi_devices` that `0154` adds. Crash reports from other machines name the same function with an execute access violation or an illegal instruction.
+- The cause is not known. The dumps keep neither the page's protection nor its bytes, so a page whose protection was changed, one whose content changed and a fault in how the code was run cannot be told apart.
+- `0154`'s watch thread made every process that loads mmdevapi with the Mac driver run a full listing at start, with twelve calls of `GetDefaultAudioEndpoint` through the enumerator's own method, even with no device change and no registered client. Nothing on Windows or in upstream Wine does this.
+
+### Design
+
+- `0207`: the driver's first `wait_device_change`, which registers the Core Audio listeners and returns `S_FALSE`, runs on the initialising thread before the driver's devices are first listed. Every later change moves the driver's serial past the one the watch thread starts from, so the thread lists the devices again only after a change, and a change during the first listing still wakes it. `device_listed_serial` keeps its meaning.
+- `0207`: `GetDefaultAudioEndpoint` and the watch thread share `get_default_device()`, which reads the registry and the device list directly. The watch thread calls no COM method of mmdevapi's own objects. The rule is unchanged; the value size is now reset before each registry query, and an unterminated value is terminated.
+- `0207` does not fix a race on a code page; it removes background work the watch thread did at start. Whether that work is needed for the fault to happen is not known.
+- `0208`: an execute access violation or illegal instruction at an address inside a builtin image is logged in `dispatch_exception()` before any handler, with the page's protection, state, type and allocation base, the 16 bytes at the address and the thread name. The first four per process.
+- `0208`: `NtProtectVirtualMemory` making executable pages of a builtin image writable or not executable is logged with the range, the module base and the old and new protection. The thread in the line is the one that made the change; the caller's address is not recorded, because the system call frame only holds the return address into the syscall stub. The first sixteen per process.
+- Both lines use their own `codepage` channel at `ERR` level, so a log reader that treats `seh` or `virtual` errors as fatal does not count them.
+
+### Validation
+
+- `scripts/static-check.sh` and `scripts/integration-check.sh` pass for `.42`: the patches apply with zero fuzz and the verification anchors match once.
+- Not yet done: a complete i386/x86_64 WoW64 build, the mmdevapi Wine tests against `.41`, `tests/audio-device-change-probe.c` for notifications and stream invalidation, an event-synchronised probe for the watch thread at start and for both log lines, and a check that a real session log holds no protection-change line Wine itself caused, which would use up the limit of sixteen.

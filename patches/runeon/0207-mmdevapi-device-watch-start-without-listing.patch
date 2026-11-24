@@ -1,0 +1,320 @@
+From: Runeon Contributors <dev@runeon.com>
+Subject: [PATCH] mmdevapi: Start the device watch without a listing and look up defaults without COM calls.
+
+0154's watch thread listed every device as soon as it started, because
+the driver's first wait_device_change only starts watching Core Audio
+and returns S_FALSE. Every process that loads mmdevapi with the Mac
+driver therefore ran a full listing on a second thread while it was
+still starting, and each listing called GetDefaultAudioEndpoint twelve
+times through the enumerator's own method.
+
+Make that first call on the initialising thread, before the driver's
+devices are first listed. Every change from then on, including one
+during that listing, moves the driver's serial past the one the watch
+thread starts from, so the thread lists the devices again only after a
+change and nothing between the listing and the start of the watch is
+missed. device_listed_serial keeps its meaning: the listing happened
+after the serial the thread passes first.
+
+GetDefaultAudioEndpoint and the watch thread now share
+get_default_device(), which reads the registry and the device list
+directly. The watch thread then calls no COM method of mmdevapi's own
+objects, so it does not run code a program may have hooked. The rule is
+unchanged: an active device named in the registry, the communications
+role trying its own value first, else the driver's default device. Two
+small differences: the value size is reset before each query (the
+communications role's value used to shrink it for the next query), and
+a stored value without a terminator is terminated.
+
+Device change notifications, AUDCLNT_E_DEVICE_INVALIDATED on a stream
+whose device is gone and the module pinning are unchanged.
+
+diff --git a/dlls/mmdevapi/devenum.c b/dlls/mmdevapi/devenum.c
+--- a/dlls/mmdevapi/devenum.c
++++ b/dlls/mmdevapi/devenum.c
+@@ -867,22 +867,31 @@ static HRESULT WINAPI MMDevice_OpenPropertyStore(IMMDevice *iface, DWORD access,
+     return MMDevPropStore_Create(This, access, ppv);
+ }
+ 
++/* Writes the endpoint ID into a buffer of DEVICE_ID_LEN characters. Shared by
++ * GetId and the lookups below, which call no COM method (see get_default_device). */
++#define DEVICE_ID_LEN 56
++static void print_device_id(const MMDevice *device, WCHAR *str)
++{
++    const GUID *id = &device->devguid;
++
++    wsprintfW(str, L"{0.0.%u.00000000}.{%08X-%04X-%04X-%02X%02X-%02X%02X%02X%02X%02X%02X}",
++              device->flow, id->Data1, id->Data2, id->Data3,
++              id->Data4[0], id->Data4[1], id->Data4[2], id->Data4[3],
++              id->Data4[4], id->Data4[5], id->Data4[6], id->Data4[7]);
++}
++
+ static HRESULT WINAPI MMDevice_GetId(IMMDevice *iface, WCHAR **itemid)
+ {
+     MMDevice *This = impl_from_IMMDevice(iface);
+     WCHAR *str;
+-    GUID *id = &This->devguid;
+ 
+     TRACE("(%p)->(%p)\n", This, itemid);
+     if (!itemid)
+         return E_POINTER;
+-    *itemid = str = CoTaskMemAlloc(56 * sizeof(WCHAR));
++    *itemid = str = CoTaskMemAlloc(DEVICE_ID_LEN * sizeof(WCHAR));
+     if (!str)
+         return E_OUTOFMEMORY;
+-    wsprintfW(str, L"{0.0.%u.00000000}.{%08X-%04X-%04X-%02X%02X-%02X%02X%02X%02X%02X%02X}",
+-              This->flow, id->Data1, id->Data2, id->Data3,
+-              id->Data4[0], id->Data4[1], id->Data4[2], id->Data4[3],
+-              id->Data4[4], id->Data4[5], id->Data4[6], id->Data4[7]);
++    print_device_id(This, str);
+     TRACE("returning %s\n", wine_dbgstr_w(str));
+     return S_OK;
+ }
+@@ -1155,12 +1164,67 @@ static HRESULT WINAPI MMDevEnum_EnumAudioEndpoints(IMMDeviceEnumerator *iface, E
+     return MMDevCol_Create(devices, flow, mask);
+ }
+ 
++/* Called with g_devices_lock held. */
++static MMDevice *find_active_device(const WCHAR *id)
++{
++    WCHAR str[DEVICE_ID_LEN];
++    MMDevice *device;
++
++    LIST_FOR_EACH_ENTRY(device, &device_list, MMDevice, entry)
++    {
++        print_device_id(device, str);
++        if (!lstrcmpW(str, id))
++            return device->state == DEVICE_STATE_ACTIVE ? device : NULL;
++    }
++    return NULL;
++}
++
++/* Called with g_devices_lock held. The rule of GetDefaultAudioEndpoint: an active
++ * device named in the registry, the communications role trying its own value
++ * first, else the driver's default device. The device watch thread uses it too:
++ * it reads the registry and the device list directly and calls no COM method, so
++ * that background thread never enters code a program may have hooked. */
++static MMDevice *get_default_device(EDataFlow flow, ERole role)
++{
++    static const WCHAR *const names[2][2] =
++    {
++        { L"DefaultOutput", L"DefaultVoiceOutput" },
++        { L"DefaultInput", L"DefaultVoiceInput" },
++    };
++    WCHAR reg_key[256], def_id[256];
++    MMDevice *device;
++    DWORD size;
++    HKEY key;
++    int i;
++
++    lstrcpyW(reg_key, drv_keyW);
++    lstrcatW(reg_key, L"\\");
++    lstrcatW(reg_key, drvs.module_name);
++
++    if(RegOpenKeyW(HKEY_CURRENT_USER, reg_key, &key) == ERROR_SUCCESS){
++        for(i = role == eCommunications ? 1 : 0; i >= 0; i--){
++            /* Room for a terminator the stored value may lack. */
++            size = sizeof(def_id) - sizeof(WCHAR);
++            if(RegQueryValueExW(key, names[flow == eCapture][i], 0, NULL,
++                        (BYTE*)def_id, &size) != ERROR_SUCCESS)
++                continue;
++            def_id[size / sizeof(WCHAR)] = 0;
++            if((device = find_active_device(def_id))){
++                RegCloseKey(key);
++                return device;
++            }
++            TRACE("Unable to find %sdevice %s\n", i ? "voice " : "", wine_dbgstr_w(def_id));
++        }
++        RegCloseKey(key);
++    }
++
++    return flow == eRender ? MMDevice_def_play : MMDevice_def_rec;
++}
++
+ static HRESULT WINAPI MMDevEnum_GetDefaultAudioEndpoint(IMMDeviceEnumerator *iface, EDataFlow flow, ERole role, IMMDevice **device)
+ {
+     MMDevEnumImpl *This = impl_from_IMMDeviceEnumerator(iface);
+-    WCHAR reg_key[256];
+-    HKEY key;
+-    HRESULT hr;
++    MMDevice *impl;
+ 
+     TRACE("(%p)->(%u,%u,%p)\n", This, flow, role, device);
+ 
+@@ -1178,64 +1242,13 @@ static HRESULT WINAPI MMDevEnum_GetDefaultAudioEndpoint(IMMDeviceEnumerator *ifa
+     if(!drvs.module_name[0])
+         return E_NOTFOUND;
+ 
+-    lstrcpyW(reg_key, drv_keyW);
+-    lstrcatW(reg_key, L"\\");
+-    lstrcatW(reg_key, drvs.module_name);
+-
+-    if(RegOpenKeyW(HKEY_CURRENT_USER, reg_key, &key) == ERROR_SUCCESS){
+-        const WCHAR *reg_x_name, *reg_vx_name;
+-        WCHAR def_id[256];
+-        DWORD size = sizeof(def_id), state;
+-
+-        if(flow == eRender){
+-            reg_x_name = L"DefaultOutput";
+-            reg_vx_name = L"DefaultVoiceOutput";
+-        }else{
+-            reg_x_name = L"DefaultInput";
+-            reg_vx_name = L"DefaultVoiceInput";
+-        }
+-
+-        if(role == eCommunications &&
+-                RegQueryValueExW(key, reg_vx_name, 0, NULL,
+-                    (BYTE*)def_id, &size) == ERROR_SUCCESS){
+-            hr = IMMDeviceEnumerator_GetDevice(iface, def_id, device);
+-            if(SUCCEEDED(hr)){
+-                if(SUCCEEDED(IMMDevice_GetState(*device, &state)) &&
+-                        state == DEVICE_STATE_ACTIVE){
+-                    RegCloseKey(key);
+-                    return S_OK;
+-                }
+-            }
+-
+-            TRACE("Unable to find voice device %s\n", wine_dbgstr_w(def_id));
+-        }
+-
+-        if(RegQueryValueExW(key, reg_x_name, 0, NULL,
+-                    (BYTE*)def_id, &size) == ERROR_SUCCESS){
+-            hr = IMMDeviceEnumerator_GetDevice(iface, def_id, device);
+-            if(SUCCEEDED(hr)){
+-                if(SUCCEEDED(IMMDevice_GetState(*device, &state)) &&
+-                        state == DEVICE_STATE_ACTIVE){
+-                    RegCloseKey(key);
+-                    return S_OK;
+-                }
+-            }
+-
+-            TRACE("Unable to find device %s\n", wine_dbgstr_w(def_id));
+-        }
+-
+-        RegCloseKey(key);
+-    }
+-
+     EnterCriticalSection(&g_devices_lock);
+ 
+-    if (flow == eRender)
+-        *device = &MMDevice_def_play->IMMDevice_iface;
+-    else
+-        *device = &MMDevice_def_rec->IMMDevice_iface;
+-
+-    if (*device)
++    if ((impl = get_default_device(flow, role)))
++    {
++        *device = &impl->IMMDevice_iface;
+         IMMDevice_AddRef(*device);
++    }
+ 
+     LeaveCriticalSection(&g_devices_lock);
+ 
+@@ -1540,22 +1553,18 @@ static void add_device_event(struct device_events *events, int type, EDataFlow f
+ 
+ static WCHAR *device_id(MMDevice *device)
+ {
+-    WCHAR *id = NULL;
+-    if (device) IMMDevice_GetId(&device->IMMDevice_iface, &id);
++    WCHAR *id;
++
++    if (!device || !(id = CoTaskMemAlloc(DEVICE_ID_LEN * sizeof(WCHAR))))
++        return NULL;
++    print_device_id(device, id);
+     return id;
+ }
+ 
++/* Called with g_devices_lock held. */
+ static WCHAR *default_device_id(EDataFlow flow, ERole role)
+ {
+-    IMMDevice *device;
+-    WCHAR *id = NULL;
+-
+-    if (SUCCEEDED(MMDevEnum_GetDefaultAudioEndpoint(&enumerator.IMMDeviceEnumerator_iface, flow, role, &device)))
+-    {
+-        IMMDevice_GetId(device, &id);
+-        IMMDevice_Release(device);
+-    }
+-    return id;
++    return device_id(get_default_device(flow, role));
+ }
+ 
+ static void set_device_state(MMDevice *device, DWORD state)
+@@ -1714,12 +1723,40 @@ static void refresh_devices(void)
+     free(events.events);
+ }
+ 
++static UINT64 device_watch_serial;
++static BOOL device_watch_ready;
++
++/* Before the driver's devices are first listed. The driver's first
++ * wait_device_change starts watching Core Audio and returns at once with
++ * S_FALSE, so every change from here on, including one during that listing,
++ * wakes the watch thread. The thread therefore lists nothing when it starts:
++ * it used to, which made every process that loads mmdevapi run a full listing
++ * on a second thread while it was still starting. Only the Mac driver
++ * reports changes. */
++void prepare_device_watch(void)
++{
++    struct wait_device_change_params params = { 0 };
++
++    if (wcscmp(drvs.module_name, L"winecoreaudio.drv"))
++        return;
++    params.result = E_NOTIMPL;
++    if (__wine_unix_call(drvs.module_unixlib, wait_device_change, &params) || params.result != S_FALSE)
++    {
++        WARN("The driver doesn't report device changes: %08lx\n", params.result);
++        return;
++    }
++    device_watch_serial = params.serial;
++    device_watch_ready = TRUE;
++}
++
+ static DWORD WINAPI device_watch_proc(void *user)
+ {
+     struct wait_device_change_params params = { 0 };
+ 
+     SetThreadDescription(GetCurrentThread(), L"wine_mmdevapi_devices");
+ 
++    /* The devices were listed after this serial (prepare_device_watch). */
++    params.serial = device_watch_serial;
+     for (;;)
+     {
+         params.result = E_NOTIMPL;
+@@ -1732,12 +1769,12 @@ static DWORD WINAPI device_watch_proc(void *user)
+     }
+ }
+ 
+-/* After the driver's devices are loaded. Only the Mac driver reports changes. */
++/* After the driver's devices are loaded. */
+ void start_device_watch(void)
+ {
+     HANDLE thread;
+ 
+-    if (wcscmp(drvs.module_name, L"winecoreaudio.drv"))
++    if (!device_watch_ready)
+         return;
+     if ((thread = CreateThread(NULL, 0, device_watch_proc, NULL, 0, NULL)))
+     {
+diff --git a/dlls/mmdevapi/main.c b/dlls/mmdevapi/main.c
+--- a/dlls/mmdevapi/main.c
++++ b/dlls/mmdevapi/main.c
+@@ -194,6 +194,7 @@ static BOOL WINAPI init_driver(INIT_ONCE *once, void *param, void **context)
+         else midi_driver = drvs;
+ 
+         load_devices_from_reg();
++        prepare_device_watch();
+         load_driver_devices(eRender);
+         load_driver_devices(eCapture);
+         start_device_watch();
+diff --git a/dlls/mmdevapi/mmdevapi_private.h b/dlls/mmdevapi/mmdevapi_private.h
+--- a/dlls/mmdevapi/mmdevapi_private.h
++++ b/dlls/mmdevapi/mmdevapi_private.h
+@@ -131,6 +131,7 @@ extern HRESULT SpatialAudioClient_Create(IMMDevice *device, ISpatialAudioClient
+ extern BOOL get_device_name_from_guid( const GUID *guid, char **name, EDataFlow *flow );
+ extern HRESULT load_devices_from_reg(void);
+ extern HRESULT load_driver_devices(EDataFlow flow);
++extern void prepare_device_watch(void);
+ extern void start_device_watch(void);
+ 
+ extern void main_loop_stop(void);
