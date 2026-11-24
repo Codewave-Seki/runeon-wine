@@ -1533,7 +1533,9 @@ Patch set `cx26.3-wine11.0-runeon.41` adds `patches/runeon/0204` after `0203`. S
 ### Validation
 
 - `tests/graphics-route-check.py` compiles the patched route code. It checks the route, load order and variables, the fallback for each invalid or missing input, overlap, malformed ids, the strip only while `RUNEON_GFX_DIR_METALFX` is set, and the marker. Against `.40` it checks that the id is skipped.
-- Not yet verified: a complete i386/x86_64 WoW64 build, and a run with the route of a DLSS program next to a second program without it in the same session. Both are required before tagging.
+- A complete i386/x86_64 WoW64 build of `cx26.3-wine11.0-runeon.41` (tag on `45ef78a`) succeeded and ships in seed `2026.11.22`.
+- In one launcher session on macOS 27 (maintainer's local tests, local build and the released Dev build): a D3D12 title on this route loaded `nvngx.dll` from the bridge directory and offered DLSS; the same title off the route, and a D3D11 title on another route, loaded neither bridge file and offered no DLSS. Every run exited normally.
+- Not verified: two programs running at the same time with and without the route.
 
 <a id="graphics-route-dxmt-metalfx"></a>
 
@@ -1565,7 +1567,9 @@ Patch set `cx26.3-wine11.0-runeon.41` adds `patches/runeon/0205` after `0204`. S
 ### Validation
 
 - `tests/graphics-route-check.py` compiles the patched route code. It checks the route, load order and variables, the fallback for each invalid or missing input, overlap, malformed ids, the strip only while `RUNEON_DXMT_NGX_PATH` is set, that each MetalFX route drops the other's variables, and the marker. Against `.40` it checks that the id is skipped. Removing the strip or the fallback makes it fail.
-- Not yet verified: a complete i386/x86_64 WoW64 build, that DXMT reads the variables (it needs its `0.80-runeon.9` component), and a run with the route of a DLSS program next to a second program without it in the same session. All are required before tagging.
+- A complete i386/x86_64 WoW64 build of `cx26.3-wine11.0-runeon.41` (tag on `45ef78a`) succeeded and ships in seed `2026.11.22`.
+- With DXMT `0.80-runeon.9`, in one launcher session on macOS 27 (maintainer's local tests, local build and the released Dev build): a D3D11 title on this route logged `runeon-dxmt-nvext-ngx-path-1` with the launcher's NGX directory, loaded `_nvngx.dll` from it and offered DLSS. Off the route, the same title enabled no vendor extension, loaded neither file and offered no DLSS. Every run exited normally.
+- Not verified: two programs running at the same time with and without the route.
 
 <a id="graphics-route-ngx-isolation"></a>
 
@@ -1591,4 +1595,6 @@ Patch set `cx26.3-wine11.0-runeon.41` adds `patches/runeon/0206` after `0205`. S
 ### Validation
 
 - `tests/graphics-route-check.py` checks the rules added for a plain route, an unrouted process, both MetalFX routes, each invalid-configuration fallback, directories containing separators and unmanaged launches.
-- Not yet verified: a complete i386/x86_64 WoW64 build, and a run in one session of a routed DLSS program next to an unrouted program that reads `FullPath`. Both are required before tagging.
+- A complete i386/x86_64 WoW64 build of `cx26.3-wine11.0-runeon.41` (tag on `45ef78a`) succeeded and ships in seed `2026.11.22`.
+- In one launcher session on macOS 27 (maintainer's local test with load tracing): after routed runs had pointed `FullPath` at the launcher's directories, later runs of a D3D11 and a D3D12 title not on a MetalFX route loaded neither `nvngx` nor `_nvngx` and offered no DLSS; switched back on, both loaded them again.
+- Not verified: whether those unrouted runs attempted the load and were refused, or never tried it; two programs running at the same time; the `Z:` and 8.3 names named under Limit.
