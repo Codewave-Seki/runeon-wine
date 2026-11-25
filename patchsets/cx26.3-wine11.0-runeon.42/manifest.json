@@ -4802,6 +4802,23 @@
           "occurrences": 1
         }
       ]
+    },
+    {
+      "order": 239,
+      "path": "patches/runeon/0209-server-saturate-distant-relative-timer.patch",
+      "sha256": "07dee53a45c9d76df251a93bbdaf344bf675a6617602427cd4c0058b21e7a44c",
+      "kind": "runeon-product",
+      "status": "active",
+      "risk": "medium",
+      "summary": "Windows takes any negative NtSetTimer() due time as relative, so -MAXLONGLONG means about 29,000 years and the timer does not fire; set_timer() stored it as expire - monotonic_time, which overflows, and the timer was signalled at once. The threadpool timer thread passes such a value (rel_now minus MAXLONGLONG) whenever threadpool timers exist but none is relative, so its timer fired and was re-armed over and over. A relative due time that cannot be stored is now clamped to the most distant one that can (a stored -MAXLONGLONG); every relative time that fits, every absolute time and TIMEOUT_INFINITE are unchanged, and the protocol is unchanged. Applies to every process without an opt-in: the Windows result is the only correct one, and it identifies no process. server is ABI-sensitive; approved individually by the maintainer on 2026-11-25, admission pending a complete build. WineHQ master (checked 2026-11-25) has the same overflow.",
+      "testStrategy": "Not yet built or run. tests/timer-relative-overflow-probe.c, built for x86 and x64, sets a waitable timer to -MAXLONGLONG, to QueryPerformanceCounter() minus MAXLONGLONG and to -2^62 and requires WAIT_TIMEOUT after 100 ms each, then requires a 10 ms relative timer to fire; an equivalent probe on the .41 runtime got WAIT_OBJECT_0 for the first two and WAIT_TIMEOUT for -2^62. Planned: run it on this patch set's runtime, and the kernel32 and ntdll sync and threadpool Wine tests compared with the previous patch set.",
+      "verification": [
+        {
+          "path": "server/timer.c",
+          "contains": "if (expire < monotonic_time - TIMEOUT_INFINITE) expire = monotonic_time - TIMEOUT_INFINITE;",
+          "occurrences": 1
+        }
+      ]
     }
   ],
   "targetedReview": {

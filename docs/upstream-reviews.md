@@ -1624,3 +1624,31 @@ Patch set `cx26.3-wine11.0-runeon.42` adds `patches/runeon/0207` and `0208` afte
 
 - `scripts/static-check.sh` and `scripts/integration-check.sh` pass for `.42`: the patches apply with zero fuzz and the verification anchors match once.
 - Not yet done: a complete i386/x86_64 WoW64 build, the mmdevapi Wine tests against `.41`, `tests/audio-device-change-probe.c` for notifications and stream invalidation, an event-synchronised probe for the watch thread at start and for both log lines, and a check that a real session log holds no protection-change line Wine itself caused, which would use up the limit of sixteen.
+
+<a id="timer-relative-overflow"></a>
+
+## Distant relative timer due times
+
+Patch set `cx26.3-wine11.0-runeon.42` adds `patches/runeon/0209` after `0208`. It changes `server`, which is ABI-sensitive, and is not opt-in, so it needed the maintainer's individual approval, given on 2026-11-25. It has not been built or run; admission to a release waits for a complete build and the checks below.
+
+### Need
+
+- Windows takes any negative `NtSetTimer()` due time as relative; `-MAXLONGLONG` is about 29,000 years away.
+- `set_timer()` and `timeout_to_abstime()` store a relative time as `expire - monotonic_time`, which overflows a signed 64-bit value for such a due time.
+- On the `.41` runtime, in a fresh prefix, a MinGW probe set a waitable timer to `-MAXLONGLONG` and to `QueryPerformanceCounter()` minus `MAXLONGLONG`: both were signalled within a 100 ms wait. `-2^62` stayed unsignalled.
+- The threadpool timer thread (`update_timers()`, from the `f6c53a242a` part of `0148`) arms its relative timer with `rel_now` minus `MAXLONGLONG` whenever threadpool timers exist but none is relative, so that timer fires at once and is armed again.
+- WineHQ master (checked 2026-11-25) has the same `set_timer()` and `update_timers()` code; no upstream fix exists to backport.
+
+### Design
+
+- `set_timer()` clamps a relative due time below `monotonic_time - TIMEOUT_INFINITE` to that value, so the stored time is `-MAXLONGLONG`, the most distant one that can be stored. The clamped value is passed on to `add_timeout_user()`, so the timer and its timeout agree.
+- No step the clamped value reaches overflows: `timeout_to_abstime()` gives `-MAXLONGLONG`; the timeout list negates it and subtracts `monotonic_time`; `abstime_to_timeout()` adds `monotonic_time` back; `NtQueryTimer()` negates it and subtracts the performance counter. The periodic re-arm only runs when the timer fires.
+- Relative times that fit, absolute times and `TIMEOUT_INFINITE` take the unchanged path.
+- Under msync the timer's sync is a server-signalled msync object and `NtSetTimer()` always reaches `set_timer()`, so the fix applies with and without msync.
+- Fixing the server covers every `NtSetTimer()` caller. Another downstream project clamps the due time in `NtSetTimer()` instead; no code is taken from it.
+
+### Validation
+
+- `scripts/static-check.sh` and `scripts/integration-check.sh` pass for `.42`; the series applies with zero fuzz.
+- `tests/timer-relative-overflow-probe.c` builds with MinGW for x86 and x64 under `-Wall -Wextra -Werror`.
+- Not yet done: a complete i386/x86_64 WoW64 build, the probe on this patch set's runtime, and the kernel32 and ntdll sync and threadpool Wine tests against `.41`.

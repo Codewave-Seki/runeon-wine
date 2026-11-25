@@ -1,0 +1,40 @@
+From: Runeon Contributors <dev@runeon.com>
+Subject: [PATCH] server: Saturate a relative timer time too distant to store.
+
+Windows takes any negative due time in NtSetTimer() as relative, so a
+huge one such as -MAXLONGLONG means a time some 29,000 years away: the
+timer does not fire. set_timer() and timeout_to_abstime() store a
+relative time as expire - monotonic_time, which overflows a signed
+64-bit value for such a due time, and the timer was signalled at once.
+Due times of -MAXLONGLONG and of QueryPerformanceCounter() minus
+MAXLONGLONG reproduce it on the previous patch set's runtime; -2^62 stays unsignalled.
+
+The threadpool timer thread reaches this whenever threadpool timers
+exist but none is relative: update_timers() arms its relative timer
+with rel_now minus MAXLONGLONG, so that timer fires at once, wakes the
+thread and is armed again the same way.
+
+Clamp a relative time that cannot be stored to the most distant one
+that can, a stored value of -MAXLONGLONG. Every relative time that
+fits, every absolute time and TIMEOUT_INFINITE are unchanged.
+The clamped value is negated and offset by monotonic_time in the
+timeout list and in abstime_to_timeout() without overflowing; it is
+never reached by the periodic re-arm, which only runs when the timer
+fires. This covers every NtSetTimer() caller. No protocol change.
+
+Another downstream project works around the same overflow by clamping
+the due time in NtSetTimer(); no code is taken from it.
+
+diff --git a/server/timer.c b/server/timer.c
+--- a/server/timer.c
++++ b/server/timer.c
+@@ -191,6 +191,9 @@
+         timer->signaled = 0;
+         reset_sync( timer->sync );
+     }
++    /* Windows accepts any negative relative time; one too distant to be stored as a
++     * monotonic time must not wrap around, so give it the most distant one instead */
++    if (expire < monotonic_time - TIMEOUT_INFINITE) expire = monotonic_time - TIMEOUT_INFINITE;
+     timer->when     = (expire <= 0) ? expire - monotonic_time : max( expire, current_time );
+     timer->period   = period;
+     timer->callback = callback;
