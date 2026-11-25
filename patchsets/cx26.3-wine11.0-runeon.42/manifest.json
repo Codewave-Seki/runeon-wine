@@ -4762,11 +4762,11 @@
     {
       "order": 237,
       "path": "patches/runeon/0207-mmdevapi-device-watch-start-without-listing.patch",
-      "sha256": "7d03b21d9ce9a1594eff3e2565831314eaba9827d37908352540d02921d9410c",
+      "sha256": "a01e0949506d9f9f45ce8bd12da7f39a735ca4f1bd3b2e25de0ebc75fbbc47cc",
       "kind": "runeon-product",
       "status": "active",
       "risk": "medium",
-      "summary": "Narrows 0154's device watch. The driver's first wait_device_change, which starts watching Core Audio and returns S_FALSE, now runs on the initialising thread before the driver's devices are first listed, so the watch thread starts from that serial and lists the devices again only after a change; it used to run a full listing at start in every process that loads mmdevapi with the Mac driver, with twelve GetDefaultAudioEndpoint calls. GetDefaultAudioEndpoint and the watch thread share get_default_device(), which reads the registry and the device list directly, so the watch thread calls no COM method of mmdevapi's own objects. The default device rule, notifications, AUDCLNT_E_DEVICE_INVALIDATED and module pinning are unchanged; the registry value size is now reset before each query and an unterminated value is terminated. A change to an individually approved downstream patch without an opt-in (0154); implementation approved by the maintainer on 2026-11-24, admission pending a complete build and review.",
+      "summary": "Narrows 0154's device watch. The driver's first wait_device_change, which starts watching Core Audio and returns S_FALSE, now runs on the initialising thread before the driver's devices are first listed, so the watch thread starts from that serial and lists the devices again only after a change; it used to run a full listing at start in every process that loads mmdevapi with the Mac driver, with twelve GetDefaultAudioEndpoint calls. GetDefaultAudioEndpoint and the watch thread share get_default_device(), which reads the registry and the device list directly, so the watch thread's default device lookups no longer go through mmdevapi's own COM methods; a refresh after a change still creates an audio client for a new device and takes device references. The default device rule, notifications, AUDCLNT_E_DEVICE_INVALIDATED and module pinning are unchanged; the registry value size is now reset before each query and an unterminated value is terminated. A change to an individually approved downstream patch without an opt-in (0154); implementation approved by the maintainer on 2026-11-24, admission pending a complete build and review.",
       "testStrategy": "Not yet built or run. Planned: an event-synchronised probe on the patched runtime asserting that the watch thread makes no GetDefaultAudioEndpoint call before a device change, and tests/audio-device-change-probe.c for notifications and stream invalidation when the output device is switched; mmdevapi Wine tests compared with the previous patch set.",
       "verification": [
         {
@@ -4784,11 +4784,11 @@
     {
       "order": 238,
       "path": "patches/runeon/0208-ntdll-log-builtin-code-faults.patch",
-      "sha256": "18e9fd372dafa0dc350e6ecf1ab3dd4c56527877c25d0f0c80cb7d954f681acc",
+      "sha256": "a726216a5935d828f312a55ac281f89d2df61f16809dc2d6ac6ae928b5d31fa5",
       "kind": "runeon-product",
       "status": "active",
       "risk": "low",
-      "summary": "Logs, on the codepage debug channel at ERR level, an execute access violation or illegal instruction at an address inside a Wine builtin module before any handler runs (code, module and offset, parameters, the page's protection, state, type and allocation base, the 16 bytes now at the address and the thread name; first four per process), and NtProtectVirtualMemory making executable pages of a builtin image writable or not executable (range, module base, old and new protection; first sixteen per process; caller address not recorded). A crash dump keeps neither the page's protection nor its bytes. Logging only. ABI-sensitive ntdll change without an opt-in; implementation approved by the maintainer on 2026-11-24, admission pending a complete build and review.",
+      "summary": "Logs, on the codepage debug channel at ERR level, an execute access violation or illegal instruction at an address inside a Wine builtin module before any handler runs (code, module and offset, parameters, the page's protection, state, type and allocation base, the 16 bytes now at the address and the thread name; first four per process; the module is looked up under the loader lock only if it is free, otherwise the fault is not logged), and NtProtectVirtualMemory making executable pages of a builtin image writable or not executable (range, module base, old and new protection; first sixteen per process; caller address not recorded). A crash dump keeps neither the page's protection nor its bytes. Logging only. ABI-sensitive ntdll change without an opt-in; implementation approved by the maintainer on 2026-11-24, admission pending a complete build and review.",
       "testStrategy": "Not yet built or run. Planned: an event-synchronised probe on the patched runtime that makes a builtin code page not executable and writable in turn and checks one line for each change and one for the resulting fault, with the bytes matching the image; the line counts stop at their limits.",
       "verification": [
         {

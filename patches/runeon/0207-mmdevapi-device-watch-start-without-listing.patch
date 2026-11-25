@@ -18,8 +18,10 @@ after the serial the thread passes first.
 
 GetDefaultAudioEndpoint and the watch thread now share
 get_default_device(), which reads the registry and the device list
-directly. The watch thread then calls no COM method of mmdevapi's own
-objects, so it does not run code a program may have hooked. The rule is
+directly, so the watch thread's default device lookups no longer go
+through mmdevapi's own COM methods. A refresh after a device change
+still creates an audio client for a new device (set_format) and takes
+device references as before. The rule is
 unchanged: an active device named in the registry, the communications
 role trying its own value first, else the driver's default device. Two
 small differences: the value size is reset before each query (the
@@ -91,9 +93,9 @@ diff --git a/dlls/mmdevapi/devenum.c b/dlls/mmdevapi/devenum.c
 +
 +/* Called with g_devices_lock held. The rule of GetDefaultAudioEndpoint: an active
 + * device named in the registry, the communications role trying its own value
-+ * first, else the driver's default device. The device watch thread uses it too:
-+ * it reads the registry and the device list directly and calls no COM method, so
-+ * that background thread never enters code a program may have hooked. */
++ * first, else the driver's default device. The device watch thread uses it too,
++ * so its default device lookups read the registry and the device list directly
++ * instead of going through mmdevapi's own COM methods. */
 +static MMDevice *get_default_device(EDataFlow flow, ERole role)
 +{
 +    static const WCHAR *const names[2][2] =

@@ -11,7 +11,9 @@ an address inside a builtin module, log before any handler runs: the
 code, module and offset, the exception parameters, the page's
 protection, state and type from NtQueryVirtualMemory, the 16 bytes now
 at the address read with NtReadVirtualMemory, and the thread's name.
-The first four such faults of a process only.
+The first four such faults of a process only. The module is looked up
+under the loader lock, taken only if it is free: a fault while another
+thread holds it is not logged rather than made to wait.
 
 When NtProtectVirtualMemory makes executable pages of a builtin image
 writable or not executable, log the range, the module base and the old
@@ -34,7 +36,7 @@ diff --git a/dlls/ntdll/exception.c b/dlls/ntdll/exception.c
  
  typedef struct
  {
-@@ -229,6 +230,67 @@ static LONG call_vectored_handlers( EXCEPTION_RECORD *rec, CONTEXT *context )
+@@ -229,6 +230,84 @@ static LONG call_vectored_handlers( EXCEPTION_RECORD *rec, CONTEXT *context )
  }
  
  
@@ -59,6 +61,11 @@ diff --git a/dlls/ntdll/exception.c b/dlls/ntdll/exception.c
 +    } name;
 +    MEMORY_BASIC_INFORMATION mbi;
 +    LDR_DATA_TABLE_ENTRY *module;
++    WCHAR module_name[64];
++    UNICODE_STRING module_str = { 0, sizeof(module_name), module_name };
++    ULONG_PTR module_base = 0, magic;
++    ULONG locked;
++    BOOL builtin;
 +    BYTE code[16];
 +    char hex[sizeof(code) * 2 + 1];
 +    SIZE_T size = 0;
@@ -71,8 +78,19 @@ diff --git a/dlls/ntdll/exception.c b/dlls/ntdll/exception.c
 +        if (rec->NumberParameters < 2 || info0 != EXCEPTION_EXECUTE_FAULT) return;
 +    }
 +    else if (rec->ExceptionCode != EXCEPTION_ILLEGAL_INSTRUCTION) return;
-+    if (LdrFindEntryForAddress( rec->ExceptionAddress, &module ) || !(module->Flags & LDR_WINE_INTERNAL)) return;
-+    if (InterlockedIncrement( &count ) > 4) return;
++    /* The module list needs the loader lock. Never wait for it here: another
++     * thread holding it may be waiting for this one. Copy what the line needs
++     * while it is held. */
++    if (LdrLockLoaderLock( 2 /* try only */, &locked, &magic ) || locked != 1) return;
++    builtin = !LdrFindEntryForAddress( rec->ExceptionAddress, &module ) && (module->Flags & LDR_WINE_INTERNAL);
++    if (builtin)
++    {
++        module_base = (ULONG_PTR)module->DllBase;
++        module_str.Length = min( module->BaseDllName.Length, sizeof(module_name) );
++        memcpy( module_name, module->BaseDllName.Buffer, module_str.Length );
++    }
++    LdrUnlockLoaderLock( 0, magic );
++    if (!builtin || InterlockedIncrement( &count ) > 4) return;
 +
 +    if (NtQueryVirtualMemory( NtCurrentProcess(), rec->ExceptionAddress, MemoryBasicInformation,
 +                              &mbi, sizeof(mbi), NULL ))
@@ -87,13 +105,14 @@ diff --git a/dlls/ntdll/exception.c b/dlls/ntdll/exception.c
 +    }
 +    hex[size * 2] = 0;
 +    name.info.ThreadName.Length = 0;
++    name.info.ThreadName.Buffer = NULL;
 +    if (NtQueryInformationThread( NtCurrentThread(), ThreadNameInformation, &name, sizeof(name), NULL ))
 +        name.info.ThreadName.Length = 0;
 +
 +    /* Kept short: the whole line has to fit a crash report's excerpt. */
 +    ERR_(codepage)( "code=%lx at %p (%s+%Ix) info=%Ix,%Ix prot=%lx state=%lx type=%lx base=%p bytes=%s thread=%s\n",
-+                    rec->ExceptionCode, rec->ExceptionAddress, debugstr_us( &module->BaseDllName ),
-+                    (ULONG_PTR)rec->ExceptionAddress - (ULONG_PTR)module->DllBase, info0, info1,
++                    rec->ExceptionCode, rec->ExceptionAddress, debugstr_us( &module_str ),
++                    (ULONG_PTR)rec->ExceptionAddress - module_base, info0, info1,
 +                    mbi.Protect, mbi.State, mbi.Type, mbi.AllocationBase, hex,
 +                    debugstr_us( &name.info.ThreadName ) );
 +}
@@ -102,7 +121,7 @@ diff --git a/dlls/ntdll/exception.c b/dlls/ntdll/exception.c
  /*******************************************************************
   *		dispatch_exception
   */
-@@ -289,6 +351,8 @@ NTSTATUS WINAPI dispatch_exception( EXCEPTION_RECORD *rec, CONTEXT *context )
+@@ -289,6 +368,8 @@ NTSTATUS WINAPI dispatch_exception( EXCEPTION_RECORD *rec, CONTEXT *context )
          TRACE( " info[%ld]=%p\n", i, (void *)rec->ExceptionInformation[i] );
      TRACE_CONTEXT( context );
  
