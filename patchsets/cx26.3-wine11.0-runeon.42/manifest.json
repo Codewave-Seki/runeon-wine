@@ -4784,11 +4784,11 @@
     {
       "order": 238,
       "path": "patches/runeon/0208-ntdll-log-builtin-code-faults.patch",
-      "sha256": "a726216a5935d828f312a55ac281f89d2df61f16809dc2d6ac6ae928b5d31fa5",
+      "sha256": "58368681dd8c19e134964ed73d4eb52b082f8a7b1083fb85dda60d460176bf5e",
       "kind": "runeon-product",
       "status": "active",
       "risk": "low",
-      "summary": "Logs, on the codepage debug channel at ERR level, an execute access violation or illegal instruction at an address inside a Wine builtin module before any handler runs (code, module and offset, parameters, the page's protection, state, type and allocation base, the 16 bytes now at the address and the thread name; first four per process; the module is looked up under the loader lock only if it is free, otherwise the fault is not logged), and NtProtectVirtualMemory making executable pages of a builtin image writable or not executable (range, module base, old and new protection; first sixteen per process; caller address not recorded). A crash dump keeps neither the page's protection nor its bytes. Logging only. ABI-sensitive ntdll change without an opt-in; implementation approved by the maintainer on 2026-11-24, admission pending a complete build and review.",
+      "summary": "Logs, on the codepage debug channel at ERR level, an execute access violation or illegal instruction at an address inside a Wine builtin module before any handler runs (code, module and offset, parameters, the page's protection, state, type and allocation base, the 16 bytes now at the address and the thread name; first four per process; the module is looked up under the loader lock only if it is free, otherwise the fault is not logged; the last range found to hold no builtin code, a non-builtin module or a page in no module, is remembered and skipped, and nothing is looked up once four faults have been logged), and NtProtectVirtualMemory making executable pages of a builtin image writable or not executable (range, module base, old and new protection; first sixteen per process; caller address not recorded). A crash dump keeps neither the page's protection nor its bytes. Logging only. ABI-sensitive ntdll change without an opt-in; implementation approved by the maintainer on 2026-11-24, admission pending a complete build and review.",
       "testStrategy": "Not yet built or run. Planned: an event-synchronised probe on the patched runtime that makes a builtin code page not executable and writable in turn and checks one line for each change and one for the resulting fault, with the bytes matching the image; the line counts stop at their limits.",
       "verification": [
         {

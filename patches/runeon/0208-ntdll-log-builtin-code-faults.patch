@@ -13,7 +13,11 @@ protection, state and type from NtQueryVirtualMemory, the 16 bytes now
 at the address read with NtReadVirtualMemory, and the thread's name.
 The first four such faults of a process only. The module is looked up
 under the loader lock, taken only if it is free: a fault while another
-thread holds it is not logged rather than made to wait.
+thread holds it is not logged rather than made to wait. The last range
+found to hold no builtin code, a module that is not builtin or a page in
+no module, is remembered, so a program that raises such faults in its own
+code many times a second does not take the lock and walk the module list
+each time; nothing is looked up once four faults have been logged.
 
 When NtProtectVirtualMemory makes executable pages of a builtin image
 writable or not executable, log the range, the module base and the old
@@ -36,7 +40,7 @@ diff --git a/dlls/ntdll/exception.c b/dlls/ntdll/exception.c
  
  typedef struct
  {
-@@ -229,6 +230,84 @@ static LONG call_vectored_handlers( EXCEPTION_RECORD *rec, CONTEXT *context )
+@@ -229,6 +230,97 @@ static LONG call_vectored_handlers( EXCEPTION_RECORD *rec, CONTEXT *context )
  }
  
  
@@ -54,16 +58,17 @@ diff --git a/dlls/ntdll/exception.c b/dlls/ntdll/exception.c
 +static void log_builtin_code_fault( const EXCEPTION_RECORD *rec )
 +{
 +    static LONG count;
++    static ULONG_PTR skip_start, skip_end;
 +    union
 +    {
 +        THREAD_NAME_INFORMATION info;
 +        BYTE buffer[sizeof(THREAD_NAME_INFORMATION) + 64 * sizeof(WCHAR)];
 +    } name;
 +    MEMORY_BASIC_INFORMATION mbi;
-+    LDR_DATA_TABLE_ENTRY *module;
++    LDR_DATA_TABLE_ENTRY *module = NULL;
 +    WCHAR module_name[64];
 +    UNICODE_STRING module_str = { 0, sizeof(module_name), module_name };
-+    ULONG_PTR module_base = 0, magic;
++    ULONG_PTR addr = (ULONG_PTR)rec->ExceptionAddress, module_base = 0, magic;
 +    ULONG locked;
 +    BOOL builtin;
 +    BYTE code[16];
@@ -78,12 +83,24 @@ diff --git a/dlls/ntdll/exception.c b/dlls/ntdll/exception.c
 +        if (rec->NumberParameters < 2 || info0 != EXCEPTION_EXECUTE_FAULT) return;
 +    }
 +    else if (rec->ExceptionCode != EXCEPTION_ILLEGAL_INSTRUCTION) return;
++    /* A program may raise such faults in its own code thousands of times a
++     * second, so remember the last range found to hold no builtin code (a
++     * module that is not builtin, or a page in no module) and skip it.
++     * ponytail: the range is two plain variables read and written without a
++     * lock. A torn or stale read costs an extra lookup, or a missed line if a
++     * builtin later occupies memory found not to be builtin; fine for a log. */
++    if (count >= 4 || (addr >= skip_start && addr < skip_end)) return;
 +    /* The module list needs the loader lock. Never wait for it here: another
 +     * thread holding it may be waiting for this one. Copy what the line needs
 +     * while it is held. */
 +    if (LdrLockLoaderLock( 2 /* try only */, &locked, &magic ) || locked != 1) return;
 +    builtin = !LdrFindEntryForAddress( rec->ExceptionAddress, &module ) && (module->Flags & LDR_WINE_INTERNAL);
-+    if (builtin)
++    if (!builtin)
++    {
++        skip_start = module ? (ULONG_PTR)module->DllBase : addr & ~(ULONG_PTR)0xfff;
++        skip_end = skip_start + (module ? module->SizeOfImage : 0x1000);
++    }
++    else
 +    {
 +        module_base = (ULONG_PTR)module->DllBase;
 +        module_str.Length = min( module->BaseDllName.Length, sizeof(module_name) );
@@ -121,7 +138,7 @@ diff --git a/dlls/ntdll/exception.c b/dlls/ntdll/exception.c
  /*******************************************************************
   *		dispatch_exception
   */
-@@ -289,6 +368,8 @@ NTSTATUS WINAPI dispatch_exception( EXCEPTION_RECORD *rec, CONTEXT *context )
+@@ -289,6 +381,8 @@ NTSTATUS WINAPI dispatch_exception( EXCEPTION_RECORD *rec, CONTEXT *context )
          TRACE( " info[%ld]=%p\n", i, (void *)rec->ExceptionInformation[i] );
      TRACE_CONTEXT( context );
  
