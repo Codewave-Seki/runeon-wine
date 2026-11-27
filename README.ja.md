@@ -10,7 +10,7 @@ Runeon Wine は、Runeon の Steam Baseline runtime のソースを公開で管�
 
 - CodeWeavers ソース：`crossover-sources-26.3.0.tar.gz`、Wine `11.0`。[`base/crossover-26.3-wine-11.0.json`](base/crossover-26.3-wine-11.0.json) で固定
 <!-- release-facts:current-patch-set -->
-- 現在の正式ソース：[`cx26.3-wine11.0-runeon.41`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.41)。seed `2026.11.22`（App `>=1.16 (41)`）に対応。定義は [`patchsets/cx26.3-wine11.0-runeon.41`](patchsets/cx26.3-wine11.0-runeon.41/manifest.json)
+- 現在の正式ソース：[`cx26.3-wine11.0-runeon.42`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.42)。seed `2026.11.27`（App `>=1.16 (42)`）に対応。定義は [`patchsets/cx26.3-wine11.0-runeon.42`](patchsets/cx26.3-wine11.0-runeon.42/manifest.json)
 - 上流のレビュー範囲：完全な監査は `wine-11.15` まで、絞り込みスイープは `wine-11.22` まで。[MAINTENANCE.md](MAINTENANCE.md#review-records) を参照
 
 ## リポジトリ構成
@@ -44,7 +44,7 @@ scripts/integration-check.sh "$source_root"
 `integration-check.sh` は固定ベースラインの一時コピーにすべてのパッチを順に適用し、検証マーカーを確認し、同じ series を二重に適用できないことを確かめます。Release 用のバンドルをビルドするには：
 
 ```bash
-export RUNEON_WINE_PATCHSET_DEFINITION=patchsets/cx26.3-wine11.0-runeon.41
+export RUNEON_WINE_PATCHSET_DEFINITION=patchsets/cx26.3-wine11.0-runeon.42
 source_root="$(scripts/fetch-source.sh)"
 scripts/apply-series.sh "$source_root"
 scripts/build-source-bundle.sh "$source_root" dist
@@ -59,7 +59,8 @@ scripts/build-patchset-bundle.sh dist
 
 | パッチセット | 状態 | Seed | 説明 |
 |---|---|---|---|
-| [`.41`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.41) | 正式版、latest | `2026.11.22` | 現行版。App `>=1.16 (41)` に配布 |
+| [`.42`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.42) | 正式版、latest | `2026.11.27` | 現行版。App `>=1.16 (42)` に配布 |
+| [`.41`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.41) | 正式版 | `2026.11.22` | App `1.16 (41)` に配布 |
 | [`.40`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.40) | 正式版 | `2026.11.20` | App `1.16 (39)`–`1.16 (40)` に配布 |
 | [`.39`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.39) | 正式版 | `2026.11.19` | 置き換え済み、保持 |
 | [`.38`](https://github.com/Codewave-Seki/runeon-wine/releases/tag/cx26.3-wine11.0-runeon.38) | 正式版 | `2026.11.17` | 置き換え済み、保持 |
