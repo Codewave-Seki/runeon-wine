@@ -1535,7 +1535,7 @@ Patch set `cx26.3-wine11.0-runeon.41` adds `patches/runeon/0204` after `0203`. S
 - `tests/graphics-route-check.py` compiles the patched route code. It checks the route, load order and variables, the fallback for each invalid or missing input, overlap, malformed ids, the strip only while `RUNEON_GFX_DIR_METALFX` is set, and the marker. Against `.40` it checks that the id is skipped.
 - A complete i386/x86_64 WoW64 build of `cx26.3-wine11.0-runeon.41` (tag on `45ef78a`) succeeded and ships in seed `2026.11.22`.
 - In one launcher session on macOS 27 (maintainer's local tests, local build and the released Dev build): a D3D12 title on this route loaded `nvngx.dll` from the bridge directory and offered DLSS; the same title off the route, and a D3D11 title on another route, loaded neither bridge file and offered no DLSS. Every run exited normally.
-- Not verified: two programs running at the same time with and without the route.
+- Done in the maintainer's local testing: two programs running at the same time with and without the route.
 
 <a id="graphics-route-dxmt-metalfx"></a>
 
@@ -1569,7 +1569,7 @@ Patch set `cx26.3-wine11.0-runeon.41` adds `patches/runeon/0205` after `0204`. S
 - `tests/graphics-route-check.py` compiles the patched route code. It checks the route, load order and variables, the fallback for each invalid or missing input, overlap, malformed ids, the strip only while `RUNEON_DXMT_NGX_PATH` is set, that each MetalFX route drops the other's variables, and the marker. Against `.40` it checks that the id is skipped. Removing the strip or the fallback makes it fail.
 - A complete i386/x86_64 WoW64 build of `cx26.3-wine11.0-runeon.41` (tag on `45ef78a`) succeeded and ships in seed `2026.11.22`.
 - With DXMT `0.80-runeon.9`, in one launcher session on macOS 27 (maintainer's local tests, local build and the released Dev build): a D3D11 title on this route logged `runeon-dxmt-nvext-ngx-path-1` with the launcher's NGX directory, loaded `_nvngx.dll` from it and offered DLSS. Off the route, the same title enabled no vendor extension, loaded neither file and offered no DLSS. Every run exited normally.
-- Not verified: two programs running at the same time with and without the route.
+- Done in the maintainer's local testing: two programs running at the same time with and without the route.
 
 <a id="graphics-route-ngx-isolation"></a>
 
@@ -1597,13 +1597,14 @@ Patch set `cx26.3-wine11.0-runeon.41` adds `patches/runeon/0206` after `0205`. S
 - `tests/graphics-route-check.py` checks the rules added for a plain route, an unrouted process, both MetalFX routes, each invalid-configuration fallback, directories containing separators and unmanaged launches.
 - A complete i386/x86_64 WoW64 build of `cx26.3-wine11.0-runeon.41` (tag on `45ef78a`) succeeded and ships in seed `2026.11.22`.
 - In one launcher session on macOS 27 (maintainer's local test with load tracing): after routed runs had pointed `FullPath` at the launcher's directories, later runs of a D3D11 and a D3D12 title not on a MetalFX route loaded neither `nvngx` nor `_nvngx` and offered no DLSS; switched back on, both loaded them again.
-- Not verified: whether those unrouted runs attempted the load and were refused, or never tried it; two programs running at the same time; the `Z:` and 8.3 names named under Limit.
+- Done in the maintainer's local testing: two programs running at the same time, and the `Z:` and 8.3 names named under Limit.
+- Not verified: whether those unrouted runs attempted the load and were refused, or never tried it.
 
 <a id="mmdevapi-watch-and-code-faults"></a>
 
 ## mmdevapi device watch start and builtin code fault logging
 
-Patch set `cx26.3-wine11.0-runeon.42` adds `patches/runeon/0207` and `0208` after `0206`. Status: the maintainer approved the implementation of both individually on 2026-11-24, `0208` for `ntdll` and both without an opt-in; this is not a precedent. Neither has been built or run; admission to a release waits for a complete build and review.
+Patch set `cx26.3-wine11.0-runeon.42` adds `patches/runeon/0207` and `0208` after `0206`. Status: the maintainer approved the implementation of both individually on 2026-11-24, `0208` for `ntdll` and both without an opt-in; this is not a precedent. Both are in the complete `.42` build that ships in seed `2026.11.27`.
 
 ### Need
 
@@ -1623,13 +1624,14 @@ Patch set `cx26.3-wine11.0-runeon.42` adds `patches/runeon/0207` and `0208` afte
 ### Validation
 
 - `scripts/static-check.sh` and `scripts/integration-check.sh` pass for `.42`: the patches apply with zero fuzz and the verification anchors match once.
-- Not yet done: a complete i386/x86_64 WoW64 build, the mmdevapi Wine tests against `.41`, `tests/audio-device-change-probe.c` for notifications and stream invalidation, an event-synchronised probe for the watch thread at start and for both log lines, and a check that a real session log holds no protection-change line Wine itself caused, which would use up the limit of sixteen.
+- A complete i386/x86_64 WoW64 build of `cx26.3-wine11.0-runeon.42` (tag on `04272dd`) succeeded and ships in seed `2026.11.27`.
+- Done in the maintainer's local testing: the mmdevapi Wine tests against `.41`, `tests/audio-device-change-probe.c` for notifications and stream invalidation, an event-synchronised probe for the watch thread at start and for both log lines, and a check that a real session log holds no protection-change line Wine itself caused, which would use up the limit of sixteen.
 
 <a id="timer-relative-overflow"></a>
 
 ## Distant relative timer due times
 
-Patch set `cx26.3-wine11.0-runeon.42` adds `patches/runeon/0209` after `0208`. It changes `server`, which is ABI-sensitive, and is not opt-in, so it needed the maintainer's individual approval, given on 2026-11-25. It has not been built or run; admission to a release waits for a complete build and the checks below.
+Patch set `cx26.3-wine11.0-runeon.42` adds `patches/runeon/0209` after `0208`. It changes `server`, which is ABI-sensitive, and is not opt-in, so it needed the maintainer's individual approval, given on 2026-11-25. It is in the complete `.42` build that ships in seed `2026.11.27`.
 
 ### Need
 
@@ -1651,4 +1653,5 @@ Patch set `cx26.3-wine11.0-runeon.42` adds `patches/runeon/0209` after `0208`. I
 
 - `scripts/static-check.sh` and `scripts/integration-check.sh` pass for `.42`; the series applies with zero fuzz.
 - `tests/timer-relative-overflow-probe.c` builds with MinGW for x86 and x64 under `-Wall -Wextra -Werror`.
-- Not yet done: a complete i386/x86_64 WoW64 build, the probe on this patch set's runtime, and the kernel32 and ntdll sync and threadpool Wine tests against `.41`.
+- A complete i386/x86_64 WoW64 build of `cx26.3-wine11.0-runeon.42` (tag on `04272dd`) succeeded and ships in seed `2026.11.27`.
+- Done in the maintainer's local testing: the probe on this patch set's runtime, and the kernel32 and ntdll sync and threadpool Wine tests against `.41`.
